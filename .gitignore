@@ -83,3 +83,6 @@ tmp/
 config/user_profile.yaml
 user_profile.yaml
 *.user.yaml
+examples/logs/
+# Ignore example logs
+examples/logs/*.log

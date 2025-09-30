@@ -34,8 +34,16 @@ tables:
       
       fund_type:
         type: varchar
-        description: Fund type/strategy
+        description: Fund investment strategy classification
+        is_dimension: true
+        dimension_context: "Used to categorize funds by investment approach and asset class"
         examples: [Equity, Fixed Income, Balanced, Money Market]
+        dictionary_table: fund_type_dictionary
+        dictionary_value_column: fund_type_code
+        dictionary_description_column: description
+        dictionary_predicates:
+          - "is_active = true"
+          - "effective_date <= CURRENT_DATE"
       
       inception_date:
         type: date
@@ -60,7 +68,9 @@ tables:
       
       risk_rating:
         type: varchar
-        description: Risk rating (Low, Medium, High)
+        description: Fund risk assessment level
+        is_dimension: true
+        dimension_context: "Risk rating assigned to funds (Low, Medium, High)"
       
       benchmark_index:
         type: varchar
@@ -121,7 +131,9 @@ tables:
       
       client_type:
         type: varchar
-        description: Individual, Corporate, Institutional
+        description: Client category classification
+        is_dimension: true
+        dimension_context: "Classification of clients by type and relationship"
       
       first_name:
         type: varchar
@@ -598,6 +610,9 @@ tables:
       
       performance_rating:
         type: numeric
+        description: Fund manager performance score
+        is_dimension: true
+        dimension_context: "Numerical performance rating assigned to fund managers based on track record"
       
       is_active:
         type: boolean

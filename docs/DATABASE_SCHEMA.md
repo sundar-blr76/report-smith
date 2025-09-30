@@ -166,12 +166,12 @@ execution_steps (1) ─────< (N) query_executions
 
 ```bash
 # Recommended: Use Python script
-cd scripts
+cd db_setup
 python3 setup_database.py
 
 # Or manually with psql
 psql -U postgres -h localhost -c "CREATE DATABASE reportsmith;"
-psql -U postgres -h localhost -d reportsmith -f scripts/create_reportsmith_schema.sql
+psql -U postgres -h localhost -d reportsmith -f db_setup/create_reportsmith_schema.sql
 ```
 
 ### Verify Installation

@@ -1,15 +1,10 @@
-"""Configuration system for ReportSmith enterprise deployment."""
+"""Configuration system for ReportSmith."""
 
-from .config_manager import ApplicationConfigManager, DatabaseConfigManager
-from .config_loader import ConfigLoader, ConfigValidator
-from .config_models import ApplicationConfig, DatabaseInstanceConfig, SchemaDefinition
+from .config_loader import ConfigurationManager, ApplicationConfig, DatabaseConfig, TableConfig
 
 __all__ = [
-    "ApplicationConfigManager",
-    "DatabaseConfigManager", 
-    "ConfigLoader",
-    "ConfigValidator",
+    "ConfigurationManager",
     "ApplicationConfig",
-    "DatabaseInstanceConfig",
-    "SchemaDefinition",
+    "DatabaseConfig",
+    "TableConfig",
 ]

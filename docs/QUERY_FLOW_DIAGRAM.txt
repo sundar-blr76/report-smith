@@ -1,0 +1,243 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    REPORTSMITH QUERY PROCESSING FLOW                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ USER INPUT                                                                  │
+│ "Show total fees from TruePotential equity funds last month"                │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: SEMANTIC UNDERSTANDING (Embedding Search)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Query Embeddings Generated → Search Vector Collections                     │
+│                                                                             │
+│  ┌─────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  │
+│  │ Schema Collection   │  │ Dimension Collection │  │ Context Collection│  │
+│  ├─────────────────────┤  ├──────────────────────┤  ├──────────────────┤  │
+│  │ "total fees"        │  │ "TruePotential"     │  │ "total fees      │  │
+│  │ → fee_transactions  │  │ → short_name        │  │  collected"      │  │
+│  │   .fee_amount       │  │   = 'TruePotential' │  │ → SUM(fee_amount)│  │
+│  │                     │  │                     │  │                  │  │
+│  │ "equity funds"      │  │ "equity"            │  │ Business Rule:   │  │
+│  │ → funds.fund_type   │  │ → fund_type         │  │ Use completed    │  │
+│  │                     │  │   = 'Equity'        │  │ transactions     │  │
+│  │                     │  │                     │  │                  │  │
+│  │ "last month"        │  │ "last month"        │  │                  │  │
+│  │ → date filter       │  │ → fee_period_end    │  │                  │  │
+│  │   (temporal)        │  │   >= '2024-11-01'   │  │                  │  │
+│  └─────────────────────┘  └──────────────────────┘  └──────────────────┘  │
+│                                                                             │
+│  Results:                                                                   │
+│  • Entities: fee_transactions, funds, management_companies                  │
+│  • Filters: fund_type='Equity', short_name='TruePotential', date range     │
+│  • Aggregation: SUM(fee_amount)                                            │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: RELATIONSHIP DISCOVERY                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Analyze relationships from app.yaml:                                       │
+│                                                                             │
+│  ┌──────────────────┐         ┌──────────┐         ┌──────────────────┐   │
+│  │fee_transactions  │─fund_id─▶│  funds   │─mgmt_id─▶│ management_      │   │
+│  │                  │         │          │         │  companies       │   │
+│  │• fee_amount      │         │• fund_type│         │• short_name      │   │
+│  │• fee_period_end  │         │          │         │                  │   │
+│  └──────────────────┘         └──────────┘         └──────────────────┘   │
+│                                                                             │
+│  Navigation Path:                                                           │
+│  fee_transactions → funds → management_companies                            │
+│                                                                             │
+│  Required JOINs:                                                            │
+│  • fee_transactions.fund_id = funds.id                                      │
+│  • funds.management_company_id = management_companies.id                    │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: QUERY PLAN GENERATION                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Generated SQL (Single-Step):                                               │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ SELECT                                                                │ │
+│  │   SUM(ft.fee_amount) as total_fees,                                   │ │
+│  │   COUNT(*) as transaction_count                                       │ │
+│  │ FROM fee_transactions ft                                              │ │
+│  │ JOIN funds f ON ft.fund_id = f.id                                     │ │
+│  │ JOIN management_companies mc ON f.management_company_id = mc.id       │ │
+│  │ WHERE f.fund_type = 'Equity'                                          │ │
+│  │ AND mc.short_name = 'TruePotential'                                   │ │
+│  │ AND ft.fee_period_end >= '2024-11-01'                                 │ │
+│  │ AND ft.fee_period_end < '2024-12-01'                                  │ │
+│  │ AND ft.payment_status IN ('Paid', 'Pending')                          │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Execution Plan Metadata:                                                   │
+│  • Database: financial_testdb                                              │
+│  • Estimated rows: ~150                                                    │
+│  • Estimated cost: Low                                                     │
+│  • Tables accessed: 3                                                      │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: USER CONFIRMATION                                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Display to User:                                                           │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ EXTRACTION PLAN                                                       │ │
+│  │                                                                       │ │
+│  │ Query: Total fees from TruePotential equity funds (Nov 2024)         │ │
+│  │                                                                       │ │
+│  │ Data Sources:                                                         │ │
+│  │ • Database: financial_testdb                                         │ │
+│  │ • Tables: fee_transactions, funds, management_companies               │ │
+│  │                                                                       │ │
+│  │ Filters Applied:                                                      │ │
+│  │ • Fund Type: Equity                                                   │ │
+│  │ • Management Company: TruePotential                                   │ │
+│  │ • Period: November 2024                                               │ │
+│  │ • Status: Paid, Pending                                               │ │
+│  │                                                                       │ │
+│  │ Expected Output:                                                      │ │
+│  │ • Total Fees: $XXX,XXX                                               │ │
+│  │ • Transaction Count: ~150                                             │ │
+│  │                                                                       │ │
+│  │ Estimated Execution Time: < 1 second                                  │ │
+│  │                                                                       │ │
+│  │ [Execute] [Modify] [View SQL] [Cancel]                               │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼ (User Approves)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: EXECUTION & LOGGING                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Create Session Record (execution_sessions)                                 │
+│  ├─ session_id: "ses_2024120112345"                                        │
+│  ├─ original_query: "Show total fees from TruePotential..."                │
+│  └─ status: "running"                                                       │
+│                                                                             │
+│  Execute Query Steps (execution_steps)                                      │
+│  └─ Step 1: Single aggregation query                                        │
+│      ├─ database_name: financial_testdb                                     │
+│      ├─ query_executed: [SQL from Phase 3]                                  │
+│      ├─ rows_examined: 847                                                  │
+│      ├─ rows_returned: 1                                                    │
+│      └─ duration: 0.043 seconds                                             │
+│                                                                             │
+│  Log Query Execution (query_executions)                                     │
+│  └─ SQL with parameters, timing, status                                     │
+│                                                                             │
+│  Update Session (execution_sessions)                                        │
+│  └─ status: "completed", total_duration: 0.127 seconds                      │
+└───────────────────────────────┬─────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 6: RESULT PRESENTATION                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │ RESULTS                                                               │ │
+│  │                                                                       │ │
+│  │ Total Fees Collected: $45,280.50                                     │ │
+│  │ Transaction Count: 142                                                │ │
+│  │                                                                       │ │
+│  │ Execution Details:                                                    │ │
+│  │ • Database: financial_testdb                                         │ │
+│  │ • Rows Examined: 847                                                  │ │
+│  │ • Execution Time: 0.127 seconds                                       │ │
+│  │ • Session ID: ses_2024120112345                                       │ │
+│  │                                                                       │ │
+│  │ [Export to Excel] [View SQL] [Save Query] [View Logs]               │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ COMPLEX MULTI-STEP SCENARIO
+═══════════════════════════════════════════════════════════════════════════════
+
+User Query: "Show clients with >$1M in TruePotential funds and their transaction history"
+
+STEP 1: Identify High-Value Clients
+┌──────────────────────────────────────────────────────────────┐
+│ CREATE TEMP TABLE high_value_clients AS                     │
+│ SELECT                                                        │
+│   c.id, c.client_code, c.first_name, c.last_name,           │
+│   SUM(h.market_value) as total_value                         │
+│ FROM clients c                                               │
+│ JOIN accounts a ON c.id = a.client_id                        │
+│ JOIN holdings h ON a.id = h.account_id                       │
+│ JOIN funds f ON h.fund_id = f.id                            │
+│ JOIN management_companies mc ON f.management_company_id=mc.id│
+│ WHERE mc.short_name = 'TruePotential'                        │
+│ AND h.as_of_date = (SELECT MAX(as_of_date) FROM holdings)   │
+│ GROUP BY c.id, c.client_code, c.first_name, c.last_name     │
+│ HAVING SUM(h.market_value) > 1000000                        │
+└──────────────────────────────────────────────────────────────┘
+        │
+        │ Result: 23 clients identified
+        ▼
+
+STEP 2: Get Transaction History
+┌──────────────────────────────────────────────────────────────┐
+│ SELECT                                                        │
+│   hvc.client_code,                                           │
+│   hvc.first_name || ' ' || hvc.last_name as client_name,    │
+│   hvc.total_value,                                           │
+│   t.transaction_date,                                        │
+│   t.transaction_type,                                        │
+│   f.fund_code,                                               │
+│   t.shares,                                                  │
+│   t.net_amount                                               │
+│ FROM high_value_clients hvc                                  │
+│ JOIN accounts a ON hvc.id = (SELECT client_id FROM accounts │
+│                               WHERE id = a.id)               │
+│ JOIN transactions t ON a.id = t.account_id                   │
+│ JOIN funds f ON t.fund_id = f.id                            │
+│ WHERE t.transaction_date >= CURRENT_DATE - INTERVAL '1 year'│
+│ ORDER BY hvc.client_code, t.transaction_date DESC           │
+└──────────────────────────────────────────────────────────────┘
+        │
+        │ Result: 1,247 transactions
+        ▼
+
+STEP 3: Export to Excel with Multiple Sheets
+┌──────────────────────────────────────────────────────────────┐
+│ Sheet 1: Client Summary (23 rows)                            │
+│ Sheet 2: Transaction History (1,247 rows)                    │
+│ Sheet 3: Execution Log                                       │
+└──────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+KEY COMPONENTS IN MEMORY:
+
+┌────────────────────┐
+│ ChromaDB           │
+│ (In-Memory)        │
+├────────────────────┤
+│ Collections:       │
+│ • schema (3,000)   │
+│ • dimensions (500) │
+│ • context (50)     │
+│                    │
+│ Total: ~21 MB      │
+└────────────────────┘
+
+Refresh Strategy:
+• Schema: On config change
+• Dimensions: Lazy load + 24hr TTL
+• Context: On config change
+
+═══════════════════════════════════════════════════════════════════════════════

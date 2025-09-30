@@ -33,7 +33,7 @@ ReportSmith/
 ├── src/reportsmith/       # Application code
 ├── config/
 │   └── applications/      # YAML configs (one per app)
-├── scripts/               # Database setup scripts
+├── db_setup/              # Database setup scripts
 ├── docs/                  # Documentation
 ├── tests/                 # Tests
 └── PROJECT.md             # Complete requirements & decisions
@@ -50,7 +50,7 @@ ReportSmith/
 
 1. **Create Database**
    ```bash
-   cd scripts
+   cd db_setup
    python3 setup_database.py
    ```
 

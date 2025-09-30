@@ -1,10 +1,5 @@
-"""Database connectivity and management."""
+"""Database module for ReportSmith."""
 
-from .connection_manager import DatabaseConnectionManager
-from .query_executor import MultiDatabaseQueryExecutor, TempTableManager
+from .simple_connection_manager import ConnectionManager
 
-__all__ = [
-    "DatabaseConnectionManager",
-    "MultiDatabaseQueryExecutor", 
-    "TempTableManager",
-]
+__all__ = ["ConnectionManager"]

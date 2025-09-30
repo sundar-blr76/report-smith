@@ -1,15 +1,18 @@
 """Database connection management for multiple database types."""
 
 from typing import Dict, Any, Optional
+import os
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import QueuePool
-from loguru import logger
 import threading
 from contextlib import contextmanager
 
+from ..logger import get_logger
 from ..config_system.config_models import DatabaseInstanceConfig, DatabaseType
+
+logger = get_logger(__name__)
 
 
 class DatabaseConnectionManager:
