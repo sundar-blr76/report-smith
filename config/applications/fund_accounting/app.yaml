@@ -1,0 +1,253 @@
+---
+# ==============================================================================
+# FUND ACCOUNTING - APPLICATION DEFINITION
+# ==============================================================================
+# Business logic, metrics, and context shared across all instances
+# ==============================================================================
+
+application:
+  id: fund_accounting
+  name: Fund Accounting System
+  database_vendor: postgresql
+  business_function: Fund Management & Client Portfolio Tracking
+  
+  description: |
+    Fund accounting system with client management, portfolio holdings,
+    transactions, and performance tracking.
+
+# ==============================================================================
+# RELATIONSHIPS - How tables connect
+# ==============================================================================
+
+relationships:
+  - name: funds_to_management_company
+    parent: management_companies.id
+    child: funds.management_company_id
+    type: one_to_many
+    description: Each fund belongs to one management company
+  
+  - name: funds_to_fee_schedule
+    parent: fee_schedules.id
+    child: funds.fee_schedule_id
+    type: one_to_many
+    description: Each fund uses one fee schedule
+  
+  - name: clients_to_accounts
+    parent: clients.id
+    child: accounts.client_id
+    type: one_to_many
+    description: Each client can have multiple accounts
+  
+  - name: accounts_to_holdings
+    parent: accounts.id
+    child: holdings.account_id
+    type: one_to_many
+    description: Each account has multiple fund holdings
+  
+  - name: funds_to_holdings
+    parent: funds.id
+    child: holdings.fund_id
+    type: one_to_many
+    description: Each fund appears in multiple client holdings
+  
+  - name: accounts_to_transactions
+    parent: accounts.id
+    child: transactions.account_id
+    type: one_to_many
+    description: Each account has multiple transactions
+  
+  - name: funds_to_transactions
+    parent: funds.id
+    child: transactions.fund_id
+    type: one_to_many
+    description: Each fund has multiple transactions
+  
+  - name: funds_to_performance
+    parent: funds.id
+    child: performance_reports.fund_id
+    type: one_to_many
+    description: Each fund has multiple performance reports
+  
+  - name: funds_to_managers
+    parent: funds.id
+    child: fund_manager_assignments.fund_id
+    type: one_to_many
+    description: Each fund can have multiple managers assigned
+  
+  - name: managers_to_assignments
+    parent: fund_managers.id
+    child: fund_manager_assignments.fund_manager_id
+    type: one_to_many
+    description: Each manager can manage multiple funds
+  
+  - name: accounts_to_subscriptions
+    parent: accounts.id
+    child: account_fund_subscriptions.account_id
+    type: one_to_many
+    description: Each account has multiple fund subscriptions
+  
+  - name: funds_to_subscriptions
+    parent: funds.id
+    child: account_fund_subscriptions.fund_id
+    type: one_to_many
+    description: Each fund has multiple account subscriptions
+
+# ==============================================================================
+# BUSINESS CONTEXT - Metrics, Rules, Queries
+# ==============================================================================
+
+business_context:
+  
+  # Business metrics
+  metrics:
+    total_aum:
+      name: Total Assets Under Management
+      formula: SUM(total_aum) FROM funds WHERE is_active = true
+      unit: currency
+      description: Total assets managed across all active funds
+    
+    portfolio_value:
+      name: Portfolio Market Value
+      formula: SUM(market_value) FROM holdings WHERE as_of_date = (SELECT MAX(as_of_date) FROM holdings)
+      unit: currency
+      description: Current total market value of all client holdings
+    
+    monthly_return:
+      name: Monthly Return
+      formula: ((nav_end / nav_start) - 1) * 100
+      unit: percentage
+      description: Fund return percentage for the month
+    
+    total_fees_collected:
+      name: Total Fees Collected
+      formula: SUM(fee_amount) FROM fee_transactions WHERE payment_status = 'Paid'
+      unit: currency
+      description: Total fees collected from all clients
+  
+  # Business rules
+  rules:
+    - name: Active Funds Only
+      description: Only query funds where is_active = true for operational reports
+      applies_to: [funds]
+    
+    - name: Latest Holdings
+      description: Use MAX(as_of_date) to get most recent holdings snapshot
+      applies_to: [holdings]
+    
+    - name: Completed Transactions
+      description: Financial reports use only completed transactions
+      filter: transaction_status = 'Completed'
+      applies_to: [transactions]
+  
+  # Sample queries demonstrating common patterns
+  sample_queries:
+    
+    - question: Show all active funds with AUM
+      sql: |
+        SELECT fund_code, fund_name, fund_type, total_aum
+        FROM funds
+        WHERE is_active = true
+        ORDER BY total_aum DESC;
+    
+    - question: Get client portfolio with current holdings
+      sql: |
+        SELECT 
+          c.client_code,
+          c.first_name || ' ' || c.last_name as client_name,
+          a.account_number,
+          f.fund_code,
+          f.fund_name,
+          h.shares_held,
+          h.nav_per_share,
+          h.market_value,
+          h.unrealized_gain_loss
+        FROM clients c
+        JOIN accounts a ON c.id = a.client_id
+        JOIN holdings h ON a.id = h.account_id
+        JOIN funds f ON h.fund_id = f.id
+        WHERE c.client_code = 'C001'
+        AND h.as_of_date = (SELECT MAX(as_of_date) FROM holdings)
+        ORDER BY h.market_value DESC;
+    
+    - question: Calculate monthly fund performance
+      sql: |
+        SELECT 
+          f.fund_code,
+          f.fund_name,
+          pr.report_date,
+          pr.return_percentage,
+          pr.benchmark_return,
+          pr.excess_return,
+          pr.sharpe_ratio
+        FROM funds f
+        JOIN performance_reports pr ON f.id = pr.fund_id
+        WHERE pr.period_type = 'Monthly'
+        AND pr.report_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '12 months')
+        ORDER BY f.fund_code, pr.report_date DESC;
+    
+    - question: Total fees by fund for a period
+      sql: |
+        SELECT 
+          f.fund_code,
+          f.fund_name,
+          ft.fee_type,
+          COUNT(*) as transaction_count,
+          SUM(ft.fee_amount) as total_fees
+        FROM fee_transactions ft
+        JOIN funds f ON ft.fund_id = f.id
+        WHERE ft.fee_period_start >= '2024-01-01'
+        AND ft.fee_period_end <= '2024-12-31'
+        AND ft.payment_status IN ('Paid', 'Pending')
+        GROUP BY f.fund_code, f.fund_name, ft.fee_type
+        ORDER BY total_fees DESC;
+    
+    - question: Client transaction history
+      sql: |
+        SELECT 
+          t.transaction_date,
+          t.transaction_type,
+          f.fund_code,
+          f.fund_name,
+          t.shares,
+          t.price_per_share,
+          t.gross_amount,
+          t.fees,
+          t.net_amount,
+          t.transaction_status
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        JOIN clients c ON a.client_id = c.id
+        JOIN funds f ON t.fund_id = f.id
+        WHERE c.client_code = 'C001'
+        AND t.transaction_date >= CURRENT_DATE - INTERVAL '6 months'
+        ORDER BY t.transaction_date DESC;
+    
+    - question: Top performing funds by return
+      sql: |
+        SELECT 
+          f.fund_code,
+          f.fund_name,
+          f.fund_type,
+          pr.return_percentage,
+          pr.sharpe_ratio,
+          f.total_aum
+        FROM funds f
+        JOIN performance_reports pr ON f.id = pr.fund_id
+        WHERE pr.period_type = 'Annual'
+        AND pr.report_date = (
+          SELECT MAX(report_date) 
+          FROM performance_reports 
+          WHERE fund_id = f.id AND period_type = 'Annual'
+        )
+        AND f.is_active = true
+        ORDER BY pr.return_percentage DESC
+        LIMIT 10;
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+
+metadata:
+  version: 1.0
+  last_updated: 2024-12-01
+  description: Shared business logic for all fund accounting instances

@@ -1,0 +1,72 @@
+---
+# ==============================================================================
+# FUND ACCOUNTING - FINANCIAL_TESTDB INSTANCE
+# ==============================================================================
+# Connection and instance-specific configuration
+# ==============================================================================
+
+instance:
+  instance_id: financial_testdb
+  instance_name: Financial Test Database
+  region: Local
+  environment: test
+  
+  description: |
+    Local PostgreSQL test database for development and testing.
+    Contains sample fund accounting data.
+
+# ==============================================================================
+# CONNECTION
+# ==============================================================================
+
+connection:
+  # All connection details from environment variables
+  env_vars:
+    host: FINANCIAL_TESTDB_HOST
+    port: FINANCIAL_TESTDB_PORT
+    database: FINANCIAL_TESTDB_NAME
+    schema: FINANCIAL_TESTDB_SCHEMA
+    user: FINANCIAL_TESTDB_USER
+    password: FINANCIAL_TESTDB_PASSWORD
+
+# ==============================================================================
+# INSTANCE DATA INFO
+# ==============================================================================
+
+data_info:
+  total_records: ~10000
+  data_freshness: Test data
+  update_frequency: As needed
+  timezone: UTC
+  
+  table_counts:
+    funds: ~20
+    clients: ~100
+    accounts: ~150
+    holdings: ~500
+    transactions: ~5000
+    performance_reports: ~200
+    fee_transactions: ~1000
+
+# ==============================================================================
+# INSTANCE-SPECIFIC OVERRIDES (if any)
+# ==============================================================================
+
+# schema_overrides:
+#   # Use this section if this instance has schema differences
+#   # Example:
+#   # tables:
+#   #   funds:
+#   #     columns:
+#   #       custom_field:
+#   #         type: varchar
+#   #         description: Instance-specific field
+
+# ==============================================================================
+# METADATA
+# ==============================================================================
+
+metadata:
+  version: 1.0
+  last_updated: 2024-12-01
+  notes: Primary test instance for fund accounting development

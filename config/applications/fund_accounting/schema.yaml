@@ -1,0 +1,725 @@
+---
+# ==============================================================================
+# FUND ACCOUNTING - SCHEMA DEFINITION
+# ==============================================================================
+# Table and column definitions shared across all instances
+# ==============================================================================
+
+tables:
+  
+  # ----------------------------------------------------------------------------
+  # FUNDS
+  # ----------------------------------------------------------------------------
+  funds:
+    description: Master fund information
+    primary_key: id
+    estimated_rows: 100
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+        description: Unique fund identifier
+      
+      fund_code:
+        type: varchar
+        nullable: false
+        unique: true
+        description: External fund code (e.g., TP001)
+      
+      fund_name:
+        type: varchar
+        nullable: false
+        description: Full fund name
+      
+      fund_type:
+        type: varchar
+        description: Fund type/strategy
+        examples: [Equity, Fixed Income, Balanced, Money Market]
+      
+      inception_date:
+        type: date
+        description: Fund launch date
+      
+      base_currency:
+        type: varchar
+        default: USD
+        description: Base currency (USD, EUR, etc)
+      
+      nav_per_share:
+        type: numeric
+        description: Current NAV per share
+      
+      total_aum:
+        type: numeric
+        description: Total assets under management
+      
+      minimum_investment:
+        type: numeric
+        description: Minimum investment amount
+      
+      risk_rating:
+        type: varchar
+        description: Risk rating (Low, Medium, High)
+      
+      benchmark_index:
+        type: varchar
+        description: Benchmark index for performance comparison
+      
+      management_company_id:
+        type: integer
+        description: FK to management_companies
+      
+      fee_schedule_id:
+        type: integer
+        description: FK to fee_schedules
+      
+      is_active:
+        type: boolean
+        default: true
+        description: Active status
+      
+      created_at:
+        type: timestamp
+        description: Record creation time
+      
+      updated_at:
+        type: timestamp
+        description: Last update time
+    
+    indexes:
+      - name: funds_pkey
+        columns: [id]
+        unique: true
+      - name: funds_fund_code_key
+        columns: [fund_code]
+        unique: true
+    
+    common_queries:
+      - All active funds
+      - Funds by type
+      - Top funds by AUM
+  
+  # ----------------------------------------------------------------------------
+  # CLIENTS
+  # ----------------------------------------------------------------------------
+  clients:
+    description: Client master data
+    primary_key: id
+    estimated_rows: 500
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      client_code:
+        type: varchar
+        nullable: false
+        unique: true
+        description: Unique client code
+      
+      client_type:
+        type: varchar
+        description: Individual, Corporate, Institutional
+      
+      first_name:
+        type: varchar
+        description: First name (for individuals)
+      
+      last_name:
+        type: varchar
+        description: Last name (for individuals)
+      
+      company_name:
+        type: varchar
+        description: Company name (for corporate/institutional)
+      
+      email:
+        type: varchar
+      
+      phone:
+        type: varchar
+      
+      address:
+        type: text
+      
+      city:
+        type: varchar
+      
+      state:
+        type: varchar
+      
+      country:
+        type: varchar
+      
+      zip_code:
+        type: varchar
+      
+      date_of_birth:
+        type: date
+      
+      registration_date:
+        type: date
+      
+      risk_tolerance:
+        type: varchar
+        description: Conservative, Moderate, Aggressive
+      
+      kyc_status:
+        type: varchar
+        default: Pending
+        description: KYC verification status
+      
+      is_accredited:
+        type: boolean
+        default: false
+      
+      created_at:
+        type: timestamp
+      
+      updated_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # ACCOUNTS
+  # ----------------------------------------------------------------------------
+  accounts:
+    description: Client investment accounts
+    primary_key: id
+    estimated_rows: 1000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      account_number:
+        type: varchar
+        nullable: false
+        unique: true
+      
+      client_id:
+        type: integer
+        description: FK to clients
+      
+      account_type:
+        type: varchar
+        description: Individual, Joint, Corporate, Trust, IRA
+      
+      account_name:
+        type: varchar
+      
+      base_currency:
+        type: varchar
+        default: USD
+      
+      opening_date:
+        type: date
+      
+      account_status:
+        type: varchar
+        default: Active
+        description: Active, Closed, Suspended
+      
+      total_balance:
+        type: numeric
+        default: 0
+      
+      available_balance:
+        type: numeric
+        default: 0
+      
+      management_company_id:
+        type: integer
+      
+      created_at:
+        type: timestamp
+      
+      updated_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # HOLDINGS
+  # ----------------------------------------------------------------------------
+  holdings:
+    description: Account fund holdings
+    primary_key: id
+    estimated_rows: 5000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      account_id:
+        type: integer
+        description: FK to accounts
+      
+      fund_id:
+        type: integer
+        description: FK to funds
+      
+      as_of_date:
+        type: date
+        description: Snapshot date
+      
+      shares_held:
+        type: numeric
+        description: Number of shares held
+      
+      nav_per_share:
+        type: numeric
+        description: NAV per share on as_of_date
+      
+      market_value:
+        type: numeric
+        description: Total market value (shares * nav)
+      
+      cost_basis:
+        type: numeric
+        description: Original cost basis
+      
+      unrealized_gain_loss:
+        type: numeric
+        description: Unrealized gain/loss
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # TRANSACTIONS
+  # ----------------------------------------------------------------------------
+  transactions:
+    description: Fund transactions
+    primary_key: id
+    estimated_rows: 10000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      transaction_id:
+        type: varchar
+        nullable: false
+        unique: true
+      
+      account_id:
+        type: integer
+        description: FK to accounts
+      
+      fund_id:
+        type: integer
+        description: FK to funds
+      
+      transaction_type:
+        type: varchar
+        description: Purchase, Redemption, Exchange, Dividend
+      
+      transaction_date:
+        type: date
+      
+      settlement_date:
+        type: date
+      
+      shares:
+        type: numeric
+        description: Number of shares
+      
+      price_per_share:
+        type: numeric
+        description: Transaction price per share
+      
+      gross_amount:
+        type: numeric
+        description: Gross transaction amount
+      
+      fees:
+        type: numeric
+        default: 0
+      
+      net_amount:
+        type: numeric
+        description: Net amount after fees
+      
+      currency:
+        type: varchar
+        default: USD
+      
+      transaction_status:
+        type: varchar
+        default: Completed
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # PERFORMANCE REPORTS
+  # ----------------------------------------------------------------------------
+  performance_reports:
+    description: Fund performance metrics
+    primary_key: id
+    estimated_rows: 1000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      fund_id:
+        type: integer
+        description: FK to funds
+      
+      report_date:
+        type: date
+      
+      period_type:
+        type: varchar
+        description: Daily, Monthly, Quarterly, Annual
+      
+      nav_start:
+        type: numeric
+      
+      nav_end:
+        type: numeric
+      
+      return_percentage:
+        type: numeric
+        description: Period return percentage
+      
+      benchmark_return:
+        type: numeric
+      
+      excess_return:
+        type: numeric
+        description: return - benchmark_return
+      
+      volatility:
+        type: numeric
+        description: Standard deviation of returns
+      
+      sharpe_ratio:
+        type: numeric
+      
+      total_aum:
+        type: numeric
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # FEE SCHEDULES
+  # ----------------------------------------------------------------------------
+  fee_schedules:
+    description: Fee structure definitions
+    primary_key: id
+    estimated_rows: 20
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      schedule_name:
+        type: varchar
+        nullable: false
+      
+      management_fee_rate:
+        type: numeric
+        description: Annual management fee rate (e.g., 0.01 = 1%)
+      
+      performance_fee_rate:
+        type: numeric
+      
+      entry_fee_rate:
+        type: numeric
+      
+      exit_fee_rate:
+        type: numeric
+      
+      minimum_investment:
+        type: numeric
+      
+      fee_calculation_frequency:
+        type: varchar
+        description: Daily, Monthly, Quarterly
+      
+      high_water_mark:
+        type: boolean
+        default: false
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # FEE TRANSACTIONS
+  # ----------------------------------------------------------------------------
+  fee_transactions:
+    description: Fee calculations and charges
+    primary_key: id
+    estimated_rows: 5000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      account_id:
+        type: integer
+      
+      fund_id:
+        type: integer
+      
+      fee_type:
+        type: varchar
+        description: Management, Performance, Entry, Exit
+      
+      fee_period_start:
+        type: date
+      
+      fee_period_end:
+        type: date
+      
+      fee_rate:
+        type: numeric
+      
+      calculation_base:
+        type: numeric
+        description: Amount used for fee calculation
+      
+      fee_amount:
+        type: numeric
+      
+      currency:
+        type: varchar
+        default: USD
+      
+      payment_date:
+        type: date
+      
+      payment_status:
+        type: varchar
+        default: Pending
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # MANAGEMENT COMPANIES
+  # ----------------------------------------------------------------------------
+  management_companies:
+    description: Fund management companies
+    primary_key: id
+    estimated_rows: 10
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      name:
+        type: varchar
+        nullable: false
+      
+      short_name:
+        type: varchar
+        nullable: false
+      
+      registration_number:
+        type: varchar
+        unique: true
+      
+      established_date:
+        type: date
+      
+      headquarters_location:
+        type: varchar
+      
+      aum_billions:
+        type: numeric
+        description: Total AUM in billions
+      
+      employee_count:
+        type: integer
+      
+      regulatory_status:
+        type: varchar
+      
+      website:
+        type: varchar
+      
+      created_at:
+        type: timestamp
+      
+      updated_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # FUND MANAGERS
+  # ----------------------------------------------------------------------------
+  fund_managers:
+    description: Fund managers/portfolio managers
+    primary_key: id
+    estimated_rows: 50
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      employee_id:
+        type: varchar
+        nullable: false
+        unique: true
+      
+      first_name:
+        type: varchar
+        nullable: false
+      
+      last_name:
+        type: varchar
+        nullable: false
+      
+      email:
+        type: varchar
+      
+      hire_date:
+        type: date
+      
+      years_experience:
+        type: integer
+      
+      education_level:
+        type: varchar
+      
+      specialization:
+        type: varchar
+      
+      performance_rating:
+        type: numeric
+      
+      is_active:
+        type: boolean
+        default: true
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # FUND MANAGER ASSIGNMENTS
+  # ----------------------------------------------------------------------------
+  fund_manager_assignments:
+    description: Fund to manager assignments
+    primary_key: id
+    estimated_rows: 100
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      fund_id:
+        type: integer
+      
+      fund_manager_id:
+        type: integer
+      
+      assignment_date:
+        type: date
+      
+      is_primary_manager:
+        type: boolean
+        default: false
+      
+      allocation_percentage:
+        type: numeric
+        description: Percentage of fund managed
+      
+      created_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # ACCOUNT FUND SUBSCRIPTIONS
+  # ----------------------------------------------------------------------------
+  account_fund_subscriptions:
+    description: Account subscriptions to funds
+    primary_key: id
+    estimated_rows: 2000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      account_id:
+        type: integer
+      
+      fund_id:
+        type: integer
+      
+      subscription_date:
+        type: date
+      
+      total_shares:
+        type: numeric
+        default: 0
+      
+      total_invested:
+        type: numeric
+        default: 0
+      
+      current_value:
+        type: numeric
+        default: 0
+      
+      is_active:
+        type: boolean
+        default: true
+      
+      created_at:
+        type: timestamp
+      
+      updated_at:
+        type: timestamp
+  
+  # ----------------------------------------------------------------------------
+  # MARKET DATA
+  # ----------------------------------------------------------------------------
+  market_data:
+    description: Market data for benchmarks and securities
+    primary_key: id
+    estimated_rows: 50000
+    
+    columns:
+      id:
+        type: integer
+        nullable: false
+      
+      symbol:
+        type: varchar
+        nullable: false
+      
+      data_date:
+        type: date
+      
+      open_price:
+        type: numeric
+      
+      high_price:
+        type: numeric
+      
+      low_price:
+        type: numeric
+      
+      close_price:
+        type: numeric
+      
+      volume:
+        type: bigint
+      
+      market_cap:
+        type: numeric
+      
+      created_at:
+        type: timestamp
