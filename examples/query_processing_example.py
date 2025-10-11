@@ -295,21 +295,21 @@ def generate_sql_query(required_tables, join_path):
 -- Find clients with >$1M in TruePotential funds and their transaction history
 WITH client_holdings AS (
     SELECT 
-        c.client_id,
+        c.id,
         c.client_code,
         COALESCE(c.company_name, CONCAT(c.first_name, ' ', c.last_name)) AS client_name,
         c.client_type,
-        SUM(h.current_value) AS total_value_in_truepotential_funds,
+        SUM(h.market_value) AS total_value_in_truepotential_funds,
         COUNT(DISTINCT h.fund_id) AS number_of_funds
     FROM clients c
-    INNER JOIN accounts a ON c.client_id = a.client_id
-    INNER JOIN holdings h ON a.account_id = h.account_id
-    INNER JOIN funds f ON h.fund_id = f.fund_id
+    INNER JOIN accounts a ON c.id = a.client_id
+    INNER JOIN holdings h ON a.id = h.account_id
+    INNER JOIN funds f ON h.fund_id = f.id
     INNER JOIN management_companies mc ON f.management_company_id = mc.id
     WHERE 
         mc.name ILIKE '%TruePotential%'  -- Filter by management company
-    GROUP BY c.client_id, c.client_code, client_name, c.client_type
-    HAVING SUM(h.current_value) > 1000000  -- Filter by >$1M
+    GROUP BY c.id, c.client_code, client_name, c.client_type
+    HAVING SUM(h.market_value) > 1000000  -- Filter by >$1M
 )
 SELECT 
     ch.client_code,
@@ -326,9 +326,9 @@ SELECT
     f.fund_code,
     f.fund_name
 FROM client_holdings ch
-LEFT JOIN accounts a ON ch.client_id = a.client_id
-LEFT JOIN transactions t ON a.account_id = t.account_id
-LEFT JOIN funds f ON t.fund_id = f.fund_id
+LEFT JOIN accounts a ON ch.id = a.client_id
+LEFT JOIN transactions t ON a.id = t.account_id
+LEFT JOIN funds f ON t.fund_id = f.id
 ORDER BY 
     ch.total_value_in_truepotential_funds DESC,
     ch.client_code,
@@ -366,7 +366,7 @@ def execute_and_display_results(engine, sql):
                 print("⚠ No results found (TruePotential management company may not exist in test data)")
                 
                 print("\n💡 Suggestion: Try modifying query to use existing management companies:")
-                with conn.execute(text("SELECT DISTINCT company_name FROM management_companies LIMIT 3")) as res:
+                with conn.execute(text("SELECT DISTINCT name FROM management_companies LIMIT 3")) as res:
                     companies = res.fetchall()
                     for company in companies:
                         print(f"   - {company[0]}")
