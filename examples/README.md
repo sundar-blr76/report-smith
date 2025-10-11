@@ -11,6 +11,59 @@
 - **Dictionary Support**: Ready for enhanced descriptions with predicates
 - **Semantic Search**: Demonstrates search on unlimited dimension values
 
+### ✅ `query_processing_example.py` - **Query Processing Pipeline Demo**
+
+**Demonstrates complex natural language query processing:**
+
+**Example Query**: "Show clients with >$1M in TruePotential funds and their transaction history"
+
+Shows complete pipeline:
+- **Query Decomposition**: Breaking natural language into semantic components
+- **Schema Mapping**: Using embeddings to find relevant tables/columns
+- **Dimension Matching**: Finding specific values mentioned in query
+- **Table Identification**: Determining 6 required tables automatically
+- **Join Planning**: Planning 5-table join path with relationships
+- **SQL Generation**: Producing executable SQL with aggregations
+- **Results Display**: Sample output formatting
+
+Run it:
+```bash
+cd examples
+./run_query_example.sh
+```
+
+### ✅ `knowledge_graph_demo.py` - **Knowledge Graph Demo** (NEW!)
+
+**Demonstrates in-memory knowledge graph for schema relationships:**
+
+Shows graph-based relationship discovery:
+- **Graph Building**: Automatic construction from schema configuration
+- **Path Finding**: BFS shortest path between any two tables
+- **Multiple Paths**: DFS all possible paths with max depth limit
+- **Relationship Analysis**: Outgoing/incoming edges for each table
+- **SQL Generation**: Automatic JOIN clause generation from paths
+- **Complex Queries**: Join path planning for multi-table queries
+
+**Example Paths Found**:
+- clients → transactions (2 hops)
+- clients → funds (3 hops via accounts, holdings)
+- clients → fund_managers (5 hops!)
+- management_companies → transactions (2 hops)
+
+**Statistics**:
+- 174 nodes (13 tables + 161 columns)
+- 30 relationships (auto-inferred from schema)
+- Bidirectional path finding
+- Multiple path discovery
+
+Run it:
+```bash
+cd examples
+./run_knowledge_graph_demo.sh
+```
+
+---
+
 ### Quick Run
 
 **Using the run script (RECOMMENDED - with logging)**
