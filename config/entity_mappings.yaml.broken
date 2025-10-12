@@ -1,0 +1,151 @@
+# Entity Mappings for ReportSmith
+# Define your domain-specific terms here for precise, fast matching
+
+# Tables - Map common terms to table names
+tables:
+  funds:
+    canonical_name: funds
+    aliases: [fund, portfolio, portfolios, investment]
+    description: "Fund master table"
+  
+  clients:
+    canonical_name: clients
+    aliases: [client, customer, customers, investor, investors, account holder, account holders]
+    description: "Client master data"
+  
+  fees:
+    canonical_name: fee_transactions
+    aliases: [fee, charges, "fee transactions"]
+    description: "Fee transaction records"
+
+# Columns - Map business terms to actual columns
+columns:
+  aum:
+    canonical_name: total_aum
+    table: funds
+    column: total_aum
+    aliases: [assets, "assets under management", "managed assets", "fund size"]
+    description: "Total assets under management"
+  
+  fees:
+    canonical_name: fee_amount
+    table: fee_transactions
+    column: fee_amount
+    aliases: [fee, charges, "management fees", "advisory fees"]
+    description: "Fee amounts charged to clients"
+  
+  nav:
+    canonical_name: current_nav
+    table: funds
+    column: current_nav
+    aliases: ["net asset value", "fund value", "unit price"]
+    description: "Net asset value per unit"
+  
+  balance:
+    canonical_name: current_balance
+    table: accounts
+    column: current_balance
+    aliases: [account balance, holdings, position]
+    description: "Current account balance"
+
+# Dimension Values - Map common terms to specific values
+dimension_values:
+  equity:
+    canonical_name: Equity Growth
+    table: funds
+    column: fund_type
+    value: Equity Growth
+    aliases: [equities, stocks, "equity funds", "stock funds"]
+    description: "Equity type funds"
+  
+  bond:
+    canonical_name: Bond
+    table: funds
+    column: fund_type  
+    value: Bond
+    aliases: [bonds, "fixed income", "bond funds", debt]
+    description: "Bond and fixed income funds"
+  
+  balanced:
+    canonical_name: Balanced
+    table: funds
+    column: fund_type
+    value: Balanced
+    aliases: [balanced, hybrid, mixed, "mixed asset"]
+    description: "Balanced/hybrid funds"
+  
+  high_risk:
+    canonical_name: High
+    table: funds
+    column: risk_rating
+    value: High
+    aliases: [aggressive, "high risk", risky]
+    description: "High risk funds"
+  
+  low_risk:
+    canonical_name: Low
+    table: funds
+    column: risk_rating
+    value: Low
+    aliases: [conservative, "low risk", safe, stable]
+    description: "Low risk funds"
+  
+  truepotential:
+    canonical_name: TruePotential
+    table: management_companies
+    column: company_name
+    value: TruePotential
+    aliases: ["true potential", "tp", "truepot"]
+    description: "TruePotential management company"
+  
+  horizon:
+    canonical_name: Horizon
+    table: management_companies
+    column: company_name
+    value: Horizon
+    aliases: ["horizon capital", "horizon investments"]
+    description: "Horizon management company"
+
+# Metrics - Business metrics and calculations
+metrics:
+  total_aum:
+    canonical_name: total_aum_metric
+    entity_type: metric
+    aliases: ["total assets", "total managed assets", "total aum"]
+    description: "Sum of all AUM across active funds"
+    context: "SUM(total_aum) FROM funds WHERE is_active = true"
+  
+  total_fees:
+    canonical_name: total_fees_collected
+    entity_type: metric
+    aliases: ["total fees", "fees collected", "total charges"]
+    description: "Total fees collected from all clients"
+    context: "SUM(fee_amount) FROM fee_transactions WHERE payment_status = 'Paid'"
+
+# Business Terms - Generic business concepts (NOT dimension values)
+business_terms:
+    canonical_name: Horizon
+    entity_type: company
+    table: management_companies
+    column: company_name
+    value: Horizon
+    aliases: ["horizon capital", "horizon investments"]
+    description: "Horizon management company"
+  
+  individual:
+    canonical_name: Individual
+    entity_type: client_type
+    table: clients
+    column: client_type
+    value: Individual
+    aliases: [retail, "individual investor", personal]
+    description: "Individual/retail clients"
+  
+  institutional:
+    canonical_name: Institutional
+    entity_type: client_type
+    table: clients
+    column: client_type
+    value: Institutional
+    aliases: [institution, institutions, "institutional investor"]
+    description: "Institutional clients"
