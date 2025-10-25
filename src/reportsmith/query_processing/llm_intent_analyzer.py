@@ -238,14 +238,16 @@ For entities, use the exact terms from the query when possible."""
             limit=llm_intent.limit,
             order_by=llm_intent.order_by,
             order_direction=llm_intent.order_direction,
-            llm_reasoning=llm_intent.reasoning
+        
+        # Local helper to safely truncate long logs (also used by _extract_with_llm when debug_prompts)
         def _trunc(s: str) -> str:
             if not isinstance(s, str):
                 return str(s)
-            if len(s) <= self.max_log_chars:
+            if len(s) <= getattr(self, 'max_log_chars', 500):
                 return s
-            return s[: self.max_log_chars] + f"... [truncated {len(s) - self.max_log_chars} chars]"
+            return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
 
+            llm_reasoning=llm_intent.reasoning
         )
         
         logger.info(f"Extracted: {llm_intent.intent_type.value}, {len(enriched_entities)} entities")
