@@ -124,8 +124,12 @@ def query(req: QueryRequest) -> QueryResponse:
 
     # Run multi-agent graph for the question
     try:
+        from reportsmith.logger import get_logger
+        get_logger(__name__).info("[api] supervisor handling /query; delegating to orchestrator")
         final_state = orchestrator.run(req.question)
     except Exception as e:
+        from reportsmith.logger import get_logger
+        get_logger(__name__).error(f"[api] orchestration failed: {e}")
         raise HTTPException(status_code=500, detail=f"Orchestration failed: {e}")
 
     def _get(obj, key):
