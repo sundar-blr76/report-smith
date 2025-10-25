@@ -165,6 +165,22 @@ def get_logger(name: str) -> logging.Logger:
 
 
 
+# Request ID helpers (used by API middleware)
+
+def bind_request_id(request_id: Optional[str]) -> None:
+    try:
+        REQUEST_ID.set(request_id)
+    except Exception:
+        pass
+
+
+def clear_request_id() -> None:
+    try:
+        REQUEST_ID.set(None)
+    except Exception:
+        pass
+
+
 
 
 # Export helpers for external use
