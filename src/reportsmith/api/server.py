@@ -29,7 +29,7 @@ orchestrator: MultiAgentOrchestrator | None = None
 
 @app.on_event("startup")
 def startup_event() -> None:
-    global rs_app, intent_analyzer
+    global rs_app, intent_analyzer, orchestrator
     try:
         rs_app = ReportSmithApp()
         rs_app.initialize()
