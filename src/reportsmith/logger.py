@@ -10,6 +10,18 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+IST_TZ = ZoneInfo("Asia/Kolkata")
+
+
+class ISTFormatter(logging.Formatter):
+    """Formatter that renders %(asctime)s in IST (Asia/Kolkata)."""
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, IST_TZ)
+        if datefmt:
+            return dt.strftime(datefmt)
+        # Fallback ISO with TZ
+        return dt.strftime('%Y-%m-%dT%H:%M:%S %Z')
+
 
 class LoggerManager:
     """Manages application-wide logging configuration."""
@@ -42,12 +54,12 @@ class LoggerManager:
         log_file = self.log_dir / "app.log"
         
         # Create formatters
-        detailed_formatter = logging.Formatter(
+        detailed_formatter = ISTFormatter(
             '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         
-        simple_formatter = logging.Formatter(
+        simple_formatter = ISTFormatter(
             '%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%H:%M:%S'
         )
