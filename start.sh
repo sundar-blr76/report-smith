@@ -110,10 +110,13 @@ pkill -f 'streamlit run .*src/reportsmith/ui/app\.py' 2>/dev/null || true
 
 # Start API (uvicorn --reload) and UI (streamlit) in background
 echo -e "${YELLOW}Starting FastAPI (uvicorn --reload)...${NC}"
-nohup uvicorn reportsmith.api.server:app --reload --host 127.0.0.1 --port 8000 > logs/api.log 2>&1 &
+# Capture only early boot errors to boot.log; runtime logging goes to app.log via Python logging.
+: > logs/boot.log
+nohup uvicorn reportsmith.api.server:app --reload --host 127.0.0.1 --port 8000 > /dev/null 2> logs/boot.log &
 API_PID=$!
 echo $API_PID > logs/api.pid
 echo -e "${GREEN}✓ API started (PID: $API_PID) -> http://127.0.0.1:8000${NC}"
+echo -e "${GREEN}✓ Boot errors (if any) -> logs/boot.log${NC}"
 
 echo -e "${YELLOW}Starting UI (streamlit)...${NC}"
 nohup env STREAMLIT_BROWSER_GATHER_USAGE_STATS=false streamlit run src/reportsmith/ui/app.py --server.port 8501 --server.address 127.0.0.1 --server.headless true --browser.gatherUsageStats false > logs/ui.log 2>&1 &
