@@ -12,10 +12,25 @@ st.sidebar.title("Settings")
 api_base: str = st.sidebar.text_input("API Base URL", value="http://127.0.0.1:8000")
 timeout_s: int = st.sidebar.number_input("Timeout (seconds)", min_value=1, max_value=120, value=30)
 
+# Optional: manual refresh
+st.sidebar.button("Refresh status")
+
+# Small helper to check an endpoint with a couple retries (warm-up)
+def _check_endpoint(path: str, tries: int = 3, timeout: int = 10):
+    last_err = None
+    for i in range(tries):
+        try:
+            resp = requests.get(f"{api_base}{path}", timeout=timeout)
+            return resp
+        except requests.exceptions.RequestException as e:
+            last_err = e
+            time.sleep(1)
+    raise last_err if last_err else RuntimeError("Unknown error")
+
 # Health check
 health_status = "unknown"
 try:
-    r = requests.get(f"{api_base}/health", timeout=5)
+    r = _check_endpoint("/health")
     if r.ok and r.json().get("status") == "ok":
         health_status = "healthy"
     else:
@@ -27,7 +42,7 @@ except Exception as e:
 ready_status = "unknown"
 ready_ok = False
 try:
-    rr = requests.get(f"{api_base}/ready", timeout=5)
+    rr = _check_endpoint("/ready")
     if rr.status_code == 200:
         ready_ok = True
         ready_status = "ready"
