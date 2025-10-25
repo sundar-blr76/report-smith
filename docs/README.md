@@ -3,7 +3,6 @@
 ## 📚 Core Documentation
 
 - **[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)** - Database schema (5 tables)
-- **[../PROJECT.md](../PROJECT.md)** - Complete requirements and decisions
 - **[../SETUP.md](../SETUP.md)** - Setup guide
 
 ## Database
