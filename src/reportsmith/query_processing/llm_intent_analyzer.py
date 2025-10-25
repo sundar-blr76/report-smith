@@ -131,11 +131,6 @@ class LLMIntentAnalyzer:
     """
     LLM-based intent analyzer using structured output.
     
-        # Observability settings
-        self.debug_prompts = (os.getenv("LLM_DEBUG_PROMPTS", "false").lower() in ("1", "true", "yes"))
-        self.max_log_chars = int(os.getenv("LLM_DEBUG_MAX_CHARS", "500") or 500)
-        self.metrics_events: list[dict] = []
-
     Much simpler and more maintainable than pattern-based approach.
     Uses OpenAI or Anthropic with JSON schema for reliable extraction.
     """
