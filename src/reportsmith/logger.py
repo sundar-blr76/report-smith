@@ -9,6 +9,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
+from contextvars import ContextVar
+
+# Context var to hold request/trace id
+REQUEST_ID: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 
 IST_TZ = ZoneInfo("Asia/Kolkata")
 
@@ -21,6 +25,15 @@ class ISTFormatter(logging.Formatter):
             return dt.strftime(datefmt)
         # Fallback ISO with TZ
         return dt.strftime('%Y-%m-%dT%H:%M:%S %Z')
+
+
+class RequestIdFilter(logging.Filter):
+    """Inject request_id from contextvar into log records."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        rid = REQUEST_ID.get()
+        if not hasattr(record, "request_id"):
+            record.request_id = rid or "-"
+        return True
 
 
 class LoggerManager:
@@ -55,24 +68,28 @@ class LoggerManager:
         
         # Create formatters
         detailed_formatter = ISTFormatter(
-            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+            '%(asctime)s - %(name)s - %(levellevel)s - [%(filename)s:%(lineno)d] - [rid:%(request_id)s] - %(message)s'.replace('levellevel','levelname'),
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         
         simple_formatter = ISTFormatter(
-            '%(asctime)s - %(levelname)s - %(message)s',
+            '%(asctime)s - %(levellevel)s - [rid:%(request_id)s] - %(message)s'.replace('levellevel','levelname'),
             datefmt='%H:%M:%S'
         )
+        
+        req_filter = RequestIdFilter()
         
         # File handler - detailed logging
         file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
+        file_handler.addFilter(req_filter)
         
         # Console handler - simpler logging
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(log_level)
         console_handler.setFormatter(simple_formatter)
+        console_handler.addFilter(req_filter)
         
         # Configure root logger
         root_logger = logging.getLogger()
@@ -93,6 +110,22 @@ class LoggerManager:
                 # Avoid duplicate file handler for same path
                 if not any(isinstance(h, logging.FileHandler) and getattr(h, 'baseFilename', None) == str(log_file) for h in lg.handlers):
                     lg.addHandler(file_handler)
+
+# Helpers to bind and clear request ID in context
+
+def bind_request_id(request_id: Optional[str]) -> None:
+    try:
+        REQUEST_ID.set(request_id)
+    except Exception:
+        pass
+
+
+def clear_request_id() -> None:
+    try:
+        REQUEST_ID.set(None)
+    except Exception:
+        pass
+
                 # Ensure console output consistent
                 if not any(isinstance(h, logging.StreamHandler) for h in lg.handlers):
                     lg.addHandler(console_handler)
