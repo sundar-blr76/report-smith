@@ -84,6 +84,21 @@ class LoggerManager:
         # Add handlers
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
+
+        # Also attach handlers to FastAPI/Uvicorn loggers so they write to app.log
+        for lname in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+            lg = logging.getLogger(lname)
+            try:
+                lg.setLevel(log_level)
+                # Avoid duplicate file handler for same path
+                if not any(isinstance(h, logging.FileHandler) and getattr(h, 'baseFilename', None) == str(log_file) for h in lg.handlers):
+                    lg.addHandler(file_handler)
+                # Ensure console output consistent
+                if not any(isinstance(h, logging.StreamHandler) for h in lg.handlers):
+                    lg.addHandler(console_handler)
+                lg.propagate = False
+            except Exception:
+                pass
         
         # Log startup information
         logger = logging.getLogger(__name__)
