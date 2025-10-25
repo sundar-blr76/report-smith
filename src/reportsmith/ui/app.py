@@ -57,8 +57,25 @@ st.sidebar.markdown(f"**API Ready:** {ready_status}")
 st.title("ReportSmith – Interactive Query")
 st.caption("Enter a natural language question, send to the API, and view structured JSON output.")
 
+
+# Sample queries with varying complexity
+samples = [
+    "Show monthly fees for all equity funds",
+    "What is the total AUM for bond funds by fund type?",
+    "List top 10 clients by account balance for the last quarter",
+    "Compare average fees between equity and bond funds in 2024",
+    "Show daily transactions for account 12345 between 2025-01-01 and 2025-01-31",
+]
+
+with st.expander("Sample queries", expanded=True):
+    for i, q in enumerate(samples, start=1):
+        if st.button(f"Use sample {i}", key=f"sample_{i}"):
+            st.session_state["rs_sample_query"] = q
+    st.code("\n".join(f"- {q}" for q in samples))
+
 with st.form("query_form"):
-    question = st.text_area("Question", placeholder="Show monthly fees for all equity funds", height=100)
+    default_q = st.session_state.get("rs_sample_query") or ""
+    question = st.text_area("Question", value=default_q, placeholder="Show monthly fees for all equity funds", height=100)
     app_id = st.text_input("App ID (optional)", value="")
     submitted = st.form_submit_button("Send Query")
 
