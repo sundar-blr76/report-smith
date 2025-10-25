@@ -255,18 +255,16 @@ For entities, use the exact terms from the query when possible."""
         logger.debug(f"Request - Provider: {self.llm_provider}, Model: {self.model}")
         
         if self.llm_provider == "openai":
+            def _trunc(s: str) -> str:
+                if not isinstance(s, str):
+                    return str(s)
+                if len(s) <= getattr(self, 'max_log_chars', 500):
+                    return s
+                return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
             request_payload = {
                 "model": self.model,
                 "messages": [
                     {"role": "system", "content": self.SYSTEM_PROMPT},
-        
-        def _trunc(s: str) -> str:
-            if not isinstance(s, str):
-                return str(s)
-            if len(s) <= getattr(self, 'max_log_chars', 500):
-                return s
-            return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
-
                     {"role": "user", "content": f"Analyze this query: {query}"}
                 ],
                 "response_format": "LLMQueryIntent (structured output)",
