@@ -84,16 +84,23 @@ echo -e "${GREEN}  ReportSmith Application Starting${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Start the application
-python3 -m reportsmith.app
+# Start API (uvicorn --reload) and UI (streamlit) in background
+echo -e "${YELLOW}Starting FastAPI (uvicorn --reload)...${NC}"
+nohup uvicorn reportsmith.api.server:app --reload --host 127.0.0.1 --port 8000 > logs/api.log 2>&1 &
+API_PID=$!
+echo $API_PID > logs/api.pid
+echo -e "${GREEN}✓ API started (PID: $API_PID) -> http://127.0.0.1:8000${NC}"
 
-exit_code=$?
+echo -e "${YELLOW}Starting UI (streamlit)...${NC}"
+nohup streamlit run src/reportsmith/ui/app.py --server.port 8501 --server.address 127.0.0.1 > logs/ui.log 2>&1 &
+UI_PID=$!
+echo $UI_PID > logs/ui.pid
+echo -e "${GREEN}✓ UI started (PID: $UI_PID) -> http://127.0.0.1:8501${NC}"
 
 echo ""
-if [ $exit_code -eq 0 ]; then
-    echo -e "${GREEN}Application completed successfully.${NC}"
-else
-    echo -e "${RED}Application exited with error code: $exit_code${NC}"
-fi
+echo -e "${GREEN}Use these to stop:${NC}"
+echo "  kill \$(cat logs/api.pid)  # API"
+echo "  kill \$(cat logs/ui.pid)   # UI"
+echo ""
 
-exit $exit_code
+exit 0
