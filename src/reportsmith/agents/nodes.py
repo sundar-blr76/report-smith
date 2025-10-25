@@ -54,6 +54,11 @@ class AgentNodes:
                 logger.info(
                     f"[intent][llm] provider={lm.get('provider')} model={lm.get('model')} prompt_chars={lm.get('prompt_chars')} latency_ms={lm.get('latency_ms')} tokens={lm.get('tokens')}"
                 )
+            # Append all metrics events (intent + refine)
+            events = getattr(self.intent_analyzer, "metrics_events", None)
+            if isinstance(events, list) and events:
+                state.llm_summaries.extend(events)
+                logger.info(f"[intent][llm] captured {len(events)} LLM event(s)")
             entities = [
                 {
                     "text": e.text,

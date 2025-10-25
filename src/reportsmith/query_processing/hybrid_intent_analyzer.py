@@ -253,6 +253,7 @@ class HybridIntentAnalyzer:
                 llm_intent = self.llm_analyzer._extract_with_llm(query)
                 # Capture latest LLM call metrics if available
                 self.last_metrics = getattr(self.llm_analyzer, "last_metrics", None)
+                self.metrics_events = getattr(self.llm_analyzer, "metrics_events", [])
                 if self.last_metrics:
                     logger.info(
                         f"[llm] summary provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"

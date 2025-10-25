@@ -131,6 +131,11 @@ class LLMIntentAnalyzer:
     """
     LLM-based intent analyzer using structured output.
     
+        # Observability settings
+        self.debug_prompts = (os.getenv("LLM_DEBUG_PROMPTS", "false").lower() in ("1", "true", "yes"))
+        self.max_log_chars = int(os.getenv("LLM_DEBUG_MAX_CHARS", "500") or 500)
+        self.metrics_events: list[dict] = []
+
     Much simpler and more maintainable than pattern-based approach.
     Uses OpenAI or Anthropic with JSON schema for reliable extraction.
     """
@@ -234,6 +239,13 @@ For entities, use the exact terms from the query when possible."""
             order_by=llm_intent.order_by,
             order_direction=llm_intent.order_direction,
             llm_reasoning=llm_intent.reasoning
+        def _trunc(s: str) -> str:
+            if not isinstance(s, str):
+                return str(s)
+            if len(s) <= self.max_log_chars:
+                return s
+            return s[: self.max_log_chars] + f"... [truncated {len(s) - self.max_log_chars} chars]"
+
         )
         
         logger.info(f"Extracted: {llm_intent.intent_type.value}, {len(enriched_entities)} entities")
@@ -260,7 +272,8 @@ For entities, use the exact terms from the query when possible."""
                 "temperature": 0
             }
             prompt_chars = sum(len(m["content"]) for m in request_payload["messages"]) if request_payload.get("messages") else 0
-            logger.debug(f"OpenAI Intent Extraction Request Payload: {json.dumps(request_payload, indent=2)}")
+            if self.debug_prompts:
+                logger.debug(f"OpenAI Prompt (trunc): {_trunc(json.dumps(request_payload, indent=2))}")
             
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
@@ -275,15 +288,19 @@ For entities, use the exact terms from the query when possible."""
             logger.debug(f"OpenAI Intent Extraction Response Metadata - Model: {response.model}, Usage: {response.usage}")
             parsed_result = response.choices[0].message.parsed
             dt_ms = (time.perf_counter() - t0) * 1000.0
-            self.last_metrics = {
+            metrics = {
+                "stage": "intent",
                 "provider": "openai",
                 "model": self.model,
                 "prompt_chars": prompt_chars,
                 "latency_ms": round(dt_ms, 2),
                 "tokens": getattr(response, "usage", None),
             }
+            self.last_metrics = metrics
+            self.metrics_events.append(metrics)
             logger.info(f"LLM summary: provider=openai model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
-            logger.info(f"OpenAI Intent Extraction Result: {parsed_result.model_dump_json(indent=2)}")
+            if self.debug_prompts:
+                logger.debug(f"OpenAI Parsed (trunc): {_trunc(parsed_result.model_dump_json(indent=2))}")
             
             return parsed_result
         
@@ -309,7 +326,8 @@ Return only valid JSON, no other text."""
                 }]
             }
             logger.debug(f"Anthropic Intent Extraction Request Payload: {json.dumps({k: v if k != 'messages' else '[see user_content]' for k, v in request_payload.items()}, indent=2)}")
-            logger.debug(f"Anthropic User Content:\n{user_content}")
+            if self.debug_prompts:
+                logger.debug(f"Anthropic Prompt (trunc): {_trunc(user_content)}")
             prompt_chars = len(user_content) + len(self.SYSTEM_PROMPT)
             
             response = self.client.messages.create(**request_payload)
@@ -326,13 +344,16 @@ Return only valid JSON, no other text."""
             intent_data = json.loads(json_text)
             logger.info(f"Anthropic Intent Extraction Result: {json.dumps(intent_data, indent=2)}")
             dt_ms = (time.perf_counter() - t0) * 1000.0
-            self.last_metrics = {
+            metrics = {
+                "stage": "intent",
                 "provider": "anthropic",
                 "model": self.model,
                 "prompt_chars": prompt_chars,
                 "latency_ms": round(dt_ms, 2),
                 "tokens": getattr(response, "usage", None),
             }
+            self.last_metrics = metrics
+            self.metrics_events.append(metrics)
             logger.info(f"LLM summary: provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
             return LLMQueryIntent(**intent_data)
@@ -357,7 +378,8 @@ Return only valid JSON, no other text."""
             prompt_chars = len(prompt)
             logger.debug(f"Gemini Intent Extraction Request - Prompt length: {len(prompt)} chars")
             logger.debug(f"Gemini Intent Extraction Request - Generation config: {json.dumps(generation_config, indent=2)}")
-            logger.debug(f"Gemini Prompt:\n{prompt}")
+            if self.debug_prompts:
+                logger.debug(f"Gemini Prompt (trunc): {_trunc(prompt)}")
             
             response = self.client.generate_content(
                 prompt,
@@ -376,14 +398,20 @@ Return only valid JSON, no other text."""
             dt_ms = (time.perf_counter() - t0) * 1000.0
             # Gemini has usage_metadata with token counts sometimes
             tokens = getattr(response, "usage_metadata", None)
-            self.last_metrics = {
+            metrics = {
+                "stage": "intent",
                 "provider": "gemini",
                 "model": self.model,
                 "prompt_chars": prompt_chars,
                 "latency_ms": round(dt_ms, 2),
                 "tokens": tokens,
+                "response_chars": len(json_text) if isinstance(json_text, str) else None,
             }
+            self.last_metrics = metrics
+            self.metrics_events.append(metrics)
             logger.info(f"LLM summary: provider=gemini model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
+            if self.debug_prompts:
+                logger.debug(f"Gemini Parsed (trunc): {_trunc(json.dumps(intent_data, indent=2))}")
             
             return LLMQueryIntent(**intent_data)
     
