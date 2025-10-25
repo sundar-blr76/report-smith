@@ -64,7 +64,6 @@ ReportSmith/
    - See `fund_accounting.yaml` for example
 
 ### Documentation
-- **[PROJECT.md](PROJECT.md)** - Complete project requirements and decisions
 - **[SETUP.md](SETUP.md)** - Detailed setup guide
 - **[docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema details
 
