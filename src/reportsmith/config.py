@@ -1,7 +1,8 @@
 """Configuration management for ReportSmith."""
 
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -52,10 +53,13 @@ class Settings(BaseSettings):
     default_query_timeout: int = 300  # seconds
     max_temp_table_size_mb: int = 1000
     max_concurrent_queries: int = 10
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
+    # Pydantic v2 settings configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 # Global settings instance
