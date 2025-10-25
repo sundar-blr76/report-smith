@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 
 class LoggerManager:
@@ -78,7 +79,13 @@ class LoggerManager:
         logger.info("ReportSmith Application Starting")
         logger.info(f"Log File: {log_file}")
         logger.info(f"Log Level: {level.upper()}")
-        logger.info(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # Force IST timezone (Asia/Kolkata)
+        try:
+            ist_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+            started_at = ist_now.strftime('%Y-%m-%d %H:%M:%S IST')
+        except Exception:
+            started_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        logger.info(f"Started at: {started_at}")
         logger.info("=" * 60)
         
         # Suppress noisy third-party loggers
