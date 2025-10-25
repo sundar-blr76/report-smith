@@ -79,6 +79,10 @@ if submitted:
                 elapsed = time.time() - start
                 st.caption(f"Completed in {elapsed:.2f}s (status {resp.status_code})")
 
+                trace_id = resp.headers.get("X-Request-ID")
+                if trace_id:
+                    st.caption(f"Trace ID: {trace_id}")
+
                 if not resp.ok:
                     # Try to extract detail, including readiness error payload
                     try:
