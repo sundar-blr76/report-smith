@@ -241,6 +241,10 @@ For entities, use the exact terms from the query when possible."""
     
     def _extract_with_llm(self, query: str) -> LLMQueryIntent:
         """Extract intent using LLM with structured output."""
+        import time
+        t0 = time.perf_counter()
+        prompt_chars = 0
+        self.last_metrics = None
         
         logger.info(f"LLM Intent Extraction Request for query: '{query}'")
         logger.debug(f"Request - Provider: {self.llm_provider}, Model: {self.model}")
@@ -255,6 +259,7 @@ For entities, use the exact terms from the query when possible."""
                 "response_format": "LLMQueryIntent (structured output)",
                 "temperature": 0
             }
+            prompt_chars = sum(len(m["content"]) for m in request_payload["messages"]) if request_payload.get("messages") else 0
             logger.debug(f"OpenAI Intent Extraction Request Payload: {json.dumps(request_payload, indent=2)}")
             
             response = self.client.beta.chat.completions.parse(
@@ -269,6 +274,15 @@ For entities, use the exact terms from the query when possible."""
             
             logger.debug(f"OpenAI Intent Extraction Response Metadata - Model: {response.model}, Usage: {response.usage}")
             parsed_result = response.choices[0].message.parsed
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            self.last_metrics = {
+                "provider": "openai",
+                "model": self.model,
+                "prompt_chars": prompt_chars,
+                "latency_ms": round(dt_ms, 2),
+                "tokens": getattr(response, "usage", None),
+            }
+            logger.info(f"LLM summary: provider=openai model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             logger.info(f"OpenAI Intent Extraction Result: {parsed_result.model_dump_json(indent=2)}")
             
             return parsed_result
@@ -296,6 +310,7 @@ Return only valid JSON, no other text."""
             }
             logger.debug(f"Anthropic Intent Extraction Request Payload: {json.dumps({k: v if k != 'messages' else '[see user_content]' for k, v in request_payload.items()}, indent=2)}")
             logger.debug(f"Anthropic User Content:\n{user_content}")
+            prompt_chars = len(user_content) + len(self.SYSTEM_PROMPT)
             
             response = self.client.messages.create(**request_payload)
             
@@ -310,6 +325,15 @@ Return only valid JSON, no other text."""
             
             intent_data = json.loads(json_text)
             logger.info(f"Anthropic Intent Extraction Result: {json.dumps(intent_data, indent=2)}")
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            self.last_metrics = {
+                "provider": "anthropic",
+                "model": self.model,
+                "prompt_chars": prompt_chars,
+                "latency_ms": round(dt_ms, 2),
+                "tokens": getattr(response, "usage", None),
+            }
+            logger.info(f"LLM summary: provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
             return LLMQueryIntent(**intent_data)
         
@@ -330,6 +354,7 @@ Return only valid JSON, no other text."""
                 "temperature": 0,
                 "response_mime_type": "application/json",
             }
+            prompt_chars = len(prompt)
             logger.debug(f"Gemini Intent Extraction Request - Prompt length: {len(prompt)} chars")
             logger.debug(f"Gemini Intent Extraction Request - Generation config: {json.dumps(generation_config, indent=2)}")
             logger.debug(f"Gemini Prompt:\n{prompt}")
@@ -348,6 +373,17 @@ Return only valid JSON, no other text."""
             
             intent_data = json.loads(json_text)
             logger.info(f"Gemini Intent Extraction Result: {json.dumps(intent_data, indent=2)}")
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            # Gemini has usage_metadata with token counts sometimes
+            tokens = getattr(response, "usage_metadata", None)
+            self.last_metrics = {
+                "provider": "gemini",
+                "model": self.model,
+                "prompt_chars": prompt_chars,
+                "latency_ms": round(dt_ms, 2),
+                "tokens": tokens,
+            }
+            logger.info(f"LLM summary: provider=gemini model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
             return LLMQueryIntent(**intent_data)
     

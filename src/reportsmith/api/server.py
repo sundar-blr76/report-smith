@@ -143,5 +143,7 @@ def query(req: QueryRequest) -> QueryResponse:
         "plan": _get(final_state, "plan"),
         "result": _get(final_state, "result"),
         "errors": _get(final_state, "errors"),
+        "timings_ms": _get(final_state, "timings"),
+        "llm_summaries": _get(final_state, "llm_summaries"),
     }
     return QueryResponse(status="ok", data=data)
