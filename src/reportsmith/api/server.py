@@ -83,6 +83,20 @@ def info() -> Dict[str, Any]:
     }
 
 
+@app.get("/ready")
+def ready() -> Dict[str, Any]:
+    components = {
+        "rs_app": rs_app is not None,
+        "intent_analyzer": intent_analyzer is not None,
+        "orchestrator": orchestrator is not None,
+    }
+    is_ready = all(components.values())
+    if not is_ready:
+        # 503 with component breakdown
+        raise HTTPException(status_code=503, detail={"ready": False, "components": components})
+    return {"ready": True, "components": components}
+
+
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest) -> QueryResponse:
     if rs_app is None:
