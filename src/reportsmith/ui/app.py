@@ -70,6 +70,16 @@ samples = [
     "Show daily transactions and fees for account 12345 between 2025-01-01 and 2025-01-31 (join through subscriptions if needed)",
     # Triggers multi-hop join and filters on metrics and managers
     "Find funds with AUM over 100M but total fees under 1M in 2024; include fund manager names",
+    # Local mappings should catch these precisely
+    "Show AUM for all equity funds",
+    "List fees for TruePotential clients",
+    "What's the total balance for institutional investors?",
+    # LLM handles variations
+    "I need the managed assets for stock portfolios",
+    "Show me charges for TP customers",
+    # Complex queries need both
+    "Compare AUM between conservative and aggressive funds",
+    "What are the average fees by fund type for all our retail investors?",
 ]
 
 with st.expander("Sample queries (graph + LLM refinement)", expanded=True):
