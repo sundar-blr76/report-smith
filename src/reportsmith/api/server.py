@@ -97,13 +97,16 @@ def query(req: QueryRequest) -> QueryResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Orchestration failed: {e}")
 
+    def _get(obj, key):
+        return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
     data = {
         "question": req.question,
-        "intent": final_state.intent,
-        "entities": final_state.entities,
-        "tables": final_state.tables,
-        "plan": final_state.plan,
-        "result": final_state.result,
-        "errors": final_state.errors,
+        "intent": _get(final_state, "intent"),
+        "entities": _get(final_state, "entities"),
+        "tables": _get(final_state, "tables"),
+        "plan": _get(final_state, "plan"),
+        "result": _get(final_state, "result"),
+        "errors": _get(final_state, "errors"),
     }
     return QueryResponse(status="ok", data=data)
