@@ -116,7 +116,7 @@ echo $API_PID > logs/api.pid
 echo -e "${GREEN}✓ API started (PID: $API_PID) -> http://127.0.0.1:8000${NC}"
 
 echo -e "${YELLOW}Starting UI (streamlit)...${NC}"
-nohup streamlit run src/reportsmith/ui/app.py --server.port 8501 --server.address 127.0.0.1 > logs/ui.log 2>&1 &
+nohup env STREAMLIT_BROWSER_GATHER_USAGE_STATS=false streamlit run src/reportsmith/ui/app.py --server.port 8501 --server.address 127.0.0.1 --server.headless true --browser.gatherUsageStats false > logs/ui.log 2>&1 &
 UI_PID=$!
 echo $UI_PID > logs/ui.pid
 echo -e "${GREEN}✓ UI started (PID: $UI_PID) -> http://127.0.0.1:8501${NC}"
