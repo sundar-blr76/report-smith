@@ -58,16 +58,21 @@ st.title("ReportSmith – Interactive Query")
 st.caption("Enter a natural language question, send to the API, and view structured JSON output.")
 
 
-# Sample queries with varying complexity
+# Sample queries designed to trigger KG navigation and LLM refinement
 samples = [
-    "Show monthly fees for all equity funds",
-    "What is the total AUM for bond funds by fund type?",
-    "List top 10 clients by account balance for the last quarter",
-    "Compare average fees between equity and bond funds in 2024",
-    "Show daily transactions for account 12345 between 2025-01-01 and 2025-01-31",
+    # Triggers joins: funds → fund_manager_assignments → fund_managers; time bucketing; ambiguous term "equity products"
+    "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)",
+    # Triggers clients/accounts ↔ fee_transactions ↔ funds; time filter Q1; dimension filter
+    "List the top 5 clients by total fees paid on bond funds in Q1 2025",
+    # Triggers metric mapping (AUM) + comparison across categories + quarterly grouping
+    "Compare average AUM and total fees between equity and bond funds over 2024; return results by quarter",
+    # Triggers path via account_fund_subscriptions and transactions range
+    "Show daily transactions and fees for account 12345 between 2025-01-01 and 2025-01-31 (join through subscriptions if needed)",
+    # Triggers multi-hop join and filters on metrics and managers
+    "Find funds with AUM over 100M but total fees under 1M in 2024; include fund manager names",
 ]
 
-with st.expander("Sample queries", expanded=True):
+with st.expander("Sample queries (graph + LLM refinement)", expanded=True):
     for i, q in enumerate(samples, start=1):
         if st.button(f"Use sample {i}", key=f"sample_{i}"):
             st.session_state["rs_sample_query"] = q
