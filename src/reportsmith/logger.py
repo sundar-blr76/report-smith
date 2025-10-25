@@ -162,3 +162,15 @@ def get_logger(name: str) -> logging.Logger:
     """
     manager = LoggerManager()
     return manager.get_logger(name)
+
+
+
+
+
+# Export helpers for external use
+__all__ = [
+    "LoggerManager",
+    "get_logger",
+    "bind_request_id",
+    "clear_request_id",
+]
