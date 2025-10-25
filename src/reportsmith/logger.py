@@ -110,22 +110,6 @@ class LoggerManager:
                 # Avoid duplicate file handler for same path
                 if not any(isinstance(h, logging.FileHandler) and getattr(h, 'baseFilename', None) == str(log_file) for h in lg.handlers):
                     lg.addHandler(file_handler)
-
-# Helpers to bind and clear request ID in context
-
-def bind_request_id(request_id: Optional[str]) -> None:
-    try:
-        REQUEST_ID.set(request_id)
-    except Exception:
-        pass
-
-
-def clear_request_id() -> None:
-    try:
-        REQUEST_ID.set(None)
-    except Exception:
-        pass
-
                 # Ensure console output consistent
                 if not any(isinstance(h, logging.StreamHandler) for h in lg.handlers):
                     lg.addHandler(console_handler)
