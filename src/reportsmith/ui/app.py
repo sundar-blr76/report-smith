@@ -23,7 +23,21 @@ try:
 except Exception as e:
     health_status = f"error: {e.__class__.__name__}"
 
+# Readiness check
+ready_status = "unknown"
+ready_ok = False
+try:
+    rr = requests.get(f"{api_base}/ready", timeout=5)
+    if rr.status_code == 200:
+        ready_ok = True
+        ready_status = "ready"
+    else:
+        ready_status = f"not ready ({rr.status_code})"
+except Exception as e:
+    ready_status = f"error: {e.__class__.__name__}"
+
 st.sidebar.markdown(f"**API Health:** {health_status}")
+st.sidebar.markdown(f"**API Ready:** {ready_status}")
 
 st.title("ReportSmith – Interactive Query")
 st.caption("Enter a natural language question, send to the API, and view structured JSON output.")
@@ -36,6 +50,8 @@ with st.form("query_form"):
 if submitted:
     if not question.strip():
         st.warning("Please enter a question.")
+    elif not ready_ok:
+        st.warning("API is not ready yet. Please wait a few seconds and try again.")
     else:
         payload: Dict[str, Any] = {"question": question}
         if app_id.strip():
@@ -49,8 +65,10 @@ if submitted:
                 st.caption(f"Completed in {elapsed:.2f}s (status {resp.status_code})")
 
                 if not resp.ok:
+                    # Try to extract detail, including readiness error payload
                     try:
-                        detail = resp.json().get("detail")
+                        body = resp.json()
+                        detail = body.get("detail", body)
                     except Exception:
                         detail = resp.text
                     st.error(f"Request failed: {detail}")
