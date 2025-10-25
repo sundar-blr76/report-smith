@@ -251,8 +251,15 @@ class HybridIntentAnalyzer:
         if use_llm and self.llm_analyzer:
             try:
                 llm_intent = self.llm_analyzer._extract_with_llm(query)
+                # Capture latest LLM call metrics if available
+                self.last_metrics = getattr(self.llm_analyzer, "last_metrics", None)
+                if self.last_metrics:
+                    logger.info(
+                        f"[llm] summary provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"
+                    )
                 logger.info(f"LLM found intent: {llm_intent.intent_type}, {len(llm_intent.entities)} entities")
             except Exception as e:
+                self.last_metrics = {"error": str(e)}
                 logger.warning(f"LLM analysis failed, using local only: {e}")
         
         # Step 3: Merge and enrich entities
