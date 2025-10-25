@@ -184,6 +184,11 @@ For entities, use the exact terms from the query when possible."""
         
         # Search configuration
         self.max_search_results = max_search_results
+        # Observability settings
+        self.debug_prompts = (os.getenv("LLM_DEBUG_PROMPTS", "false").lower() in ("1", "true", "yes"))
+        self.max_log_chars = int(os.getenv("LLM_DEBUG_MAX_CHARS", "500") or 500)
+        self.metrics_events: list[dict] = []
+
         self.schema_score_threshold = schema_score_threshold
         self.dimension_score_threshold = dimension_score_threshold
         self.context_score_threshold = context_score_threshold
@@ -238,15 +243,6 @@ For entities, use the exact terms from the query when possible."""
             limit=llm_intent.limit,
             order_by=llm_intent.order_by,
             order_direction=llm_intent.order_direction,
-        
-        # Local helper to safely truncate long logs (also used by _extract_with_llm when debug_prompts)
-        def _trunc(s: str) -> str:
-            if not isinstance(s, str):
-                return str(s)
-            if len(s) <= getattr(self, 'max_log_chars', 500):
-                return s
-            return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
-
             llm_reasoning=llm_intent.reasoning
         )
         
@@ -268,6 +264,14 @@ For entities, use the exact terms from the query when possible."""
                 "model": self.model,
                 "messages": [
                     {"role": "system", "content": self.SYSTEM_PROMPT},
+        
+        def _trunc(s: str) -> str:
+            if not isinstance(s, str):
+                return str(s)
+            if len(s) <= getattr(self, 'max_log_chars', 500):
+                return s
+            return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
+
                     {"role": "user", "content": f"Analyze this query: {query}"}
                 ],
                 "response_format": "LLMQueryIntent (structured output)",
