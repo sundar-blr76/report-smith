@@ -84,6 +84,30 @@ echo -e "${GREEN}  ReportSmith Application Starting${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
+# Stop existing services if running
+echo -e "${YELLOW}Checking for running services...${NC}"
+stop_pidfile() {
+  local name="$1"; local pidfile="$2"
+  if [ -f "$pidfile" ]; then
+    pid=$(cat "$pidfile" 2>/dev/null || true)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      echo -e "${YELLOW}Stopping $name (PID: $pid)...${NC}"
+      kill "$pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$pid" 2>/dev/null; then
+        echo -e "${YELLOW}Force killing $name (PID: $pid)...${NC}"
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+    rm -f "$pidfile"
+  fi
+}
+stop_pidfile "API" "logs/api.pid"
+stop_pidfile "UI" "logs/ui.pid"
+# Fallback: kill by process name if pidfiles missing/stale
+pkill -f 'uvicorn .*reportsmith\.api\.server:app' 2>/dev/null || true
+pkill -f 'streamlit run .*src/reportsmith/ui/app\.py' 2>/dev/null || true
+
 # Start API (uvicorn --reload) and UI (streamlit) in background
 echo -e "${YELLOW}Starting FastAPI (uvicorn --reload)...${NC}"
 nohup uvicorn reportsmith.api.server:app --reload --host 127.0.0.1 --port 8000 > logs/api.log 2>&1 &
