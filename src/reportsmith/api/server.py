@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from reportsmith.app import ReportSmithApp
@@ -25,6 +25,23 @@ class QueryResponse(BaseModel):
 rs_app: ReportSmithApp | None = None
 intent_analyzer: HybridIntentAnalyzer | None = None
 orchestrator: MultiAgentOrchestrator | None = None
+
+
+# Request ID middleware
+from uuid import uuid4
+from reportsmith.logger import bind_request_id, clear_request_id
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    rid = request.headers.get("x-request-id") or uuid4().hex
+    bind_request_id(rid)
+    try:
+        response: Response = await call_next(request)
+    finally:
+        clear_request_id()
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 @app.on_event("startup")
