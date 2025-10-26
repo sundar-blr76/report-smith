@@ -50,8 +50,21 @@ def startup_event() -> None:
     try:
         rs_app = ReportSmithApp()
         rs_app.initialize()
-        # Initialize hybrid analyzer and orchestrator
-        intent_analyzer = HybridIntentAnalyzer(embedding_manager=rs_app.embedding_manager)
+        # Initialize LLM analyzer (from env) and hybrid analyzer
+        from reportsmith.query_processing.llm_intent_analyzer import LLMIntentAnalyzer
+        import os
+        llm_provider = os.getenv("LLM_PROVIDER", "gemini")
+        llm_model = os.getenv("LLM_MODEL")
+        llm_analyzer = LLMIntentAnalyzer(
+            embedding_manager=rs_app.embedding_manager,
+            llm_provider=llm_provider,
+            model=llm_model,
+            api_key=None,
+        )
+        intent_analyzer = HybridIntentAnalyzer(
+            embedding_manager=rs_app.embedding_manager,
+            llm_analyzer=llm_analyzer,
+        )
         from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
         gb = KnowledgeGraphBuilder()
         # Build KG from first app's schema
