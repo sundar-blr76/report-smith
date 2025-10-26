@@ -148,6 +148,19 @@ def query(req: QueryRequest) -> QueryResponse:
     def _get(obj, key):
         return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
 
+    import json as _json
+
+    def _safe(v):
+        try:
+            _json.dumps(v)
+            return v
+        except Exception:
+            if isinstance(v, dict):
+                return {k: _safe(val) for k, val in v.items()}
+            if isinstance(v, (list, tuple)):
+                return [_safe(x) for x in v]
+            return str(v)
+
     data = {
         "question": req.question,
         "intent": _get(final_state, "intent"),
@@ -157,6 +170,6 @@ def query(req: QueryRequest) -> QueryResponse:
         "result": _get(final_state, "result"),
         "errors": _get(final_state, "errors"),
         "timings_ms": _get(final_state, "timings"),
-        "llm_summaries": _get(final_state, "llm_summaries"),
+        "llm_summaries": _safe(_get(final_state, "llm_summaries")),
     }
     return QueryResponse(status="ok", data=data)
