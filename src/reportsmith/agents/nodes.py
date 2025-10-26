@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
+import json
 
 from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
@@ -37,6 +38,10 @@ class AgentNodes:
 
     # Node: analyze intent
     def analyze_intent(self, state: QueryState) -> QueryState:
+        try:
+            logger.debug("[state@intent:start] " + json.dumps(state.model_dump(), default=str) )
+        except Exception:
+            logger.debug("[state@intent:start] (unserializable)")
         logger.info("[supervisor] received question; delegating to intent analyzer")
         import time
         t0 = time.perf_counter()
@@ -84,6 +89,10 @@ class AgentNodes:
 
     # Node: map to schema tables
     def map_schema(self, state: QueryState) -> QueryState:
+        try:
+            logger.debug("[state@schema:start] " + json.dumps(state.model_dump(), default=str))
+        except Exception:
+            logger.debug("[state@schema:start] (unserializable)")
         logger.info("[supervisor] delegating to schema mapper")
         import time
         t0 = time.perf_counter()
@@ -109,6 +118,10 @@ class AgentNodes:
 
     # Node: plan (placeholder)
     def plan_query(self, state: QueryState) -> QueryState:
+        try:
+            logger.debug("[state@plan:start] " + json.dumps(state.model_dump(), default=str))
+        except Exception:
+            logger.debug("[state@plan:start] (unserializable)")
         logger.info("[supervisor] delegating to planner")
         import time
         t0 = time.perf_counter()
@@ -129,6 +142,10 @@ class AgentNodes:
 
     # Node: finalize response (no execution)
     def finalize(self, state: QueryState) -> QueryState:
+        try:
+            logger.debug("[state@finalize:start] " + json.dumps(state.model_dump(), default=str))
+        except Exception:
+            logger.debug("[state@finalize:start] (unserializable)")
         logger.info("[supervisor] finalizing response")
         import time
         t0 = time.perf_counter()
