@@ -53,17 +53,18 @@ class AgentNodes:
                 f"[intent] analyzed question; type={intent.intent_type.value}, time_scope={intent.time_scope.value}, aggs={len(intent.aggregations)}, filters={len(intent.filters)} in {dt_ms:.1f}ms"
             )
             # Capture LLM summary if present
-            lm = getattr(self.intent_analyzer, "last_metrics", None)
-            if lm:
-                state.llm_summaries.append(lm)
-                logger.info(
-                    f"[intent][llm] provider={lm.get('provider')} model={lm.get('model')} prompt_chars={lm.get('prompt_chars')} latency_ms={lm.get('latency_ms')} tokens={lm.get('tokens')}"
-                )
-            # Append all metrics events (intent + refine)
+            # Prefer full events list (may include refine steps). If absent, fallback to last_metrics
             events = getattr(self.intent_analyzer, "metrics_events", None)
             if isinstance(events, list) and events:
                 state.llm_summaries.extend(events)
                 logger.info(f"[intent][llm] captured {len(events)} LLM event(s)")
+            else:
+                lm = getattr(self.intent_analyzer, "last_metrics", None)
+                if lm:
+                    state.llm_summaries.append(lm)
+                    logger.info(
+                        f"[intent][llm] provider={lm.get('provider')} model={lm.get('model')} prompt_chars={lm.get('prompt_chars')} latency_ms={lm.get('latency_ms')} tokens={lm.get('tokens')}"
+                    )
             entities = [
                 {
                     "text": e.text,
