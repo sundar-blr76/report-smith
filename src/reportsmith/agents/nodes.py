@@ -95,6 +95,21 @@ class AgentNodes:
         except Exception:
             logger.debug("[state@schema:start] (unserializable)")
         logger.info("[supervisor] delegating to schema mapper")
+        # Print entities supplied to schema mapper in a readable format
+        try:
+            lines = []
+            for ent in state.entities:
+                md = ((ent.get("top_match") or {}).get("metadata") or {})
+                table_hint = md.get("table")
+                conf = ent.get("confidence")
+                line = f"  - {ent.get('text')} (type={ent.get('entity_type')}, conf={conf})"
+                if table_hint:
+                    line += f", top_table={table_hint}"
+                lines.append(line)
+            if lines:
+                logger.info("[schema] entities supplied:\n" + "\n".join(lines))
+        except Exception:
+            logger.debug("[schema] entities supplied: (unserializable)")
         import time
         t0 = time.perf_counter()
         try:
