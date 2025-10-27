@@ -99,17 +99,37 @@ class AgentNodes:
         t0 = time.perf_counter()
         try:
             tables: List[str] = []
+            unmapped: List[Dict[str, Any]] = []
             for ent in state.entities:
-                match = ent.get("top_match") or {}
-                md = match.get("metadata") or {}
-                table = md.get("table")
-                if table and table not in tables:
-                    tables.append(table)
-                if ent.get("entity_type") == "table" and ent.get("text") not in tables:
-                    tables.append(ent["text"]) 
+                mapped_table = None
+                reason = None
+                if ent.get("entity_type") == "table":
+                    mapped_table = ent.get("text")
+                    reason = "entity_type=table"
+                else:
+                    match = ent.get("top_match") or {}
+                    md = match.get("metadata") or {}
+                    mapped_table = md.get("table")
+                    if mapped_table:
+                        reason = "top_match.metadata.table"
+                if mapped_table:
+                    if mapped_table not in tables:
+                        tables.append(mapped_table)
+                    logger.debug(
+                        f"[schema][map] entity='{ent.get('text')}' type={ent.get('entity_type')} -> table='{mapped_table}' via {reason}"
+                    )
+                else:
+                    unmapped.append(ent)
+                    logger.debug(
+                        f"[schema][map] entity='{ent.get('text')}' type={ent.get('entity_type')} -> unmapped"
+                    )
             state.tables = tables
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["schema_ms"] = round(dt_ms, 2)
+            if unmapped:
+                logger.warning(
+                    f"[schema] {len(unmapped)} entity(ies) not mapped to any table: {[e.get('text') for e in unmapped]}"
+                )
             logger.info(f"[schema] mapped entities to {len(tables)} table(s): {tables} in {dt_ms:.1f}ms")
             return state
         except Exception as e:
