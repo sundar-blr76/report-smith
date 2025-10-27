@@ -118,8 +118,10 @@ class AgentNodes:
             for ent in state.entities:
                 mapped_table = None
                 reason = None
-                if ent.get("entity_type") == "table":
-                    mapped_table = ent.get("text")
+                ent_text = (ent.get("text") or "").strip()
+                ent_type = ent.get("entity_type")
+                if ent_type == "table" and ent_text:
+                    mapped_table = ent_text
                     reason = "entity_type=table"
                 else:
                     match = ent.get("top_match") or {}
@@ -127,16 +129,47 @@ class AgentNodes:
                     mapped_table = md.get("table")
                     if mapped_table:
                         reason = "top_match.metadata.table"
+                    # If still not mapped and it's a column, try KG column lookup
+                    if not mapped_table and ent_type == "column" and ent_text:
+                        et_lower = ent_text.lower()
+                        # exact column name match
+                        candidates = [n for n in self.knowledge_graph.nodes.values() if n.type == "column" and (n.name or "").lower() == et_lower and n.table]
+                        # fallback: substring match (e.g., 'fees' -> 'fee_amount')
+                        if not candidates:
+                            candidates = [n for n in self.knowledge_graph.nodes.values() if n.type == "column" and et_lower in (n.name or "").lower() and n.table]
+                        cand_tables = sorted({n.table for n in candidates if n.table})
+                        if cand_tables:
+                            # Add all candidate tables; planner will resolve join path
+                            for tb in cand_tables:
+                                if tb not in tables:
+                                    tables.append(tb)
+                            mapped_table = ",".join(cand_tables)
+                            reason = "kg.column_lookup"
+                    # If still not mapped and it's a dimension value, attach to single mapped table if available
+                    if not mapped_table and ent_type == "dimension_value" and ent_text:
+                        if len(tables) == 1:
+                            # If the single mapped table has any dimension columns, assume this value applies there
+                            tb = tables[0]
+                            has_dim_cols = any(
+                                (n.type == "column" and n.table == tb and bool(n.metadata.get("is_dimension")))
+                                for n in self.knowledge_graph.nodes.values()
+                            )
+                            if has_dim_cols:
+                                mapped_table = tb
+                                reason = "assumed_dimension_on_single_table"
                 if mapped_table:
-                    if mapped_table not in tables:
-                        tables.append(mapped_table)
+                    # mapped_table may be comma-joined list; ensure we log cleanly and add individually
+                    for tb in str(mapped_table).split(","):
+                        tb = tb.strip()
+                        if tb and tb not in tables:
+                            tables.append(tb)
                     logger.debug(
-                        f"[schema][map] entity='{ent.get('text')}' type={ent.get('entity_type')} -> table='{mapped_table}' via {reason}"
+                        f"[schema][map] entity='{ent_text}' type={ent_type} -> table='{mapped_table}' via {reason}"
                     )
                 else:
                     unmapped.append(ent)
                     logger.debug(
-                        f"[schema][map] entity='{ent.get('text')}' type={ent.get('entity_type')} -> unmapped"
+                        f"[schema][map] entity='{ent_text}' type={ent_type} -> unmapped"
                     )
             state.tables = tables
             dt_ms = (time.perf_counter() - t0) * 1000.0
