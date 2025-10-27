@@ -126,14 +126,54 @@ class AgentNodes:
         import time
         t0 = time.perf_counter()
         try:
-            state.plan = {
-                "strategy": "single_db_join",
-                "tables": state.tables,
-                "notes": "Planning is a placeholder. Next step: derive join path from knowledge graph and generate SQL.",
-            }
+            tables = state.tables or []
+            plan: Dict[str, Any] = {"tables": tables}
+            if len(tables) <= 1:
+                plan.update({
+                    "strategy": "single_table" if tables else "no_tables",
+                    "notes": "No joins required.",
+                })
+            else:
+                # Use knowledge graph to stitch shortest paths from the first table to others
+                root = tables[0]
+                ordered_tables: List[str] = [root]
+                path_edges_all: List[Dict[str, Any]] = []
+                missing: List[str] = []
+                for tb in tables[1:]:
+                    path = self.knowledge_graph.find_shortest_path(root, tb)
+                    if not path:
+                        missing.append(tb)
+                        continue
+                    # Append intermediate tables from path (nodes names)
+                    for node in path.nodes:
+                        if node.type == "table" and node.name not in ordered_tables:
+                            ordered_tables.append(node.name)
+                    # Collect edge summaries
+                    for e in path.edges:
+                        path_edges_all.append({
+                            "from": e.from_node,
+                            "to": e.to_node,
+                            "type": e.relationship_type.value,
+                            "from_column": e.from_column,
+                            "to_column": e.to_column,
+                        })
+                plan.update({
+                    "strategy": "kg_shortest_paths",
+                    "path_tables": ordered_tables,
+                    "path_edges": path_edges_all,
+                    "unreachable": missing,
+                    "notes": "Join order derived via knowledge graph shortest paths from first table.",
+                })
+            state.plan = plan
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["plan_ms"] = round(dt_ms, 2)
-            logger.info(f"[planner] produced plan for {len(state.tables)} table(s) in {dt_ms:.1f}ms")
+            logger.info(
+                f"[planner] produced plan for {len(tables)} table(s); strategy={state.plan.get('strategy')} in {dt_ms:.1f}ms"
+            )
+            if state.plan.get("unreachable"):
+                logger.warning(f"[planner] unreachable tables via KG: {state.plan['unreachable']}")
+            else:
+                logger.debug(f"[planner] KG path tables: {state.plan.get('path_tables')}")
             return state
         except Exception as e:
             logger.error(f"[planner] error: {e}")
