@@ -175,8 +175,12 @@ class AgentNodes:
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["schema_ms"] = round(dt_ms, 2)
             if unmapped:
+                for e in unmapped:
+                    logger.warning(
+                        f"[schema][UNMAPPED] >>> {e.get('text')} (type={e.get('entity_type')}, conf={e.get('confidence')})"
+                    )
                 logger.warning(
-                    f"[schema] {len(unmapped)} entity(ies) not mapped to any table: {[e.get('text') for e in unmapped]}"
+                    f"[schema][UNMAPPED] {len(unmapped)} entity(ies) not mapped to any table: {[e.get('text') for e in unmapped]}"
                 )
             logger.info(f"[schema] mapped entities to {len(tables)} table(s): {tables} in {dt_ms:.1f}ms")
             return state
