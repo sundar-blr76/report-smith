@@ -245,6 +245,16 @@ class HybridIntentAnalyzer:
         # Step 1: Extract local mappings from query
         local_entities = self._extract_local_entities(query)
         logger.info(f"Found {len(local_entities)} entities from local mappings")
+        if local_entities:
+            try:
+                formatted = [
+                    f"  - {e.text} -> {e.canonical_name or ''} ({e.entity_type})"
+                    + (f" [table={e.table}, column={e.column}]" if (e.table or e.column) else "")
+                    for e in local_entities
+                ]
+                logger.info("Local mapping hits:\n" + "\n".join(formatted))
+            except Exception:
+                logger.debug("Local mapping hits: (unserializable)")
         
         # Step 2: Get LLM analysis (if enabled and available)
         llm_intent = None
