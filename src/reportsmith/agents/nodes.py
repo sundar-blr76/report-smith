@@ -180,6 +180,31 @@ class AgentNodes:
                                 # Add all candidates conservatively
                                 mapped_table = ",".join(dim_tables)
                                 reason = "kg.dimension_column_multi"
+                        # Semantic dimension search to catch domain table or attr table links
+                        if not mapped_table:
+                            try:
+                                dim_results = self.intent_analyzer.embedding_manager.search_dimensions(ent_text, top_k=3)
+                                cand_tables = []
+                                for r in dim_results:
+                                    md = getattr(r, 'metadata', {}) or {}
+                                    tb = md.get('table')
+                                    if not tb:
+                                        content = getattr(r, 'content', '') or ''
+                                        if 'Column:' in content:
+                                            piece = content.split('Column:')[1].split('|')[0].strip()
+                                            if '.' in piece:
+                                                tb = piece.split('.')[0].strip()
+                                        elif 'Table:' in content:
+                                            piece = content.split('Table:')[1].split('|')[0].strip()
+                                            tb = piece
+                                    if tb:
+                                        cand_tables.append(tb)
+                                cand_tables = sorted(set([t for t in cand_tables if t]))
+                                if cand_tables:
+                                    mapped_table = ",".join(cand_tables)
+                                    reason = "semantic.dimension_search"
+                            except Exception:
+                                pass
                 if mapped_table:
                     # mapped_table may be comma-joined list; ensure we log cleanly and add individually
                     for tb in str(mapped_table).split(","):
