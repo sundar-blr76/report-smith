@@ -71,6 +71,8 @@ class AgentNodes:
                     "entity_type": e.entity_type,
                     "confidence": e.confidence,
                     "top_match": (e.semantic_matches[0] if e.semantic_matches else None),
+                    "table": getattr(e, "table", None),
+                    "column": getattr(e, "column", None),
                 }
                 for e in intent.entities
             ]
@@ -145,10 +147,15 @@ class AgentNodes:
                                     tables.append(tb)
                             mapped_table = ",".join(cand_tables)
                             reason = "kg.column_lookup"
-                    # If still not mapped and it's a dimension value, attach to single mapped table if available
+                    # If still not mapped and it's a dimension value, attach using hints or KG
                     if not mapped_table and ent_type == "dimension_value" and ent_text:
-                        if len(tables) == 1:
-                            # If the single mapped table has any dimension columns, assume this value applies there
+                        # Prefer explicit table hint from entity (if present)
+                        ent_table_hint = ent.get("table")
+                        if ent_table_hint:
+                            mapped_table = ent_table_hint
+                            reason = "entity.table_hint"
+                        elif len(tables) == 1:
+                            # If a single mapped table exists and it has dimension columns, assume this value applies there
                             tb = tables[0]
                             has_dim_cols = any(
                                 (n.type == "column" and n.table == tb and bool(n.metadata.get("is_dimension")))
