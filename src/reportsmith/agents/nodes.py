@@ -164,6 +164,22 @@ class AgentNodes:
                             if has_dim_cols:
                                 mapped_table = tb
                                 reason = "assumed_dimension_on_single_table"
+                        # As a final fallback, try KG dimension column lookup by name/substring
+                        if not mapped_table:
+                            et_lower = ent_text.lower()
+                            dim_cols = [
+                                n for n in self.knowledge_graph.nodes.values()
+                                if n.type == "column" and bool(n.metadata.get("is_dimension"))
+                                and n.table and ((n.name or "").lower() == et_lower or et_lower in (n.name or "").lower())
+                            ]
+                            dim_tables = sorted({n.table for n in dim_cols})
+                            if len(dim_tables) == 1:
+                                mapped_table = dim_tables[0]
+                                reason = "kg.dimension_column_lookup"
+                            elif len(dim_tables) > 1:
+                                # Add all candidates conservatively
+                                mapped_table = ",".join(dim_tables)
+                                reason = "kg.dimension_column_multi"
                 if mapped_table:
                     # mapped_table may be comma-joined list; ensure we log cleanly and add individually
                     for tb in str(mapped_table).split(","):
