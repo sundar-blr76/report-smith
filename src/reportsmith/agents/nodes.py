@@ -98,18 +98,25 @@ class AgentNodes:
                     logger.info("[intent] entities:\n" + "\n".join(lines))
             except Exception:
                 logger.debug("[intent] entities: (unserializable)")
-            # LLM refinement to keep/drop entities using schema hints
-            try:
-                keep_idx, keep_reason = self.intent_analyzer.refine_entities_with_llm(state.question, entities)
-                kept_entities = [e for i, e in enumerate(entities) if i in set(keep_idx)]
-                dropped_entities = [e for i, e in enumerate(entities) if i not in set(keep_idx)]
-                logger.info(f"[intent][refine] kept {len(kept_entities)}/{len(entities)} entities; reason={keep_reason}")
-                if dropped_entities:
-                    logger.info("[intent][refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
-                entities = kept_entities
-            except Exception as e:
-                logger.warning(f"[intent][refine] failed: {e}; using all entities")
             state.intent = {
+    # Node: refine entities with LLM selection
+    def refine_entities(self, state: QueryState) -> QueryState:
+        logger.info("[supervisor] delegating to entity refiner")
+        try:
+            if not state.entities:
+                return state
+            keep_idx, keep_reason = self.intent_analyzer.refine_entities_with_llm(state.question, state.entities)
+            kept_entities = [e for i, e in enumerate(state.entities) if i in set(keep_idx)]
+            dropped_entities = [e for i, e in enumerate(state.entities) if i not in set(keep_idx)]
+            logger.info(f"[refine] kept {len(kept_entities)}/{len(state.entities)} entities; reason={keep_reason}")
+            if dropped_entities:
+                logger.info("[refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
+            state.entities = kept_entities
+            return state
+        except Exception as e:
+            logger.warning(f"[refine] failed: {e}; leaving entities unchanged")
+            return state
+
                 "type": intent.intent_type.value,
                 "time_scope": intent.time_scope.value,
                 "aggregations": [a.value for a in intent.aggregations],

@@ -37,12 +37,14 @@ class MultiAgentOrchestrator:
 
         # Define nodes
         g.add_node("intent", self.nodes.analyze_intent)
+        g.add_node("refine", self.nodes.refine_entities)
         g.add_node("schema", self.nodes.map_schema)
         g.add_node("plan", self.nodes.plan_query)
         g.add_node("finalize", self.nodes.finalize)
 
         # Edges
-        g.add_edge("intent", "schema")
+        g.add_edge("intent", "refine")
+        g.add_edge("refine", "schema")
         g.add_edge("schema", "plan")
         g.add_edge("plan", "finalize")
         g.add_edge("finalize", END)
