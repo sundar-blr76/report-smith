@@ -73,10 +73,31 @@ class AgentNodes:
                     "top_match": (e.semantic_matches[0] if e.semantic_matches else None),
                     "table": getattr(e, "table", None),
                     "column": getattr(e, "column", None),
+                    "source": getattr(e, "source", None),
                 }
                 for e in intent.entities
             ]
             logger.info(f"[intent] extracted {len(entities)} entities")
+            # Print entities by default for comprehension
+            try:
+                lines = []
+                for ent in entities:
+                    md = ((ent.get("top_match") or {}).get("metadata") or {})
+                    table_hint = ent.get("table") or md.get("table")
+                    col_hint = ent.get("column") or md.get("column")
+                    src = ent.get("source")
+                    line = f"  - {ent.get('text')} (type={ent.get('entity_type')}, conf={ent.get('confidence')})"
+                    if src:
+                        line += f", src={src}"
+                    if table_hint:
+                        line += f", table={table_hint}"
+                    if col_hint:
+                        line += f", column={col_hint}"
+                    lines.append(line)
+                if lines:
+                    logger.info("[intent] entities:\n" + "\n".join(lines))
+            except Exception:
+                logger.debug("[intent] entities: (unserializable)")
             state.intent = {
                 "type": intent.intent_type.value,
                 "time_scope": intent.time_scope.value,
