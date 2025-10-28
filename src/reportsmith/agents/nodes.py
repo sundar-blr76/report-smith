@@ -133,34 +133,135 @@ class AgentNodes:
                 text = ent.get("text") or ""
                 search_text = f"{state.question} {text}".strip()
                 try:
-                    schema_res = em.search_schema(search_text, top_k=100)
-                    dim_res = em.search_dimensions(search_text, top_k=100)
-                    ctx_res = em.search_business_context(search_text, top_k=100)
-                    best = None
-                    # pick best above thresholds
+                    # Pull larger sets; no early trimming here
+                    schema_res = em.search_schema(search_text, top_k=1000)
+                    dim_res = em.search_dimensions(search_text, top_k=1000)
+                    ctx_res = em.search_business_context(search_text, top_k=1000)
+                    all_matches = []
                     for r in schema_res:
-                        if r.score >= schema_thr and (best is None or r.score > best["score"]):
-                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "schema"}
+                        if r.score >= schema_thr:
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "schema"})
                     for r in dim_res:
-                        if r.score >= dim_thr and (best is None or r.score > best["score"]):
-                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "dimension_value"}
+                        if r.score >= dim_thr:
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "dimension_value"})
                     for r in ctx_res:
-                        if r.score >= ctx_thr and (best is None or r.score > best["score"]):
-                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "business_context"}
-                    if best:
-                        prev = ent.get("top_match")
+                        if r.score >= ctx_thr:
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "business_context"})
+    # Node: LLM filter semantic candidates per-entity
+    def semantic_filter(self, state: QueryState) -> QueryState:
+        logger.info("[supervisor] delegating to semantic filter (LLM)")
+        try:
+            if not state.entities:
+                return state
+            la = getattr(self.intent_analyzer, "llm_analyzer", None)
+            if not la:
+                logger.warning("[semantic-filter] LLM analyzer not available; skipping")
+                return state
+            import json, time
+            kept = []
+            total_before = 0
+            for ent in state.entities:
+                matches = ent.get("semantic_matches") or []
+                if not matches:
+                    kept.append(ent)
+                    continue
+                total_before += len(matches)
+                # Build prompt per entity
+                compact = [{
+                    "index": i,
+                    "content": m.get("content"),
+                    "type": m.get("type"),
+                    "score": m.get("score"),
+                } for i, m in enumerate(matches)]
+                prompt = (
+                    f"User query: {state.question}\n"
+                    f"Entity: {ent.get('text')} (type={ent.get('entity_type')})\n"
+                    "Below are semantic candidates (sorted by similarity).\n"
+                    "Select truly relevant ones and return JSON: {\n"
+                    "  \"relevant_indices\": [..],\n"
+                    "  \"reasoning\": \"...\"\n"
+                    "}\n\n"
+                    f"Candidates:\n{json.dumps(compact, indent=2)}\n"
+                )
+                provider = getattr(la, "llm_provider", "gemini")
+                t0 = time.perf_counter()
+                try:
+                    if provider == "openai":
+                        req = {
+                            "model": la.model,
+                            "messages": [
+                                {"role": "system", "content": "You filter semantic candidates for a database entity."},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "response_format": {"type": "json_object"},
+                            "temperature": 0,
+                        }
+                        resp = la.client.chat.completions.create(**req)
+                        data = json.loads(resp.choices[0].message.content)
+                    elif provider == "anthropic":
+                        resp = la.client.messages.create(
+                            model=la.model,
+                            max_tokens=1000,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0,
+                        )
+                        content = resp.content[0].text
+                        s = content.find('{'); e = content.rfind('}') + 1
+                        data = json.loads(content[s:e] if s >= 0 else content)
+                    else:
+                        gen_cfg = {"temperature": 0, "response_mime_type": "application/json"}
+                        resp = la.client.generate_content(prompt, generation_config=gen_cfg)
+                        data = json.loads(resp.text)
+                except Exception as e:
+                    logger.warning(f"[semantic-filter] LLM failed for entity '{ent.get('text')}': {e}; keeping top-1")
+                    # Keep only top-1 to be conservative
+                    ent["semantic_matches"] = matches[:1]
+                    ent["top_match"] = matches[0]
+                    kept.append(ent)
+                    continue
+                finally:
+                    dt_ms = (time.perf_counter() - t0) * 1000.0
+                    try:
+                        logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
+                    except Exception:
+                        pass
+                idxs = data.get("relevant_indices", [])
+                reason = data.get("reasoning", "")
+                filtered = [matches[i] for i in idxs if i < len(matches)]
+                if not filtered:
+                    filtered = matches[:1]
+                ent["semantic_matches"] = filtered
+                ent["top_match"] = filtered[0]
+                md = (filtered[0].get("metadata") or {})
+                if not ent.get("table") and md.get("table"):
+                    ent["table"] = md.get("table")
+                if not ent.get("column") and md.get("column"):
+                    ent["column"] = md.get("column")
+                kept.append(ent)
+                logger.info(f"[semantic-filter] entity='{ent.get('text')}' kept {len(filtered)}/{len(matches)}; reason={reason}")
+            state.entities = kept
+            logger.info("[semantic-filter] completed per-entity filtering")
+            return state
+        except Exception as e:
+            logger.warning(f"[semantic-filter] failed: {e}")
+            return state
+
+                    if all_matches:
+                        # sort high to low
+                        all_matches.sort(key=lambda x: x["score"], reverse=True)
+                        prev = ent.get("semantic_matches")
+                        ent["semantic_matches"] = all_matches
+                        best = all_matches[0]
                         ent["top_match"] = best
-                        # hydrate table/column hints if missing
                         md = best.get("metadata") or {}
                         if not ent.get("table") and md.get("table"):
                             ent["table"] = md.get("table")
                         if not ent.get("column") and md.get("column"):
                             ent["column"] = md.get("column")
-                        updated += 1 if (best != prev) else 0
-                        # brief log
+                        updated += 1 if (prev != all_matches) else 0
                         tb = (md.get("table") or "?")
                         col = (md.get("column") or "?")
-                        logger.debug(f"[semantic] entity='{text}' top={tb}.{col} score={best['score']:.3f} type={best['type']}")
+                        logger.debug(f"[semantic] entity='{text}' candidates={len(all_matches)} top={tb}.{col} score={best['score']:.3f} type={best['type']}")
                 except Exception as e:
                     logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
             logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
