@@ -236,6 +236,75 @@ class HybridIntentAnalyzer:
         ])
     
     def analyze(self, query: str, use_llm: bool = True) -> HybridQueryIntent:
+        """
+        Analyze query using hybrid approach.
+        
+        Args:
+            query: Natural language query
+            use_llm: Whether to use LLM (set False to use only local+semantic)
+            
+        Returns:
+            HybridQueryIntent with merged results
+        """
+        logger.info(f"Analyzing query: {query}")
+        
+        # Step 1: Extract local mappings from query
+        local_entities = self._extract_local_entities(query)
+        logger.info(f"Found {len(local_entities)} entities from local mappings")
+        if local_entities:
+            try:
+                formatted = [
+                    f"  - {e.text} -> {e.canonical_name or ''} ({e.entity_type})"
+                    + (f" [table={e.table}, column={e.column}]" if (e.table or e.column) else "")
+                    for e in local_entities
+                ]
+                logger.info("Local mapping hits:\n" + "\n".join(formatted))
+            except Exception:
+                logger.debug("Local mapping hits: (unserializable)")
+        
+        # Step 2: Get LLM analysis (if enabled and available)
+        llm_intent = None
+        if use_llm and self.llm_analyzer:
+            try:
+                llm_intent = self.llm_analyzer._extract_with_llm(query)
+                # Capture latest LLM call metrics if available
+                self.last_metrics = getattr(self.llm_analyzer, "last_metrics", None)
+                self.metrics_events = getattr(self.llm_analyzer, "metrics_events", [])
+                if self.last_metrics:
+                    logger.info(
+                        f"[llm] completion provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"
+                    )
+                logger.info(f"LLM intent: {llm_intent.intent_type}, entities={len(llm_intent.entities)}")
+            except Exception as e:
+                self.last_metrics = {"error": str(e)}
+                logger.warning(f"LLM analysis failed, using local only: {e}")
+        
+        # Step 3: Merge and enrich entities
+        merged_entities = self._merge_entities(
+            local_entities=local_entities,
+            llm_entities=llm_intent.entities if llm_intent else [],
+            query=query
+        )
+        
+        # Step 4: Build final intent
+        intent = HybridQueryIntent(
+            original_query=query,
+            intent_type=llm_intent.intent_type if llm_intent else IntentType.RETRIEVAL,
+            entities=merged_entities,
+            time_scope=llm_intent.time_scope if llm_intent else TimeScope.NONE,
+            aggregations=llm_intent.aggregations if llm_intent else [],
+            filters=llm_intent.filters if llm_intent else [],
+            limit=llm_intent.limit if llm_intent else None,
+            order_by=llm_intent.order_by if llm_intent else None,
+            order_direction=llm_intent.order_direction if llm_intent else "ASC",
+            llm_reasoning=llm_intent.reasoning if llm_intent else None,
+            local_mappings_used=len(local_entities),
+            llm_entities_found=len(llm_intent.entities) if llm_intent else 0
+        )
+        
+        logger.info(f"Hybrid analysis complete: {len(merged_entities)} total entities")
+        return intent
+
     def refine_entities_with_llm(self, query: str, entities: List[Dict[str, Any]]) -> tuple[List[int], str]:
         """Use LLM to decide which identified entities to keep or drop.
         Returns (keep_indices, reasoning).
@@ -336,75 +405,6 @@ class HybridIntentAnalyzer:
         keep = data.get("keep_indices", list(range(len(entities))))
         reasoning = data.get("reasoning", "")
         return (keep, reasoning)
-
-        """
-        Analyze query using hybrid approach.
-        
-        Args:
-            query: Natural language query
-            use_llm: Whether to use LLM (set False to use only local+semantic)
-            
-        Returns:
-            HybridQueryIntent with merged results
-        """
-        logger.info(f"Analyzing query: {query}")
-        
-        # Step 1: Extract local mappings from query
-        local_entities = self._extract_local_entities(query)
-        logger.info(f"Found {len(local_entities)} entities from local mappings")
-        if local_entities:
-            try:
-                formatted = [
-                    f"  - {e.text} -> {e.canonical_name or ''} ({e.entity_type})"
-                    + (f" [table={e.table}, column={e.column}]" if (e.table or e.column) else "")
-                    for e in local_entities
-                ]
-                logger.info("Local mapping hits:\n" + "\n".join(formatted))
-            except Exception:
-                logger.debug("Local mapping hits: (unserializable)")
-        
-        # Step 2: Get LLM analysis (if enabled and available)
-        llm_intent = None
-        if use_llm and self.llm_analyzer:
-            try:
-                llm_intent = self.llm_analyzer._extract_with_llm(query)
-                # Capture latest LLM call metrics if available
-                self.last_metrics = getattr(self.llm_analyzer, "last_metrics", None)
-                self.metrics_events = getattr(self.llm_analyzer, "metrics_events", [])
-                if self.last_metrics:
-                    logger.info(
-                        f"[llm] completion provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"
-                    )
-                logger.info(f"LLM intent: {llm_intent.intent_type}, entities={len(llm_intent.entities)}")
-            except Exception as e:
-                self.last_metrics = {"error": str(e)}
-                logger.warning(f"LLM analysis failed, using local only: {e}")
-        
-        # Step 3: Merge and enrich entities
-        merged_entities = self._merge_entities(
-            local_entities=local_entities,
-            llm_entities=llm_intent.entities if llm_intent else [],
-            query=query
-        )
-        
-        # Step 4: Build final intent
-        intent = HybridQueryIntent(
-            original_query=query,
-            intent_type=llm_intent.intent_type if llm_intent else IntentType.RETRIEVAL,
-            entities=merged_entities,
-            time_scope=llm_intent.time_scope if llm_intent else TimeScope.NONE,
-            aggregations=llm_intent.aggregations if llm_intent else [],
-            filters=llm_intent.filters if llm_intent else [],
-            limit=llm_intent.limit if llm_intent else None,
-            order_by=llm_intent.order_by if llm_intent else None,
-            order_direction=llm_intent.order_direction if llm_intent else "ASC",
-            llm_reasoning=llm_intent.reasoning if llm_intent else None,
-            local_mappings_used=len(local_entities),
-            llm_entities_found=len(llm_intent.entities) if llm_intent else 0
-        )
-        
-        logger.info(f"Hybrid analysis complete: {len(merged_entities)} total entities")
-        return intent
     
     def _extract_local_entities(self, query: str) -> List[EnrichedEntity]:
         """Extract entities using local mappings."""
