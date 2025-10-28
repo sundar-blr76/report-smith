@@ -98,6 +98,17 @@ class AgentNodes:
                     logger.info("[intent] entities:\n" + "\n".join(lines))
             except Exception:
                 logger.debug("[intent] entities: (unserializable)")
+            # LLM refinement to keep/drop entities using schema hints
+            try:
+                keep_idx, keep_reason = self.intent_analyzer.refine_entities_with_llm(state.question, entities)
+                kept_entities = [e for i, e in enumerate(entities) if i in set(keep_idx)]
+                dropped_entities = [e for i, e in enumerate(entities) if i not in set(keep_idx)]
+                logger.info(f"[intent][refine] kept {len(kept_entities)}/{len(entities)} entities; reason={keep_reason}")
+                if dropped_entities:
+                    logger.info("[intent][refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
+                entities = kept_entities
+            except Exception as e:
+                logger.warning(f"[intent][refine] failed: {e}; using all entities")
             state.intent = {
                 "type": intent.intent_type.value,
                 "time_scope": intent.time_scope.value,

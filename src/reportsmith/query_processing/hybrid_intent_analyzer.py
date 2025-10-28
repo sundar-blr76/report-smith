@@ -230,6 +230,82 @@ class HybridIntentAnalyzer:
         ])
     
     def analyze(self, query: str, use_llm: bool = True) -> HybridQueryIntent:
+    def refine_entities_with_llm(self, query: str, entities: List[Dict[str, Any]]) -> tuple[List[int], str]:
+        """Use LLM to decide which identified entities to keep or drop.
+        Returns (keep_indices, reasoning).
+        """
+        if not entities or not self.llm_analyzer:
+            return (list(range(len(entities))), "LLM not available or no entities; kept all")
+        # Build compact descriptions
+        descs = []
+        for idx, e in enumerate(entities):
+            md = ((e.get("top_match") or {}).get("metadata") or {})
+            descs.append({
+                "index": idx,
+                "text": e.get("text"),
+                "type": e.get("entity_type"),
+                "confidence": e.get("confidence"),
+                "table": e.get("table") or md.get("table"),
+                "column": e.get("column") or md.get("column"),
+                "match_score": ((e.get("top_match") or {}).get("score")),
+            })
+        import json, time
+        prompt = (
+            "You are an entity selection assistant for a data query system.\n"
+            "Given the user query and the detected entities (with type, hints), "
+            "decide which entities to KEEP for downstream planning.\n"
+            "Prefer precise, non-duplicative entities. Drop ambiguous or redundant ones.\n\n"
+            f"Query: {query}\n\n"
+            f"Entities: {json.dumps(descs, indent=2)}\n\n"
+            "Return a JSON object: {\n"
+            "  \"keep_indices\": [list of indices to keep],\n"
+            "  \"reasoning\": \"brief rationale for retention/drop decisions\"\n"
+            "}"
+        )
+        la = self.llm_analyzer
+        provider = getattr(la, "llm_provider", "gemini")
+        t0 = time.perf_counter()
+        try:
+            if provider == "openai":
+                req = {
+                    "model": la.model,
+                    "messages": [
+                        {"role": "system", "content": "You select relevant entities for SQL planning."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0,
+                }
+                resp = la.client.chat.completions.create(**req)
+                txt = resp.choices[0].message.content
+                data = json.loads(txt)
+            elif provider == "anthropic":
+                resp = la.client.messages.create(
+                    model=la.model,
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                )
+                content = resp.content[0].text
+                start = content.find('{'); end = content.rfind('}') + 1
+                data = json.loads(content[start:end] if start >= 0 else content)
+            else:  # gemini
+                gen_cfg = {"temperature": 0, "response_mime_type": "application/json"}
+                resp = la.client.generate_content(prompt, generation_config=gen_cfg)
+                data = json.loads(resp.text)
+        except Exception as e:
+            logger.warning(f"Entity refinement LLM failed: {e}; keeping all")
+            return (list(range(len(entities))), f"refinement_error: {e}")
+        finally:
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            try:
+                logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
+            except Exception:
+                pass
+        keep = data.get("keep_indices", list(range(len(entities))))
+        reasoning = data.get("reasoning", "")
+        return (keep, reasoning)
+
         """
         Analyze query using hybrid approach.
         
