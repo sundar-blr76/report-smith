@@ -100,6 +100,18 @@ class AgentNodes:
             except Exception:
                 logger.debug("[intent] entities: (unserializable)")
             state.intent = {
+                "type": intent.intent_type.value,
+                "time_scope": intent.time_scope.value,
+                "aggregations": [a.value for a in intent.aggregations],
+                "filters": intent.filters,
+            }
+            state.entities = entities
+            return state
+        except Exception as e:
+            logger.error(f"[intent] error: {e}")
+            state.errors.append(f"intent_error: {e}")
+            return state
+
     # Node: refine entities with LLM selection
     def refine_entities(self, state: QueryState) -> QueryState:
         logger.info("[supervisor] delegating to entity refiner")
@@ -110,6 +122,14 @@ class AgentNodes:
             kept_entities = [e for i, e in enumerate(state.entities) if i in set(keep_idx)]
             dropped_entities = [e for i, e in enumerate(state.entities) if i not in set(keep_idx)]
             logger.info(f"[refine] kept {len(kept_entities)}/{len(state.entities)} entities; reason={keep_reason}")
+            if dropped_entities:
+                logger.info("[refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
+            state.entities = kept_entities
+            return state
+        except Exception as e:
+            logger.warning(f"[refine] failed: {e}; leaving entities unchanged")
+            return state
+
     # Node: semantic enrichment for entities using embeddings search
     def semantic_enrich(self, state: QueryState) -> QueryState:
         logger.info("[supervisor] delegating to semantic enricher")
@@ -147,6 +167,30 @@ class AgentNodes:
                     for r in ctx_res:
                         if r.score >= ctx_thr:
                             all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "business_context"})
+                    if all_matches:
+                        # sort high to low
+                        all_matches.sort(key=lambda x: x["score"], reverse=True)
+                        prev = ent.get("semantic_matches")
+                        ent["semantic_matches"] = all_matches
+                        best = all_matches[0]
+                        ent["top_match"] = best
+                        md = best.get("metadata") or {}
+                        if not ent.get("table") and md.get("table"):
+                            ent["table"] = md.get("table")
+                        if not ent.get("column") and md.get("column"):
+                            ent["column"] = md.get("column")
+                        updated += 1 if (prev != all_matches) else 0
+                        tb = (md.get("table") or "?")
+                        col = (md.get("column") or "?")
+                        logger.debug(f"[semantic] entity='{text}' candidates={len(all_matches)} top={tb}.{col} score={best['score']:.3f} type={best['type']}")
+                except Exception as e:
+                    logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
+            logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
+            return state
+        except Exception as e:
+            logger.warning(f"[semantic] failed: {e}")
+            return state
+
     # Node: LLM filter semantic candidates per-entity
     def semantic_filter(self, state: QueryState) -> QueryState:
         logger.info("[supervisor] delegating to semantic filter (LLM)")
@@ -159,13 +203,11 @@ class AgentNodes:
                 return state
             import json, time
             kept = []
-            total_before = 0
             for ent in state.entities:
                 matches = ent.get("semantic_matches") or []
                 if not matches:
                     kept.append(ent)
                     continue
-                total_before += len(matches)
                 # Build prompt per entity
                 compact = [{
                     "index": i,
@@ -244,50 +286,6 @@ class AgentNodes:
             return state
         except Exception as e:
             logger.warning(f"[semantic-filter] failed: {e}")
-            return state
-
-                    if all_matches:
-                        # sort high to low
-                        all_matches.sort(key=lambda x: x["score"], reverse=True)
-                        prev = ent.get("semantic_matches")
-                        ent["semantic_matches"] = all_matches
-                        best = all_matches[0]
-                        ent["top_match"] = best
-                        md = best.get("metadata") or {}
-                        if not ent.get("table") and md.get("table"):
-                            ent["table"] = md.get("table")
-                        if not ent.get("column") and md.get("column"):
-                            ent["column"] = md.get("column")
-                        updated += 1 if (prev != all_matches) else 0
-                        tb = (md.get("table") or "?")
-                        col = (md.get("column") or "?")
-                        logger.debug(f"[semantic] entity='{text}' candidates={len(all_matches)} top={tb}.{col} score={best['score']:.3f} type={best['type']}")
-                except Exception as e:
-                    logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
-            logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
-            return state
-        except Exception as e:
-            logger.warning(f"[semantic] failed: {e}")
-            return state
-
-            if dropped_entities:
-                logger.info("[refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
-            state.entities = kept_entities
-            return state
-        except Exception as e:
-            logger.warning(f"[refine] failed: {e}; leaving entities unchanged")
-            return state
-
-                "type": intent.intent_type.value,
-                "time_scope": intent.time_scope.value,
-                "aggregations": [a.value for a in intent.aggregations],
-                "filters": intent.filters,
-            }
-            state.entities = entities
-            return state
-        except Exception as e:
-            logger.error(f"[intent] error: {e}")
-            state.errors.append(f"intent_error: {e}")
             return state
 
     # Node: map to schema tables
