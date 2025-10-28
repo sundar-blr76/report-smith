@@ -7,11 +7,8 @@ based on their data source optimality when multiple sources exist for the same d
 """
 
 import json
+import yaml
 from pathlib import Path
-import sys
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def demonstrate_entity_priority():
@@ -173,8 +170,6 @@ def load_and_display_mappings():
     print("Entity Mappings Configuration")
     print("=" * 80)
     print()
-    
-    import yaml
     
     mappings_file = Path(__file__).parent.parent / "config" / "entity_mappings.yaml"
     
