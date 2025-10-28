@@ -240,7 +240,7 @@ class HybridIntentAnalyzer:
         Returns:
             HybridQueryIntent with merged results
         """
-        logger.info(f"Analyzing query with hybrid approach: {query}")
+        logger.info(f"Analyzing query: {query}")
         
         # Step 1: Extract local mappings from query
         local_entities = self._extract_local_entities(query)
@@ -266,9 +266,9 @@ class HybridIntentAnalyzer:
                 self.metrics_events = getattr(self.llm_analyzer, "metrics_events", [])
                 if self.last_metrics:
                     logger.info(
-                        f"[llm] summary provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"
+                        f"[llm] provider={self.last_metrics.get('provider')} model={self.last_metrics.get('model')} prompt_chars={self.last_metrics.get('prompt_chars')} latency_ms={self.last_metrics.get('latency_ms')}"
                     )
-                logger.info(f"LLM found intent: {llm_intent.intent_type}, {len(llm_intent.entities)} entities")
+                logger.info(f"LLM intent: {llm_intent.intent_type}, entities={len(llm_intent.entities)}")
             except Exception as e:
                 self.last_metrics = {"error": str(e)}
                 logger.warning(f"LLM analysis failed, using local only: {e}")

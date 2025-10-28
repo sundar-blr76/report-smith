@@ -17,8 +17,10 @@ from typing import Dict, List, Set, Tuple, Optional, Any
 from collections import defaultdict, deque
 from enum import Enum
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+VERBOSE_KG_LOG = os.getenv("RS_KG_VERBOSE", "0").lower() in {"1", "true", "yes", "y"}
 
 
 class RelationshipType(Enum):
@@ -96,7 +98,8 @@ class SchemaKnowledgeGraph:
     def add_node(self, node: Node) -> None:
         """Add a node to the graph."""
         self.nodes[node.id] = node
-        logger.debug(f"Added node: {node.id} (type: {node.type})")
+        if VERBOSE_KG_LOG:
+            logger.debug(f"Added node: {node.id} (type: {node.type})")
         
     def add_edge(self, edge: Edge) -> None:
         """Add an edge (relationship) to the graph."""
@@ -108,10 +111,11 @@ class SchemaKnowledgeGraph:
         # Add to reverse adjacency list (backward direction)
         self.reverse_adjacency_list[edge.to_node].append((edge.from_node, edge))
         
-        logger.debug(
-            f"Added edge: {edge.from_node} → {edge.to_node} "
-            f"({edge.relationship_type.value})"
-        )
+        if VERBOSE_KG_LOG:
+            logger.debug(
+                f"Added edge: {edge.from_node} → {edge.to_node} "
+                f"({edge.relationship_type.value})"
+            )
     
     def get_node(self, node_id: str) -> Optional[Node]:
         """Get a node by its ID."""
