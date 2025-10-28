@@ -26,6 +26,9 @@ columns:
     column: total_aum
     aliases: [assets, "assets under management", "managed assets", "fund size"]
     description: "Total assets under management"
+    priority: high
+    optimal_source: true
+    source_notes: "Primary source for AUM - preferred over aggregating from holdings or positions"
   
   fees:
     canonical_name: fee_amount
@@ -33,6 +36,9 @@ columns:
     column: fee_amount
     aliases: [fee, charges, "management fees", "advisory fees"]
     description: "Fee amounts charged to clients"
+    priority: high
+    optimal_source: true
+    source_notes: "Primary source for fee amounts from transaction records"
   
   nav:
     canonical_name: current_nav
@@ -40,6 +46,9 @@ columns:
     column: current_nav
     aliases: ["net asset value", "fund value", "unit price"]
     description: "Net asset value per unit"
+    priority: high
+    optimal_source: true
+    source_notes: "Primary source for current NAV from funds table"
   
   balance:
     canonical_name: current_balance
@@ -47,6 +56,27 @@ columns:
     column: current_balance
     aliases: [account balance, holdings, position]
     description: "Current account balance"
+  
+  # Alternative AUM sources (lower priority - for demonstration)
+  aum_from_holdings:
+    canonical_name: market_value
+    table: holdings
+    column: market_value
+    aliases: []  # No aliases - shouldn't match directly
+    description: "Market value from holdings (requires aggregation for total AUM)"
+    priority: low
+    optimal_source: false
+    source_notes: "Secondary source - requires SUM aggregation across holdings; prefer funds.total_aum for overall AUM"
+  
+  aum_from_performance:
+    canonical_name: total_aum
+    table: performance_reports
+    column: total_aum
+    aliases: []  # No aliases - shouldn't match directly
+    description: "Historical AUM from performance reports"
+    priority: low
+    optimal_source: false
+    source_notes: "Historical snapshot - prefer funds.total_aum for current AUM values"
 
 # Dimension Values - Map to specific values in dimension columns
 dimension_values:

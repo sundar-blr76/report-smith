@@ -74,6 +74,7 @@ class AgentNodes:
                     "table": getattr(e, "table", None),
                     "column": getattr(e, "column", None),
                     "source": getattr(e, "source", None),
+                    "local_mapping": getattr(e, "local_mapping", None),
                 }
                 for e in intent.entities
             ]
