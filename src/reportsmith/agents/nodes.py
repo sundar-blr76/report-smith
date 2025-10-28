@@ -110,6 +110,65 @@ class AgentNodes:
             kept_entities = [e for i, e in enumerate(state.entities) if i in set(keep_idx)]
             dropped_entities = [e for i, e in enumerate(state.entities) if i not in set(keep_idx)]
             logger.info(f"[refine] kept {len(kept_entities)}/{len(state.entities)} entities; reason={keep_reason}")
+    # Node: semantic enrichment for entities using embeddings search
+    def semantic_enrich(self, state: QueryState) -> QueryState:
+        logger.info("[supervisor] delegating to semantic enricher")
+        try:
+            if not state.entities:
+                return state
+            em = getattr(self.intent_analyzer, "embedding_manager", None)
+            if em is None:
+                la = getattr(self.intent_analyzer, "llm_analyzer", None)
+                em = getattr(la, "embedding_manager", None) if la else None
+            if em is None:
+                logger.warning("[semantic] embedding manager not available; skipping enrichment")
+                return state
+            # Thresholds (fallback defaults if not available from LLM analyzer)
+            la = getattr(self.intent_analyzer, "llm_analyzer", None)
+            schema_thr = getattr(la, "schema_score_threshold", 0.3)
+            dim_thr = getattr(la, "dimension_score_threshold", 0.3)
+            ctx_thr = getattr(la, "context_score_threshold", 0.4)
+            updated = 0
+            for ent in state.entities:
+                text = ent.get("text") or ""
+                search_text = f"{state.question} {text}".strip()
+                try:
+                    schema_res = em.search_schema(search_text, top_k=100)
+                    dim_res = em.search_dimensions(search_text, top_k=100)
+                    ctx_res = em.search_business_context(search_text, top_k=100)
+                    best = None
+                    # pick best above thresholds
+                    for r in schema_res:
+                        if r.score >= schema_thr and (best is None or r.score > best["score"]):
+                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "schema"}
+                    for r in dim_res:
+                        if r.score >= dim_thr and (best is None or r.score > best["score"]):
+                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "dimension_value"}
+                    for r in ctx_res:
+                        if r.score >= ctx_thr and (best is None or r.score > best["score"]):
+                            best = {"content": r.content, "metadata": r.metadata, "score": r.score, "type": "business_context"}
+                    if best:
+                        prev = ent.get("top_match")
+                        ent["top_match"] = best
+                        # hydrate table/column hints if missing
+                        md = best.get("metadata") or {}
+                        if not ent.get("table") and md.get("table"):
+                            ent["table"] = md.get("table")
+                        if not ent.get("column") and md.get("column"):
+                            ent["column"] = md.get("column")
+                        updated += 1 if (best != prev) else 0
+                        # brief log
+                        tb = (md.get("table") or "?")
+                        col = (md.get("column") or "?")
+                        logger.debug(f"[semantic] entity='{text}' top={tb}.{col} score={best['score']:.3f} type={best['type']}")
+                except Exception as e:
+                    logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
+            logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
+            return state
+        except Exception as e:
+            logger.warning(f"[semantic] failed: {e}")
+            return state
+
             if dropped_entities:
                 logger.info("[refine] dropped entities:\n" + "\n".join([f"  - {e.get('text')} ({e.get('entity_type')})" for e in dropped_entities]))
             state.entities = kept_entities
