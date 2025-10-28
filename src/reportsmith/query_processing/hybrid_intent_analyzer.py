@@ -35,6 +35,9 @@ class LocalEntityMapping:
     aliases: List[str] = field(default_factory=list)
     description: Optional[str] = None
     context: Optional[str] = None
+    priority: Optional[str] = None  # "high", "medium", "low" - indicates preference level
+    optimal_source: bool = False  # True if this is the preferred/authoritative source
+    source_notes: Optional[str] = None  # Explanation of why this source is optimal or when to prefer it
 
 
 @dataclass
@@ -184,7 +187,10 @@ class HybridIntentAnalyzer:
                         value=mapping_data.get('value'),
                         aliases=mapping_data.get('aliases', []),
                         description=mapping_data.get('description'),
-                        context=mapping_data.get('context')
+                        context=mapping_data.get('context'),
+                        priority=mapping_data.get('priority'),
+                        optimal_source=mapping_data.get('optimal_source', False),
+                        source_notes=mapping_data.get('source_notes')
                     )
                     mapping_dict[term.lower()] = mapping
             
@@ -236,11 +242,14 @@ class HybridIntentAnalyzer:
         """
         if not entities or not self.llm_analyzer:
             return (list(range(len(entities))), "LLM not available or no entities; kept all")
-        # Build compact descriptions
+        # Build compact descriptions with priority and optimal source information
         descs = []
         for idx, e in enumerate(entities):
             md = ((e.get("top_match") or {}).get("metadata") or {})
-            descs.append({
+            local_mapping = e.get("local_mapping")
+            
+            # Build entity description
+            entity_desc = {
                 "index": idx,
                 "text": e.get("text"),
                 "type": e.get("entity_type"),
@@ -248,18 +257,40 @@ class HybridIntentAnalyzer:
                 "table": e.get("table") or md.get("table"),
                 "column": e.get("column") or md.get("column"),
                 "match_score": ((e.get("top_match") or {}).get("score")),
-            })
+                "source": e.get("source"),  # "local", "llm", or "semantic"
+            }
+            
+            # Add priority and optimal source information from local mapping if available
+            if local_mapping:
+                if hasattr(local_mapping, "priority") and local_mapping.priority:
+                    entity_desc["priority"] = local_mapping.priority
+                if hasattr(local_mapping, "optimal_source") and local_mapping.optimal_source:
+                    entity_desc["optimal_source"] = True
+                if hasattr(local_mapping, "source_notes") and local_mapping.source_notes:
+                    entity_desc["source_notes"] = local_mapping.source_notes
+            
+            descs.append(entity_desc)
+        
         import json, time
         prompt = (
             "You are an entity selection assistant for a data query system.\n"
             "Given the user query and the detected entities (with type, hints), "
-            "decide which entities to KEEP for downstream planning.\n"
-            "Prefer precise, non-duplicative entities. Drop ambiguous or redundant ones.\n\n"
+            "decide which entities to KEEP for downstream planning.\n\n"
+            "SELECTION GUIDELINES:\n"
+            "1. Prefer entities marked with 'optimal_source': true - these are authoritative/primary sources\n"
+            "2. Prioritize entities with 'priority': 'high' over those with 'medium' or 'low'\n"
+            "3. When multiple entities represent the same concept (e.g., AUM), prefer:\n"
+            "   - Direct table columns over derived/aggregated values\n"
+            "   - Primary sources (e.g., funds.total_aum) over secondary sources (e.g., sum from positions)\n"
+            "   - Current values over historical snapshots\n"
+            "4. Drop ambiguous, redundant, or less optimal duplicate entities\n"
+            "5. Consider 'source_notes' field for context on when to prefer specific sources\n"
+            "6. Prefer 'source': 'local' entities (from mappings) as they are pre-verified\n\n"
             f"Query: {query}\n\n"
             f"Entities: {json.dumps(descs, indent=2)}\n\n"
             "Return a JSON object: {\n"
             "  \"keep_indices\": [list of indices to keep],\n"
-            "  \"reasoning\": \"brief rationale for retention/drop decisions\"\n"
+            "  \"reasoning\": \"brief rationale for retention/drop decisions, especially for duplicates\"\n"
             "}"
         )
         la = self.llm_analyzer
