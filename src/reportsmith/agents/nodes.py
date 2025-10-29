@@ -38,10 +38,16 @@ class AgentNodes:
 
     # Node: analyze intent
     def analyze_intent(self, state: QueryState) -> QueryState:
+    # helper to dump state compactly for start logs
+    def _dump_state(self, state: QueryState) -> str:
         try:
-            logger.debug("[state@intent:start] " + json.dumps(state.model_dump(), default=str) )
+            return json.dumps(state.model_dump(), default=str)
         except Exception:
-            logger.debug("[state@intent:start] (unserializable)")
+            return "(unserializable)"
+
+        # Color-coded node start for visibility
+        logger.info("\x1b[1;36m=== NODE START: INTENT ===\x1b[0m")
+        logger.debug("[state@intent:start] " + self._dump_state(state))
         logger.info("[supervisor] received question; delegating to intent analyzer")
         import time
         t0 = time.perf_counter()
@@ -114,7 +120,8 @@ class AgentNodes:
 
     # Node: refine entities with LLM selection
     def refine_entities(self, state: QueryState) -> QueryState:
-        logger.info("[supervisor] delegating to entity refiner")
+        logger.info("\x1b[1;34m=== NODE START: REFINE ENTITIES ===\x1b[0m")
+        logger.debug("[state@refine:start] " + self._dump_state(state))
         try:
             if not state.entities:
                 return state
@@ -132,7 +139,8 @@ class AgentNodes:
 
     # Node: semantic enrichment for entities using embeddings search
     def semantic_enrich(self, state: QueryState) -> QueryState:
-        logger.info("[supervisor] delegating to semantic enricher")
+        logger.info("\x1b[1;35m=== NODE START: SEMANTIC ENRICH ===\x1b[0m")
+        logger.debug("[state@semantic:start] " + self._dump_state(state))
         try:
             if not state.entities:
                 return state
@@ -193,7 +201,8 @@ class AgentNodes:
 
     # Node: LLM filter semantic candidates per-entity
     def semantic_filter(self, state: QueryState) -> QueryState:
-        logger.info("[supervisor] delegating to semantic filter (LLM)")
+        logger.info("\x1b[1;33m=== NODE START: SEMANTIC FILTER (LLM) ===\x1b[0m")
+        logger.debug("[state@semantic_filter:start] " + self._dump_state(state))
         try:
             if not state.entities:
                 return state
@@ -290,10 +299,8 @@ class AgentNodes:
 
     # Node: map to schema tables
     def map_schema(self, state: QueryState) -> QueryState:
-        try:
-            logger.debug("[state@schema:start] " + json.dumps(state.model_dump(), default=str))
-        except Exception:
-            logger.debug("[state@schema:start] (unserializable)")
+        logger.info("\x1b[1;32m=== NODE START: SCHEMA MAP ===\x1b[0m")
+        logger.debug("[state@schema:start] " + self._dump_state(state))
         logger.info("[supervisor] delegating to schema mapper")
         # Print entities supplied to schema mapper in a readable format
         try:
@@ -444,7 +451,7 @@ class AgentNodes:
             logger.debug("[state@plan:start] " + json.dumps(state.model_dump(), default=str))
         except Exception:
             logger.debug("[state@plan:start] (unserializable)")
-        logger.info("[supervisor] delegating to planner")
+        logger.info("\x1b[1;31m=== NODE START: PLAN ===\x1b[0m")
         import time
         t0 = time.perf_counter()
         try:
@@ -504,10 +511,8 @@ class AgentNodes:
 
     # Node: finalize response (no execution)
     def finalize(self, state: QueryState) -> QueryState:
-        try:
-            logger.debug("[state@finalize:start] " + json.dumps(state.model_dump(), default=str))
-        except Exception:
-            logger.debug("[state@finalize:start] (unserializable)")
+        logger.info("\x1b[1;37m=== NODE START: FINALIZE ===\x1b[0m")
+        logger.debug("[state@finalize:start] " + self._dump_state(state))
         logger.info("[supervisor] finalizing response")
         import time
         t0 = time.perf_counter()
