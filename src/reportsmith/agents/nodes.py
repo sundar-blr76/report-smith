@@ -36,8 +36,6 @@ class AgentNodes:
         self.graph_builder = graph_builder
         self.knowledge_graph = knowledge_graph
 
-    # Node: analyze intent
-    def analyze_intent(self, state: QueryState) -> QueryState:
     # helper to dump state compactly for start logs
     def _dump_state(self, state: QueryState) -> str:
         try:
@@ -45,6 +43,8 @@ class AgentNodes:
         except Exception:
             return "(unserializable)"
 
+    # Node: analyze intent
+    def analyze_intent(self, state: QueryState) -> QueryState:
         # Color-coded node start for visibility
         logger.info("\x1b[1;36m=== NODE START: INTENT ===\x1b[0m")
         logger.debug("[state@intent:start] " + self._dump_state(state))
