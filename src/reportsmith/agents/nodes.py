@@ -215,7 +215,7 @@ class AgentNodes:
             # Tuning knobs for semantic filtering
             max_candidates = getattr(la, 'semantic_filter_max_candidates', 50)
             max_keep = getattr(la, 'semantic_filter_max_keep', 5)
-            min_score = getattr(la, 'semantic_filter_min_score', 0.45)
+            min_score = getattr(la, 'semantic_filter_min_score', 0.50)
             for ent in state.entities:
                 matches = ent.get("semantic_matches") or []
                 # Pre-trim by score and cap to max_candidates to avoid huge prompts
@@ -279,24 +279,23 @@ class AgentNodes:
                     ent["top_match"] = matches[0]
                     kept.append(ent)
                     continue
-                # Post-filter: enforce a maximum kept count
+                # Post-filter: enforce a maximum kept count after LLM indices are chosen
+                idxs = data.get("relevant_indices", [])
+                reason = data.get("reasoning", "")
+                filtered = [matches[i] for i in idxs if i < len(matches)]
+                if not filtered:
+                    filtered = matches[:1]
                 if len(filtered) > max_keep:
                     filtered = filtered[:max_keep]
+                # Ensure best candidate at top after trimming
+                filtered.sort(key=lambda x: x.get('score', 0), reverse=True)
 
                 finally:
                     dt_ms = (time.perf_counter() - t0) * 1000.0
                     try:
                         logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
                     except Exception:
-                # Ensure best candidate at top after trimming
-                filtered.sort(key=lambda x: x.get('score', 0), reverse=True)
-
                         pass
-                idxs = data.get("relevant_indices", [])
-                reason = data.get("reasoning", "")
-                filtered = [matches[i] for i in idxs if i < len(matches)]
-                if not filtered:
-                    filtered = matches[:1]
                 ent["semantic_matches"] = filtered
                 ent["top_match"] = filtered[0]
                 md = (filtered[0].get("metadata") or {})
