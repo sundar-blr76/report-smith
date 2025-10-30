@@ -58,6 +58,31 @@ class MultiAgentOrchestrator:
         return g.compile()
 
     def run(self, question: str) -> QueryState:
+    def run_stream(self, question: str, on_event: Callable[[str, dict], None]) -> QueryState:
+        """Run graph and stream node events via callback. on_event(event, payload)."""
+        logger.info("[supervisor] received payload; starting orchestration (stream)")
+        state = QueryState(question=question)
+        # Map node functions to event names to stream progress
+        steps = [
+            ("intent", self.nodes.analyze_intent),
+            ("semantic", self.nodes.semantic_enrich),
+            ("semantic_filter", self.nodes.semantic_filter),
+            ("refine", self.nodes.refine_entities),
+            ("schema", self.nodes.map_schema),
+            ("plan", self.nodes.plan_query),
+            ("finalize", self.nodes.finalize),
+        ]
+        for name, fn in steps:
+            try:
+                on_event("node_start", {"name": name})
+                state = fn(state)
+                on_event("node_end", {"name": name})
+            except Exception as e:
+                on_event("error", {"name": name, "error": str(e)})
+                raise
+        on_event("complete", {"name": "orchestration"})
+        return state
+
         logger.info("[supervisor] received payload; starting orchestration")
         state = QueryState(question=question)
         final: QueryState = self.graph.invoke(state)  # type: ignore

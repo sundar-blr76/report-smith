@@ -145,6 +145,32 @@ if submitted:
             except Exception as e:
                 st.error(f"Error calling API: {e}")
 
+
+# Streaming area
+st.markdown("---")
+st.subheader("Live Orchestration (stream)")
+stream_q = st.text_input("Question (stream)", value="Show AUM for all equity funds")
+if st.button("Stream Query"):
+    if not ready_ok:
+        st.warning("API is not ready yet")
+    else:
+        ph = st.empty()
+        log = []
+        try:
+            with requests.get(f"{api_base}/query/stream", params={"question": stream_q}, stream=True, timeout=timeout_s) as r:
+                r.raise_for_status()
+                for line in r.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        import json as _json
+                        obj = _json.loads(line[6:])
+                        evt = obj.get("event"); payload = obj.get("payload")
+                        log.append({"event": evt, "payload": payload})
+                        ph.json(log)
+        except Exception as e:
+            st.error(f"Streaming error: {e}")
+
 st.sidebar.markdown("---")
 st.sidebar.write("Usage:")
 st.sidebar.code(

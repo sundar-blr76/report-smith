@@ -173,3 +173,43 @@ def query(req: QueryRequest) -> QueryResponse:
         "llm_summaries": _safe(_get(final_state, "llm_summaries")),
     }
     return QueryResponse(status="ok", data=data)
+
+
+# Simple server-sent events (SSE) endpoint for streaming progress to UI
+from fastapi import BackgroundTasks
+from fastapi.responses import StreamingResponse
+import json as _json
+
+@app.get("/query/stream")
+async def query_stream(question: str):
+    if rs_app is None:
+        raise HTTPException(status_code=503, detail="ReportSmith not initialized")
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+
+    queue: list[str] = []
+
+    def on_event(event: str, payload: dict):
+        data = {"event": event, "payload": payload}
+        queue.append(f"event: {event}\ndata: {_json.dumps(data)}\n\n")
+
+    def event_generator():
+        try:
+            final_state = orchestrator.run_stream(question, on_event)
+            # Send final snapshot
+            on_event("result", {"state": {
+                "intent": final_state.intent,
+                "entities": final_state.entities,
+                "tables": final_state.tables,
+                "plan": final_state.plan,
+                "errors": final_state.errors,
+                "timings": final_state.timings,
+                "llm_summaries": final_state.llm_summaries,
+            }})
+        except Exception as e:
+            on_event("error", {"message": str(e)})
+        # drain
+        while queue:
+            yield queue.pop(0)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
