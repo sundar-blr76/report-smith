@@ -245,6 +245,7 @@ class AgentNodes:
                 )
                 provider = getattr(la, "llm_provider", "gemini")
                 t0 = time.perf_counter()
+                data = None
                 try:
                     if provider == "openai":
                         req = {
@@ -278,10 +279,17 @@ class AgentNodes:
                     ent["semantic_matches"] = matches[:1]
                     ent["top_match"] = matches[0]
                     kept.append(ent)
+                    # timing log in finally
                     continue
+                finally:
+                    dt_ms = (time.perf_counter() - t0) * 1000.0
+                    try:
+                        logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
+                    except Exception:
+                        pass
                 # Post-filter: enforce a maximum kept count after LLM indices are chosen
-                idxs = data.get("relevant_indices", [])
-                reason = data.get("reasoning", "")
+                idxs = (data or {}).get("relevant_indices", [])
+                reason = (data or {}).get("reasoning", "")
                 filtered = [matches[i] for i in idxs if i < len(matches)]
                 if not filtered:
                     filtered = matches[:1]
@@ -290,12 +298,6 @@ class AgentNodes:
                 # Ensure best candidate at top after trimming
                 filtered.sort(key=lambda x: x.get('score', 0), reverse=True)
 
-                finally:
-                    dt_ms = (time.perf_counter() - t0) * 1000.0
-                    try:
-                        logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
-                    except Exception:
-                        pass
                 ent["semantic_matches"] = filtered
                 ent["top_match"] = filtered[0]
                 md = (filtered[0].get("metadata") or {})
