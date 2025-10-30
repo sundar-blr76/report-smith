@@ -58,6 +58,12 @@ class MultiAgentOrchestrator:
         return g.compile()
 
     def run(self, question: str) -> QueryState:
+        logger.info("[supervisor] received payload; starting orchestration")
+        state = QueryState(question=question)
+        final: QueryState = self.graph.invoke(state)  # type: ignore
+        logger.info("[supervisor] orchestration complete")
+        return final
+
     def run_stream(self, question: str, on_event: Callable[[str, dict], None]) -> QueryState:
         """Run graph and stream node events via callback. on_event(event, payload)."""
         logger.info("[supervisor] received payload; starting orchestration (stream)")
@@ -82,9 +88,3 @@ class MultiAgentOrchestrator:
                 raise
         on_event("complete", {"name": "orchestration"})
         return state
-
-        logger.info("[supervisor] received payload; starting orchestration")
-        state = QueryState(question=question)
-        final: QueryState = self.graph.invoke(state)  # type: ignore
-        logger.info("[supervisor] orchestration complete")
-        return final
