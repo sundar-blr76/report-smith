@@ -5,6 +5,7 @@ Centralized logging configuration for ReportSmith application.
 import logging
 import os
 import sys
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -85,10 +86,18 @@ class LoggerManager:
         file_handler.setFormatter(detailed_formatter)
         file_handler.addFilter(req_filter)
         
+        # If terminal does not support ANSI, strip codes from console output
+        supports_color = sys.stdout.isatty() and os.getenv("TERM") not in (None, "dumb")
+        class _StripANSIFormatter(ISTFormatter):
+            ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+            def format(self, record):
+                s = super().format(record)
+                return s if supports_color else self.ansi_re.sub("", s)
+
         # Console handler - simpler logging
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(log_level)
-        console_handler.setFormatter(simple_formatter)
+        console_handler.setFormatter(_StripANSIFormatter(simple_formatter._fmt, datefmt='%H:%M:%S'))
         console_handler.addFilter(req_filter)
         
         # Configure root logger
