@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 from pydantic import BaseModel, Field
 import json
 
@@ -212,8 +212,17 @@ class AgentNodes:
                 return state
             import json, time
             kept = []
+            # Tuning knobs for semantic filtering
+            max_candidates = getattr(la, 'semantic_filter_max_candidates', 50)
+            max_keep = getattr(la, 'semantic_filter_max_keep', 5)
+            min_score = getattr(la, 'semantic_filter_min_score', 0.45)
             for ent in state.entities:
                 matches = ent.get("semantic_matches") or []
+                # Pre-trim by score and cap to max_candidates to avoid huge prompts
+                if matches:
+                    matches = [m for m in matches if (m.get('score') or 0) >= min_score]
+                    matches = matches[:max_candidates]
+
                 if not matches:
                     kept.append(ent)
                     continue
@@ -270,11 +279,18 @@ class AgentNodes:
                     ent["top_match"] = matches[0]
                     kept.append(ent)
                     continue
+                # Post-filter: enforce a maximum kept count
+                if len(filtered) > max_keep:
+                    filtered = filtered[:max_keep]
+
                 finally:
                     dt_ms = (time.perf_counter() - t0) * 1000.0
                     try:
                         logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
                     except Exception:
+                # Ensure best candidate at top after trimming
+                filtered.sort(key=lambda x: x.get('score', 0), reverse=True)
+
                         pass
                 idxs = data.get("relevant_indices", [])
                 reason = data.get("reasoning", "")
