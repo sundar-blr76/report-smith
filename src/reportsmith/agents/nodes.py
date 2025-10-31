@@ -178,27 +178,43 @@ class AgentNodes:
             schema_thr = getattr(la, "schema_score_threshold", 0.3)
             dim_thr = getattr(la, "dimension_score_threshold", 0.3)
             ctx_thr = getattr(la, "context_score_threshold", 0.4)
+            # One-time write of input payload will happen inside loop before searching
+
             updated = 0
             for ent in state.entities:
                 text = ent.get("text") or ""
                 search_text = f"{state.question} {text}".strip()
                 try:
                     # Pull larger sets; no early trimming here
+                    # Write semantic search input payload once per entity
+                    self._write_debug("semantic_input.json", {
+                        "question": state.question,
+                        "entity": ent,
+                        "search_text": search_text,
+                    # sort high to low
+                    all_matches.sort(key=lambda x: x["score"], reverse=True)
+
+                    # Write semantic search output payload (overwrite)
+                    self._write_debug("semantic_output.json", {
+                        "entity": ent.get("text"),
+                        "counts": {
+                            "schema": len(schema_res),
+                            "dimensions": len(dim_res),
+                            "context": len(ctx_res),
+                            "all_matches": len(all_matches)
+                        },
+                        "top": best,
+                    })
+
+                        "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
+                    })
+
                     schema_res = em.search_schema(search_text, top_k=1000)
                     dim_res = em.search_dimensions(search_text, top_k=1000)
                     ctx_res = em.search_business_context(search_text, top_k=1000)
                     all_matches = []
-                        # Write semantic search output payload (overwrite)
-                        self._write_debug("semantic_output.json", {
-                            "entity": ent.get("text"),
-                            "counts": {
-                                "schema": len(schema_res),
-                                "dimensions": len(dim_res),
-                                "context": len(ctx_res),
-                                "all_matches": len(all_matches)
-                            },
-                            "top": best,
-                        })
+                    # After building all_matches and identifying best, write output payload
+
 
                     for r in schema_res:
                         if r.score >= schema_thr:
