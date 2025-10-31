@@ -158,13 +158,6 @@ class AgentNodes:
         try:
             if not state.entities:
                 return state
-                # Write semantic search input payload once per entity
-                self._write_debug("semantic_input.json", {
-                    "question": state.question,
-                    "entity": ent,
-                    "search_text": search_text,
-                    "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
-                })
 
             em = getattr(self.intent_analyzer, "embedding_manager", None)
             if em is None:
@@ -191,8 +184,16 @@ class AgentNodes:
                         "question": state.question,
                         "entity": ent,
                         "search_text": search_text,
+                        "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
+                    })
+
+                    schema_res = em.search_schema(search_text, top_k=1000)
+                    dim_res = em.search_dimensions(search_text, top_k=1000)
+                    ctx_res = em.search_business_context(search_text, top_k=1000)
+                    all_matches = []
                     # sort high to low
                     all_matches.sort(key=lambda x: x["score"], reverse=True)
+                    best = all_matches[0]
 
                     # Write semantic search output payload (overwrite)
                     self._write_debug("semantic_output.json", {
@@ -206,15 +207,7 @@ class AgentNodes:
                         "top": best,
                     })
 
-                        "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
-                    })
-
-                    schema_res = em.search_schema(search_text, top_k=1000)
-                    dim_res = em.search_dimensions(search_text, top_k=1000)
-                    ctx_res = em.search_business_context(search_text, top_k=1000)
-                    all_matches = []
                     # After building all_matches and identifying best, write output payload
-
 
                     for r in schema_res:
                         if r.score >= schema_thr:
