@@ -166,6 +166,7 @@ def query(req: QueryRequest) -> QueryResponse:
         "intent": _get(final_state, "intent"),
         "entities": _get(final_state, "entities"),
         "tables": _get(final_state, "tables"),
+        "semantic_match_counts": [len((e or {}).get("semantic_matches", [])) for e in (_get(final_state, "entities") or []) if isinstance(e, dict)],
         "plan": _get(final_state, "plan"),
         "result": _get(final_state, "result"),
         "errors": _get(final_state, "errors"),

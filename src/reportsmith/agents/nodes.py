@@ -198,6 +198,13 @@ class AgentNodes:
         except Exception as e:
             logger.warning(f"[semantic] failed: {e}")
             return state
+            # add per-entity match counts for downstream consumers/UI
+            try:
+                for ent in state.entities:
+                    ent["semantic_match_count"] = len(ent.get("semantic_matches") or [])
+            except Exception:
+                pass
+
 
     # Node: LLM filter semantic candidates per-entity
     def semantic_filter(self, state: QueryState) -> QueryState:
@@ -300,6 +307,13 @@ class AgentNodes:
 
                 ent["semantic_matches"] = filtered
                 ent["top_match"] = filtered[0]
+            # update count after filtering
+            try:
+                for ent in state.entities:
+                    ent["semantic_match_count"] = len(ent.get("semantic_matches") or [])
+            except Exception:
+                pass
+
                 md = (filtered[0].get("metadata") or {})
                 if not ent.get("table") and md.get("table"):
                     ent["table"] = md.get("table")
