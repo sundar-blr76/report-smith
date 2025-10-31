@@ -191,23 +191,6 @@ class AgentNodes:
                     dim_res = em.search_dimensions(search_text, top_k=1000)
                     ctx_res = em.search_business_context(search_text, top_k=1000)
                     all_matches = []
-                    # sort high to low
-                    all_matches.sort(key=lambda x: x["score"], reverse=True)
-                    best = all_matches[0]
-
-                    # Write semantic search output payload (overwrite)
-                    self._write_debug("semantic_output.json", {
-                        "entity": ent.get("text"),
-                        "counts": {
-                            "schema": len(schema_res),
-                            "dimensions": len(dim_res),
-                            "context": len(ctx_res),
-                            "all_matches": len(all_matches)
-                        },
-                        "top": best,
-                    })
-
-                    # After building all_matches and identifying best, write output payload
 
                     for r in schema_res:
                         if r.score >= schema_thr:
@@ -235,6 +218,21 @@ class AgentNodes:
                         col = (md.get("column") or "?")
                         logger.debug(f"[semantic] entity='{text}' candidates={len(all_matches)} top={tb}.{col} score={best['score']:.3f} type={best['type']}")
                 except Exception as e:
+                    # After building all_matches, write output payload if any and compute best
+                    if all_matches:
+                        all_matches.sort(key=lambda x: x["score"], reverse=True)
+                        best = all_matches[0]
+                        self._write_debug("semantic_output.json", {
+                            "entity": ent.get("text"),
+                            "counts": {
+                                "schema": len(schema_res),
+                                "dimensions": len(dim_res),
+                                "context": len(ctx_res),
+                                "all_matches": len(all_matches)
+                            },
+                            "top": best,
+                        })
+
                     logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
             logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
             return state
