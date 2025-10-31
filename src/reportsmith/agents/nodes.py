@@ -22,6 +22,7 @@ class QueryState(BaseModel):
     errors: List[str] = Field(default_factory=list)
     timings: Dict[str, float] = Field(default_factory=dict)
     llm_summaries: List[Dict[str, Any]] = Field(default_factory=list)
+    debug_files: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentNodes:
@@ -35,6 +36,19 @@ class AgentNodes:
         self.intent_analyzer = intent_analyzer
         self.graph_builder = graph_builder
         self.knowledge_graph = knowledge_graph
+        # output directory for debug payloads
+    def _write_debug(self, filename: str, data: Any) -> None:
+        try:
+            import os, json
+            os.makedirs(self.debug_dir, exist_ok=True)
+            path = os.path.join(self.debug_dir, filename)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"[debug] failed to write {filename}: {e}")
+
+        self.debug_dir = "/home/sundar/sundar_projects/report-smith/logs/semantic_debug"
+
 
     # helper to dump state compactly for start logs
     def _dump_state(self, state: QueryState) -> str:
@@ -144,6 +158,14 @@ class AgentNodes:
         try:
             if not state.entities:
                 return state
+                # Write semantic search input payload once per entity
+                self._write_debug("semantic_input.json", {
+                    "question": state.question,
+                    "entity": ent,
+                    "search_text": search_text,
+                    "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
+                })
+
             em = getattr(self.intent_analyzer, "embedding_manager", None)
             if em is None:
                 la = getattr(self.intent_analyzer, "llm_analyzer", None)
@@ -166,6 +188,18 @@ class AgentNodes:
                     dim_res = em.search_dimensions(search_text, top_k=1000)
                     ctx_res = em.search_business_context(search_text, top_k=1000)
                     all_matches = []
+                        # Write semantic search output payload (overwrite)
+                        self._write_debug("semantic_output.json", {
+                            "entity": ent.get("text"),
+                            "counts": {
+                                "schema": len(schema_res),
+                                "dimensions": len(dim_res),
+                                "context": len(ctx_res),
+                                "all_matches": len(all_matches)
+                            },
+                            "top": best,
+                        })
+
                     for r in schema_res:
                         if r.score >= schema_thr:
                             all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "schema"})
