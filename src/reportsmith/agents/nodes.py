@@ -39,11 +39,15 @@ class AgentNodes:
         # output directory for debug payloads
     def _write_debug(self, filename: str, data: Any) -> None:
         try:
-            import os, json
+            import os, json, tempfile
             os.makedirs(self.debug_dir, exist_ok=True)
             path = os.path.join(self.debug_dir, filename)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Serialize first with default=str to avoid partial writes on non-serializable objects
+            payload = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(tmp_path, path)
         except Exception as e:
             logger.warning(f"[debug] failed to write {filename}: {e}")
 
