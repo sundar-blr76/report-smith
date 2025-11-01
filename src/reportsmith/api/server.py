@@ -139,7 +139,7 @@ def query(req: QueryRequest) -> QueryResponse:
     try:
         from reportsmith.logger import get_logger
         get_logger(__name__).info("[api] supervisor handling /query; delegating to orchestrator")
-        final_state = orchestrator.run(req.question)
+        final_state = orchestrator.run(req.question, app_id=req.app_id)
     except Exception as e:
         from reportsmith.logger import get_logger
         get_logger(__name__).error(f"[api] orchestration failed: {e}")

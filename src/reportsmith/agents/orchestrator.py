@@ -57,9 +57,9 @@ class MultiAgentOrchestrator:
         g.set_entry_point("intent")
         return g.compile()
 
-    def run(self, question: str) -> QueryState:
+    def run(self, question: str, app_id: str | None = None) -> QueryState:
         logger.info("[supervisor] received payload; starting orchestration")
-        state = QueryState(question=question)
+        state = QueryState(question=question, app_id=app_id)
         final: QueryState = self.graph.invoke(state)  # type: ignore
         logger.info("[supervisor] orchestration complete")
         return final

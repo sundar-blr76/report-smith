@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 class QueryState(BaseModel):
     question: str
+    app_id: Optional[str] = None
     intent: Dict[str, Any] | None = None
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     tables: List[str] = Field(default_factory=list)
@@ -191,9 +192,9 @@ class AgentNodes:
                         "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
                     })
 
-                    schema_res = em.search_schema(search_text, top_k=1000)
-                    dim_res = em.search_dimensions(search_text, top_k=1000)
-                    ctx_res = em.search_business_context(search_text, top_k=1000)
+                    schema_res = em.search_schema(search_text, app_id=state.app_id, top_k=1000)
+                    dim_res = em.search_dimensions(search_text, app_id=state.app_id, top_k=1000)
+                    ctx_res = em.search_business_context(search_text, app_id=state.app_id, top_k=1000)
                     all_matches = []
 
                     for r in schema_res:
