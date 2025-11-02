@@ -239,6 +239,48 @@ class AgentNodes:
                         })
 
                     logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
+            # Stats after semantic enrichment
+            try:
+                tables_set = set()
+                cols_per_table: Dict[str, set] = {}
+                rel_edges: List[Dict[str, Any]] = []
+                ctx_matches = 0
+                for ent in state.entities:
+                    # table/column from entity or top_match metadata
+                    md = ((ent.get("top_match") or {}).get("metadata") or {})
+                    tb = ent.get("table") or md.get("table")
+                    col = ent.get("column") or md.get("column")
+                    if tb:
+                        tables_set.add(tb)
+                        if col:
+                            cols_per_table.setdefault(tb, set()).add(col)
+                    # count business context matches
+                    for m in (ent.get("semantic_matches") or []):
+                        if (m.get("type") == "business_context"):
+                            ctx_matches += 1
+                # relationships between discovered tables via KG shortest paths
+                tables_list = sorted(list(tables_set))
+                if len(tables_list) > 1:
+                    root = tables_list[0]
+                    for tb in tables_list[1:]:
+                        path = self.knowledge_graph.find_shortest_path(root, tb)
+                        if path:
+                            for e in path.edges:
+                                rel_edges.append({
+                                    "from": e.from_node,
+                                    "to": e.to_node,
+                                    "type": e.relationship_type.value,
+                                    "from_column": e.from_column,
+                                    "to_column": e.to_column,
+                                })
+                # Log compact summary
+                cols_count = {k: len(v) for k, v in cols_per_table.items()}
+                logger.info(
+                    "[semantic][stats] tables=%s columns_per_table=%s relationships=%d business_context_matches=%d",
+                    tables_list, cols_count, len(rel_edges), ctx_matches,
+                )
+            except Exception as e:
+                logger.debug(f"[semantic][stats] failed: {e}")
             logger.info(f"[semantic] enriched {len(state.entities)} entities; updated={updated}")
             return state
         except Exception as e:
