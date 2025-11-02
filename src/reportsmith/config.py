@@ -26,9 +26,10 @@ class Settings(BaseSettings):
     # Audit Database (for logging and monitoring)
     audit_database_url: str = Field(default="sqlite:///reportsmith_audit.db", env="AUDIT_DATABASE_URL")
     
-    # Vector Store
+    # Vector Store / Embeddings
     vector_store_path: str = "./data/vector_store"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Use 'sentence-transformers/...' for local or 'text-embedding-3-small|large' for OpenAI
+    embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
     
     # RAG Configuration
     chunk_size: int = 1000

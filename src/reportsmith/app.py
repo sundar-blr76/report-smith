@@ -44,8 +44,16 @@ class ReportSmithApp:
             self.logger.info("Database connection manager initialized")
             
             self.logger.info("Initializing embedding manager...")
-            self.embedding_manager = EmbeddingManager()
-            self.logger.info("Embedding manager initialized")
+            # Determine embedding provider/model from settings
+            from reportsmith.config import settings as app_settings
+            # Default to OpenAI when key is present; otherwise fallback to local
+            provider = "openai" if app_settings.openai_api_key else "local"
+            self.embedding_manager = EmbeddingManager(
+                embedding_model=app_settings.embedding_model,
+                provider=provider,
+                openai_api_key=app_settings.openai_api_key
+            )
+            self.logger.info(f"Embedding manager initialized with provider={provider}")
             
             self.logger.info("Initializing dimension loader...")
             self.dimension_loader = DimensionLoader(

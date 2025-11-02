@@ -41,14 +41,17 @@ class EmbeddingManager:
     - business_context: Metrics, rules, and sample queries
     """
     
-    def __init__(self, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2", provider: str = "local", openai_api_key: Optional[str] = None):
         """
         Initialize embedding manager.
         
         Args:
-            embedding_model: Name of sentence-transformer model to use
+            embedding_model: Name of embedding model to use
+            provider: 'local' to use sentence-transformers, 'openai' to use OpenAI embeddings
+            openai_api_key: API key for OpenAI when provider='openai'
         """
         self.embedding_model = embedding_model
+        self.provider = provider
         
         # Initialize ChromaDB in-memory client
         self.client = chromadb.Client(ChromaSettings(
@@ -56,10 +59,18 @@ class EmbeddingManager:
             allow_reset=True
         ))
         
-        # Initialize embedding function
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=embedding_model
-        )
+        # Initialize embedding function based on provider
+        if provider == "openai":
+            if not openai_api_key:
+                raise ValueError("OPENAI_API_KEY is required when provider='openai'")
+            self.embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
+                api_key=openai_api_key,
+                model_name=embedding_model
+            )
+        else:
+            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name=embedding_model
+            )
         
         # Create collections
         self.collections: Dict[str, chromadb.Collection] = {}
@@ -69,7 +80,7 @@ class EmbeddingManager:
         self._dimension_cache: Dict[str, datetime] = {}
         self._cache_ttl = timedelta(hours=24)  # 24-hour staleness acceptable
         
-        logger.info(f"Initialized EmbeddingManager with model: {embedding_model}")
+        logger.info(f"Initialized EmbeddingManager with provider={provider} model={embedding_model}")
     
     def _init_collections(self):
         """Initialize ChromaDB collections."""
@@ -102,6 +113,13 @@ class EmbeddingManager:
         """
         Load schema metadata from application YAML config.
         
+        **NEW STRATEGY**: Embed ONLY entity/synonym names (minimal text)
+        Store all context, relationships, hints in metadata.
+        Multiple embeddings per entity for better matching:
+        - Primary name
+        - Each synonym/alias
+        - Description-based variants (if hints provided)
+        
         Args:
             app_id: Application identifier (e.g., 'fund_accounting')
             schema_config: Parsed schema section from YAML
@@ -113,43 +131,103 @@ class EmbeddingManager:
         ids = []
         
         tables = schema_config.get("tables", {})
+        relationships = schema_config.get("relationships", [])
+        
+        # Build relationship map for context
+        rel_map = {}  # table -> list of related tables
+        for rel in relationships:
+            from_t = rel.get("from_table", "")
+            to_t = rel.get("to_table", "")
+            rel_map.setdefault(from_t, []).append({
+                "to_table": to_t,
+                "type": rel.get("type", ""),
+                "from_column": rel.get("from_column", ""),
+                "to_column": rel.get("to_column", "")
+            })
+            # bidirectional
+            rel_map.setdefault(to_t, []).append({
+                "to_table": from_t,
+                "type": rel.get("type", ""),
+                "from_column": rel.get("to_column", ""),
+                "to_column": rel.get("from_column", "")
+            })
         
         for table_name, table_def in tables.items():
-            # Embed table-level metadata
-            table_doc = self._create_table_document(app_id, table_name, table_def)
-            table_id = self._generate_id(f"table_{app_id}_{table_name}")
-            
-            documents.append(table_doc)
-            metadatas.append({
-                "type": "table",
+            # Base metadata: full schema info + relationships
+            related_tables = rel_map.get(table_name, [])
+            # Serialize lists to JSON strings for ChromaDB compatibility
+            import json as json_module
+            base_table_meta = {
+                "entity_type": "table",
+                "entity_name": table_name,
                 "application": app_id,
                 "table": table_name,
                 "description": table_def.get("description", ""),
                 "primary_key": table_def.get("primary_key", ""),
-                "estimated_rows": table_def.get("estimated_rows", 0)
-            })
-            ids.append(table_id)
+                "estimated_rows": table_def.get("estimated_rows", 0),
+                # Store as JSON strings (ChromaDB doesn't support list metadata)
+                "related_tables_json": json_module.dumps([r["to_table"] for r in related_tables]),
+                "relationships_json": json_module.dumps(related_tables)
+            }
             
-            # Embed column-level metadata
+            # Embedding 1: Table name ONLY (exact match)
+            documents.append(table_name)
+            metadatas.append({**base_table_meta, "match_type": "primary", "embedded_text": table_name})
+            ids.append(self._generate_id(f"table_{app_id}_{table_name}_primary"))
+            
+            # Embedding 2-N: Each synonym (one embedding each)
+            synonyms = table_def.get("synonyms") or table_def.get("aliases") or []
+            if isinstance(synonyms, list):
+                for idx, syn in enumerate(synonyms):
+                    syn_str = str(syn).strip()
+                    if syn_str:
+                        documents.append(syn_str)
+                        metadatas.append({
+                            **base_table_meta,
+                            "match_type": "synonym",
+                            "synonym": syn_str,
+                            "embedded_text": syn_str
+                        })
+                        ids.append(self._generate_id(f"table_{app_id}_{table_name}_syn{idx}"))
+            
+            # Embed each column with same minimal strategy
             columns = table_def.get("columns", {})
             for col_name, col_def in columns.items():
-                col_doc = self._create_column_document(
-                    app_id, table_name, col_name, col_def
-                )
-                col_id = self._generate_id(f"column_{app_id}_{table_name}_{col_name}")
-                
-                documents.append(col_doc)
-                metadatas.append({
-                    "type": "column",
+                # Gather column metadata (NOT in embedding text)
+                # ChromaDB doesn't support list metadata, so we serialize to JSON
+                base_col_meta = {
+                    "entity_type": "column",
+                    "entity_name": col_name,
                     "application": app_id,
                     "table": table_name,
                     "column": col_name,
+                    "full_path": f"{table_name}.{col_name}",
                     "data_type": col_def.get("type", ""),
                     "description": col_def.get("description", ""),
                     "nullable": col_def.get("nullable", True),
-                    "examples": str(col_def.get("examples", []))
-                })
-                ids.append(col_id)
+                    "is_dimension": col_def.get("is_dimension", False),
+                    "related_tables_json": json_module.dumps([r["to_table"] for r in related_tables])
+                }
+                
+                # Embedding 1: Column name ONLY
+                documents.append(col_name)
+                metadatas.append({**base_col_meta, "match_type": "primary", "embedded_text": col_name})
+                ids.append(self._generate_id(f"column_{app_id}_{table_name}_{col_name}_primary"))
+                
+                # Embedding 2-N: Each synonym (minimal)
+                col_synonyms = col_def.get("synonyms") or col_def.get("aliases") or []
+                if isinstance(col_synonyms, list):
+                    for idx, syn in enumerate(col_synonyms):
+                        syn_str = str(syn).strip()
+                        if syn_str:
+                            documents.append(syn_str)
+                            metadatas.append({
+                                **base_col_meta,
+                                "match_type": "synonym",
+                                "synonym": syn_str,
+                                "embedded_text": syn_str
+                            })
+                            ids.append(self._generate_id(f"column_{app_id}_{table_name}_{col_name}_syn{idx}"))
         
         # Add to collection in batch
         if documents:
@@ -159,64 +237,8 @@ class EmbeddingManager:
                 ids=ids
             )
             logger.info(
-                f"Loaded {len(documents)} schema embeddings for app: {app_id}"
+                f"Loaded {len(documents)} minimal name-only embeddings for app: {app_id}"
             )
-    
-    def _create_table_document(
-        self, app_id: str, table_name: str, table_def: Dict[str, Any]
-    ) -> str:
-        """Create searchable document for table."""
-        parts = [
-            f"Table: {table_name}",
-            f"Application: {app_id}",
-            f"Description: {table_def.get('description', 'No description')}",
-            f"Primary Key: {table_def.get('primary_key', 'Not specified')}",
-        ]
-        
-        if "common_queries" in table_def:
-            parts.append(f"Common queries: {', '.join(table_def['common_queries'])}")
-        
-        # Optional hints to improve recall
-        aliases = table_def.get("aliases") or table_def.get("synonyms")
-        if aliases and isinstance(aliases, list):
-            parts.append(f"Aliases: {', '.join(map(str, aliases))}")
-        rels = table_def.get("relationships")
-        if rels and isinstance(rels, list):
-            parts.append(f"Relationships: {', '.join(map(str, rels))}")
-        
-        return " | ".join(parts)
-    
-    def _create_column_document(
-        self, app_id: str, table_name: str, col_name: str, col_def: Dict[str, Any]
-    ) -> str:
-        """Create searchable document for column."""
-        parts = [
-            f"Column: {table_name}.{col_name}",
-            f"Application: {app_id}",
-            f"Type: {col_def.get('type', 'unknown')}",
-            f"Description: {col_def.get('description', 'No description')}",
-        ]
-        
-        # Optional recall hints
-        aliases = col_def.get("aliases") or col_def.get("synonyms")
-        if aliases and isinstance(aliases, list):
-            parts.append(f"Aliases: {', '.join(map(str, aliases))}")
-        tags = col_def.get("tags")
-        if tags and isinstance(tags, list):
-            parts.append(f"Tags: {', '.join(map(str, tags))}")
-        
-        if "examples" in col_def:
-            examples = col_def["examples"]
-            if isinstance(examples, list):
-                parts.append(f"Example values: {', '.join(map(str, examples))}")
-        
-        if col_def.get("unique"):
-            parts.append("Unique identifier")
-        
-        if col_def.get("nullable") is False:
-            parts.append("Required field")
-        
-        return " | ".join(parts)
     
     # ==========================================================================
     # DIMENSION VALUE EMBEDDINGS
@@ -228,10 +250,15 @@ class EmbeddingManager:
         table: str,
         column: str,
         values: List[Dict[str, Any]],
-        context: Optional[str] = None
+        context: Optional[str] = None,
+        synonyms: Optional[Dict[str, List[str]]] = None
     ):
         """
         Load dimension values from database query results.
+        
+        **NEW STRATEGY**: Embed ONLY the value name (minimal)
+        Store domain metadata and column/table context in metadata.
+        Support synonym embeddings for common variations.
         
         Args:
             app_id: Application identifier
@@ -239,6 +266,7 @@ class EmbeddingManager:
             column: Column name
             values: List of dicts with 'value' and 'count' keys
             context: Optional business context/description
+            synonyms: Optional dict mapping value -> list of synonyms
         """
         collection = self.collections["dimension_values"]
         
@@ -249,23 +277,42 @@ class EmbeddingManager:
         for item in values:
             value = item["value"]
             count = item.get("count", 0)
+            value_str = str(value).strip()
             
-            doc = self._create_dimension_document(
-                app_id, table, column, value, count, context
-            )
-            doc_id = self._generate_id(f"dim_{app_id}_{table}_{column}_{value}")
+            if not value_str:
+                continue
             
-            documents.append(doc)
-            metadatas.append({
-                "type": "dimension",
+            # Base metadata (full context, NOT in embedding)
+            base_meta = {
+                "entity_type": "dimension_value",
+                "entity_name": value_str,
                 "application": app_id,
                 "table": table,
                 "column": column,
-                "value": str(value),
+                "value": value_str,
                 "count": count,
-                "full_path": f"{table}.{column}"
-            })
-            ids.append(doc_id)
+                "full_path": f"{table}.{column}",
+                "context": context or ""
+            }
+            
+            # Embedding 1: Value name ONLY (primary)
+            documents.append(value_str)
+            metadatas.append({**base_meta, "match_type": "primary", "embedded_text": value_str})
+            ids.append(self._generate_id(f"dim_{app_id}_{table}_{column}_{value}_primary"))
+            
+            # Embedding 2-N: Synonyms (if provided)
+            if synonyms and value_str in synonyms:
+                for idx, syn in enumerate(synonyms[value_str]):
+                    syn_str = str(syn).strip()
+                    if syn_str and syn_str != value_str:
+                        documents.append(syn_str)
+                        metadatas.append({
+                            **base_meta,
+                            "match_type": "synonym",
+                            "synonym": syn_str,
+                            "embedded_text": syn_str
+                        })
+                        ids.append(self._generate_id(f"dim_{app_id}_{table}_{column}_{value}_syn{idx}"))
         
         if documents:
             # Check if already exists and update
@@ -281,35 +328,11 @@ class EmbeddingManager:
                 self._dimension_cache[cache_key] = datetime.now()
                 
                 logger.info(
-                    f"Loaded {len(documents)} dimension values for "
+                    f"Loaded {len(documents)} minimal name-only dimension embeddings for "
                     f"{app_id}.{table}.{column}"
                 )
             except Exception as e:
                 logger.error(f"Failed to load dimension values: {e}")
-    
-    def _create_dimension_document(
-        self,
-        app_id: str,
-        table: str,
-        column: str,
-        value: Any,
-        count: int,
-        context: Optional[str] = None
-    ) -> str:
-        """Create searchable document for dimension value."""
-        parts = [
-            f"Field: {table}.{column}",
-            f"Value: {value}",
-            f"Application: {app_id}",
-        ]
-        
-        if context:
-            parts.append(f"Context: {context}")
-        
-        if count > 0:
-            parts.append(f"Appears in {count} records")
-        
-        return " | ".join(parts)
     
     def is_dimension_stale(self, app_id: str, table: str, column: str) -> bool:
         """Check if dimension cache is stale."""
@@ -328,6 +351,9 @@ class EmbeddingManager:
         """
         Load business context (metrics, rules, sample queries).
         
+        **NEW STRATEGY**: Embed ONLY metric/query names (minimal),
+        store full definitions and formulas in metadata.
+        
         Args:
             app_id: Application identifier
             context_config: Parsed business_context section from YAML
@@ -338,35 +364,56 @@ class EmbeddingManager:
         metadatas = []
         ids = []
         
-        # Load metrics
+        # Load metrics - embed ONLY metric name
         metrics = context_config.get("metrics", {})
         for metric_name, metric_def in metrics.items():
-            doc = self._create_metric_document(app_id, metric_name, metric_def)
-            doc_id = self._generate_id(f"metric_{app_id}_{metric_name}")
-            
-            documents.append(doc)
-            metadatas.append({
-                "type": "metric",
+            # ChromaDB doesn't support list metadata, serialize to JSON
+            import json as json_module
+            base_meta = {
+                "entity_type": "metric",
+                "entity_name": metric_name,
                 "application": app_id,
                 "metric_name": metric_name,
-                "description": metric_def.get("description", "")
-            })
-            ids.append(doc_id)
+                "description": metric_def.get("description", ""),
+                "formula": metric_def.get("formula", ""),
+                "tables_json": json_module.dumps(metric_def.get("tables", []))
+            }
+            
+            # Embedding 1: Metric name ONLY
+            documents.append(metric_name)
+            metadatas.append({**base_meta, "match_type": "primary", "embedded_text": metric_name})
+            ids.append(self._generate_id(f"metric_{app_id}_{metric_name}_primary"))
+            
+            # Embedding 2-N: Each synonym
+            synonyms = metric_def.get("synonyms") or metric_def.get("aliases") or []
+            if isinstance(synonyms, list):
+                for idx, syn in enumerate(synonyms):
+                    syn_str = str(syn).strip()
+                    if syn_str:
+                        documents.append(syn_str)
+                        metadatas.append({
+                            **base_meta,
+                            "match_type": "synonym",
+                            "synonym": syn_str,
+                            "embedded_text": syn_str
+                        })
+                        ids.append(self._generate_id(f"metric_{app_id}_{metric_name}_syn{idx}"))
         
-        # Load sample queries
+        # Load sample queries - embed ONLY query name
         sample_queries = context_config.get("sample_queries", [])
         for idx, query_def in enumerate(sample_queries):
-            doc = self._create_sample_query_document(app_id, query_def)
-            doc_id = self._generate_id(f"query_{app_id}_{idx}")
-            
-            documents.append(doc)
+            query_name = query_def.get("name", f"Query {idx}")
+            documents.append(query_name)
             metadatas.append({
-                "type": "sample_query",
+                "entity_type": "sample_query",
+                "entity_name": query_name,
                 "application": app_id,
-                "query_name": query_def.get("name", f"Query {idx}"),
-                "description": query_def.get("description", "")
+                "query_name": query_name,
+                "description": query_def.get("description", ""),
+                "match_type": "primary",
+                "embedded_text": query_name
             })
-            ids.append(doc_id)
+            ids.append(self._generate_id(f"query_{app_id}_{idx}"))
         
         if documents:
             collection.add(
@@ -375,43 +422,8 @@ class EmbeddingManager:
                 ids=ids
             )
             logger.info(
-                f"Loaded {len(documents)} business context embeddings for app: {app_id}"
+                f"Loaded {len(documents)} minimal name-only business embeddings for app: {app_id}"
             )
-    
-    def _create_metric_document(
-        self, app_id: str, metric_name: str, metric_def: Dict[str, Any]
-    ) -> str:
-        """Create searchable document for business metric."""
-        parts = [
-            f"Metric: {metric_name}",
-            f"Application: {app_id}",
-            f"Description: {metric_def.get('description', '')}",
-        ]
-        
-        if "formula" in metric_def:
-            parts.append(f"Formula: {metric_def['formula']}")
-        
-        if "tables" in metric_def:
-            tables = metric_def["tables"]
-            if isinstance(tables, list):
-                parts.append(f"Uses tables: {', '.join(tables)}")
-        
-        return " | ".join(parts)
-    
-    def _create_sample_query_document(
-        self, app_id: str, query_def: Dict[str, Any]
-    ) -> str:
-        """Create searchable document for sample query."""
-        parts = [
-            f"Query: {query_def.get('name', 'Unnamed')}",
-            f"Application: {app_id}",
-            f"Description: {query_def.get('description', '')}",
-        ]
-        
-        if "use_case" in query_def:
-            parts.append(f"Use case: {query_def['use_case']}")
-        
-        return " | ".join(parts)
     
     # ==========================================================================
     # SEARCH OPERATIONS

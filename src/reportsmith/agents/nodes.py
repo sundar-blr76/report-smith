@@ -173,71 +173,152 @@ class AgentNodes:
                 return state
             # Thresholds (fallback defaults if not available from LLM analyzer)
             la = getattr(self.intent_analyzer, "llm_analyzer", None)
-            schema_thr = getattr(la, "schema_score_threshold", 0.3)
-            dim_thr = getattr(la, "dimension_score_threshold", 0.3)
-            ctx_thr = getattr(la, "context_score_threshold", 0.4)
-            # One-time write of input payload will happen inside loop before searching
+            # Lower thresholds since we're now using minimal embeddings (more precise)
+            schema_thr = getattr(la, "schema_score_threshold", 0.5)
+            dim_thr = getattr(la, "dimension_score_threshold", 0.5)
+            ctx_thr = getattr(la, "context_score_threshold", 0.5)
 
             updated = 0
             for ent in state.entities:
                 text = ent.get("text") or ""
-                search_text = f"{state.question} {text}".strip()
+                # NEW: Search with entity text ONLY (not full question)
+                # This matches our minimal embedding strategy
+                search_text = text.strip()
                 try:
-                    # Pull larger sets; no early trimming here
-                    # Write semantic search input payload once per entity
+                    # Write semantic search input payload
                     self._write_debug("semantic_input.json", {
                         "question": state.question,
                         "entity": ent,
                         "search_text": search_text,
+                        "strategy": "minimal_name_only",
                         "thresholds": {"schema": schema_thr, "dimension": dim_thr, "context": ctx_thr}
                     })
 
-                    schema_res = em.search_schema(search_text, app_id=state.app_id, top_k=1000)
-                    dim_res = em.search_dimensions(search_text, app_id=state.app_id, top_k=1000)
-                    ctx_res = em.search_business_context(search_text, app_id=state.app_id, top_k=1000)
+                    # Pull top 100 per collection (reduced from 1000 since we expect higher precision)
+                    schema_res = em.search_schema(search_text, app_id=state.app_id, top_k=100)
+                    dim_res = em.search_dimensions(search_text, app_id=state.app_id, top_k=100)
+                    ctx_res = em.search_business_context(search_text, app_id=state.app_id, top_k=100)
+
+                    # If app_id filter yields nothing, retry without filter
+                    if not (schema_res or dim_res or ctx_res) and state.app_id:
+                        logger.info("[semantic] no matches with app filter; retrying without app_id")
+                        schema_res = em.search_schema(search_text, app_id=None, top_k=100)
+                        dim_res = em.search_dimensions(search_text, app_id=None, top_k=100)
+                        ctx_res = em.search_business_context(search_text, app_id=None, top_k=100)
+
                     all_matches = []
 
                     for r in schema_res:
                         if r.score >= schema_thr:
-                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "schema"})
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "source_type": "schema"})
                     for r in dim_res:
                         if r.score >= dim_thr:
-                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "dimension_value"})
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "source_type": "dimension_value"})
                     for r in ctx_res:
                         if r.score >= ctx_thr:
-                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "type": "business_context"})
-                    if all_matches:
+                            all_matches.append({"content": r.content, "metadata": r.metadata, "score": r.score, "source_type": "business_context"})
+
+                    # Deduplicate and boost confidence for entities with multiple synonym matches
+                    # Group by entity (table.column or table or metric)
+                    entity_groups: Dict[str, List[Dict[str, Any]]] = {}
+                    for m in all_matches:
+                        md = m.get("metadata") or {}
+                        # Create unique key for this entity
+                        entity_key = None
+                        if md.get("entity_type") == "table":
+                            entity_key = f"table:{md.get('table')}"
+                        elif md.get("entity_type") == "column":
+                            entity_key = f"column:{md.get('table')}.{md.get('column')}"
+                        elif md.get("entity_type") == "dimension_value":
+                            entity_key = f"dim:{md.get('table')}.{md.get('column')}={md.get('value')}"
+                        elif md.get("entity_type") == "metric":
+                            entity_key = f"metric:{md.get('metric_name')}"
+                        else:
+                            entity_key = f"other:{md.get('entity_name', 'unknown')}"
+                        
+                        if entity_key not in entity_groups:
+                            entity_groups[entity_key] = []
+                        entity_groups[entity_key].append(m)
+                    
+                    # For each entity group, compute best score and count synonym hits
+                    deduplicated_matches = []
+                    for entity_key, group in entity_groups.items():
+                        # Best score in group
+                        best_score = max(m["score"] for m in group)
+                        # Count primary vs synonym matches
+                        primary_count = sum(1 for m in group if m.get("metadata", {}).get("match_type") == "primary")
+                        synonym_count = sum(1 for m in group if m.get("metadata", {}).get("match_type") == "synonym")
+                        
+                        # Boost score if we have multiple hits (synonym convergence)
+                        boosted_score = best_score
+                        if len(group) > 1:
+                            # Modest boost: +0.05 per additional match, max +0.15
+                            boost = min(0.05 * (len(group) - 1), 0.15)
+                            boosted_score = min(1.0, best_score + boost)
+                        
+                        # Use the match with best score as representative
+                        best_match = max(group, key=lambda m: m["score"])
+                        best_match["score"] = boosted_score
+                        best_match["match_count"] = len(group)
+                        best_match["primary_count"] = primary_count
+                        best_match["synonym_count"] = synonym_count
+                        deduplicated_matches.append(best_match)
+
+                    # Always write output payload for review (overwrite with full details)
+                    try:
+                        output_data = {
+                            "entity": ent.get("text"),
+                            "entity_type": ent.get("entity_type"),
+                            "search_text": search_text,
+                            "counts": {
+                                "schema_raw": len(schema_res),
+                                "dimensions_raw": len(dim_res),
+                                "context_raw": len(ctx_res),
+                                "above_threshold": len(all_matches),
+                                "deduplicated": len(deduplicated_matches)
+                            },
+                            "thresholds": {
+                                "schema": schema_thr,
+                                "dimension": dim_thr,
+                                "context": ctx_thr
+                            },
+                            "top_5_matches": sorted(deduplicated_matches, key=lambda x: x["score"], reverse=True)[:5],
+                            "score_distribution": {
+                                "max": max((m["score"] for m in deduplicated_matches), default=0),
+                                "min": min((m["score"] for m in deduplicated_matches), default=0),
+                                "avg": sum(m["score"] for m in deduplicated_matches) / len(deduplicated_matches) if deduplicated_matches else 0
+                            }
+                        }
+                        self._write_debug("semantic_output.json", output_data)
+                    except Exception as e:
+                        logger.debug(f"[semantic] failed to write debug output: {e}")
+
+                    if not deduplicated_matches:
+                        logger.info(f"[semantic] no matches for entity='{text}' (searched with threshold: schema={schema_thr}, dim={dim_thr}, ctx={ctx_thr})")
+                    else:
                         # sort high to low
-                        all_matches.sort(key=lambda x: x["score"], reverse=True)
+                        deduplicated_matches.sort(key=lambda x: x["score"], reverse=True)
                         prev = ent.get("semantic_matches")
-                        ent["semantic_matches"] = all_matches
-                        best = all_matches[0]
+                        ent["semantic_matches"] = deduplicated_matches
+                        best = deduplicated_matches[0]
                         ent["top_match"] = best
                         md = best.get("metadata") or {}
                         if not ent.get("table") and md.get("table"):
                             ent["table"] = md.get("table")
                         if not ent.get("column") and md.get("column"):
                             ent["column"] = md.get("column")
-                        updated += 1 if (prev != all_matches) else 0
+                        updated += 1 if (prev != deduplicated_matches) else 0
                         tb = (md.get("table") or "?")
                         col = (md.get("column") or "?")
-                        logger.debug(f"[semantic] entity='{text}' candidates={len(all_matches)} top={tb}.{col} score={best['score']:.3f} type={best['type']}")
+                        src_type = best.get('source_type', '?')
+                        match_count = best.get('match_count', 1)
+                        embedded_txt = md.get("embedded_text", "?")
+                        logger.info(
+                            f"[semantic] entity='{text}' → matched='{embedded_txt}' "
+                            f"table={tb} col={col} score={best['score']:.3f} "
+                            f"source={src_type} hits={match_count} total_candidates={len(deduplicated_matches)}"
+                        )
                 except Exception as e:
-                    # After building all_matches, write output payload if any and compute best
-                    if all_matches:
-                        all_matches.sort(key=lambda x: x["score"], reverse=True)
-                        best = all_matches[0]
-                        self._write_debug("semantic_output.json", {
-                            "entity": ent.get("text"),
-                            "counts": {
-                                "schema": len(schema_res),
-                                "dimensions": len(dim_res),
-                                "context": len(ctx_res),
-                                "all_matches": len(all_matches)
-                            },
-                            "top": best,
-                        })
-
                     logger.warning(f"[semantic] enrichment failed for '{text}': {e}")
             # Stats after semantic enrichment
             try:
@@ -256,7 +337,7 @@ class AgentNodes:
                             cols_per_table.setdefault(tb, set()).add(col)
                     # count business context matches
                     for m in (ent.get("semantic_matches") or []):
-                        if (m.get("type") == "business_context"):
+                        if (m.get("source_type") == "business_context"):
                             ctx_matches += 1
                 # relationships between discovered tables via KG shortest paths
                 tables_list = sorted(list(tables_set))
@@ -294,7 +375,7 @@ class AgentNodes:
                 pass
 
 
-    # Node: LLM filter semantic candidates per-entity
+    # Node: LLM filter semantic candidates per-entity with full context
     def semantic_filter(self, state: QueryState) -> QueryState:
         logger.info("\x1b[1;33m=== NODE START: SEMANTIC FILTER (LLM) ===\x1b[0m")
         logger.debug("[state@semantic_filter:start] " + self._dump_state(state))
@@ -308,9 +389,10 @@ class AgentNodes:
             import json, time
             kept = []
             # Tuning knobs for semantic filtering
-            max_candidates = getattr(la, 'semantic_filter_max_candidates', 50)
+            max_candidates = getattr(la, 'semantic_filter_max_candidates', 30)  # reduced to keep prompt manageable
             max_keep = getattr(la, 'semantic_filter_max_keep', 5)
             min_score = getattr(la, 'semantic_filter_min_score', 0.50)
+            
             for ent in state.entities:
                 matches = ent.get("semantic_matches") or []
                 # Pre-trim by score and cap to max_candidates to avoid huge prompts
@@ -321,23 +403,72 @@ class AgentNodes:
                 if not matches:
                     kept.append(ent)
                     continue
-                # Build prompt per entity
-                compact = [{
-                    "index": i,
-                    "content": m.get("content"),
-                    "type": m.get("type"),
-                    "score": m.get("score"),
-                } for i, m in enumerate(matches)]
+                
+                # Build enriched prompt with full entity metadata and relationship context
+                candidates_detail = []
+                for i, m in enumerate(matches):
+                    md = m.get("metadata") or {}
+                    detail = {
+                        "index": i,
+                        "embedded_text": m.get("content"),
+                        "score": round(m.get("score"), 3),
+                        "source_type": m.get("source_type"),
+                        "entity_type": md.get("entity_type"),
+                    }
+                    
+                    # Add type-specific details
+                    # Deserialize JSON fields from ChromaDB metadata
+                    import json as json_module
+                    if md.get("entity_type") == "table":
+                        detail["table"] = md.get("table")
+                        detail["description"] = md.get("description", "")
+                        # Deserialize related_tables from JSON string
+                        try:
+                            related_tables_json = md.get("related_tables_json", "[]")
+                            detail["related_tables"] = json_module.loads(related_tables_json) if related_tables_json else []
+                        except Exception:
+                            detail["related_tables"] = []
+                    elif md.get("entity_type") == "column":
+                        detail["table"] = md.get("table")
+                        detail["column"] = md.get("column")
+                        detail["description"] = md.get("description", "")
+                        detail["data_type"] = md.get("data_type", "")
+                    elif md.get("entity_type") == "dimension_value":
+                        detail["table"] = md.get("table")
+                        detail["column"] = md.get("column")
+                        detail["value"] = md.get("value")
+                        detail["context"] = md.get("context", "")
+                    elif md.get("entity_type") == "metric":
+                        detail["metric_name"] = md.get("metric_name")
+                        detail["description"] = md.get("description", "")
+                        # Deserialize tables from JSON string
+                        try:
+                            tables_json = md.get("tables_json", "[]")
+                            detail["tables"] = json_module.loads(tables_json) if tables_json else []
+                        except Exception:
+                            detail["tables"] = []
+                    
+                    # Add match type info
+                    detail["match_type"] = md.get("match_type", "unknown")
+                    if md.get("match_type") == "synonym":
+                        detail["synonym"] = md.get("synonym")
+                    
+                    candidates_detail.append(detail)
+                
                 prompt = (
-                    f"User query: {state.question}\n"
-                    f"Entity: {ent.get('text')} (type={ent.get('entity_type')})\n"
-                    "Below are semantic candidates (sorted by similarity).\n"
-                    "Select truly relevant ones and return JSON: {\n"
-                    "  \"relevant_indices\": [..],\n"
-                    "  \"reasoning\": \"...\"\n"
-                    "}\n\n"
-                    f"Candidates:\n{json.dumps(compact, indent=2)}\n"
+                    f"User Query: '{state.question}'\n"
+                    f"Entity to Match: '{ent.get('text')}' (type: {ent.get('entity_type')})\n\n"
+                    f"Task: Filter semantic search candidates to keep ONLY those truly relevant "
+                    f"to the entity '{ent.get('text')}' in the context of the user query.\n\n"
+                    f"Candidates (with full metadata and relationships):\n"
+                    f"{json.dumps(candidates_detail, indent=2)}\n\n"
+                    f"Return JSON with:\n"
+                    f"{{\n"
+                    f'  "relevant_indices": [list of relevant candidate indices],\n'
+                    f'  "reasoning": "brief explanation of why you kept/dropped candidates"\n'
+                    f"}}\n"
                 )
+                
                 provider = getattr(la, "llm_provider", "gemini")
                 t0 = time.perf_counter()
                 data = None
@@ -346,7 +477,7 @@ class AgentNodes:
                         req = {
                             "model": la.model,
                             "messages": [
-                                {"role": "system", "content": "You filter semantic candidates for a database entity."},
+                                {"role": "system", "content": "You are an expert at filtering semantic search results for database entities using full schema context and relationships."},
                                 {"role": "user", "content": prompt},
                             ],
                             "response_format": {"type": "json_object"},
@@ -374,42 +505,40 @@ class AgentNodes:
                     ent["semantic_matches"] = matches[:1]
                     ent["top_match"] = matches[0]
                     kept.append(ent)
-                    # timing log in finally
                     continue
                 finally:
                     dt_ms = (time.perf_counter() - t0) * 1000.0
-                    try:
-                        logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
-                    except Exception:
-                        pass
+                    logger.info(f"[llm] completion provider={provider} model={getattr(la,'model',None)} prompt_chars={len(prompt)} latency_ms={round(dt_ms,2)}")
+                
                 # Post-filter: enforce a maximum kept count after LLM indices are chosen
                 idxs = (data or {}).get("relevant_indices", [])
                 reason = (data or {}).get("reasoning", "")
                 filtered = [matches[i] for i in idxs if i < len(matches)]
                 if not filtered:
                     filtered = matches[:1]
+                    reason = "No LLM-selected matches; keeping top-1 by score"
                 if len(filtered) > max_keep:
                     filtered = filtered[:max_keep]
                 # Ensure best candidate at top after trimming
                 filtered.sort(key=lambda x: x.get('score', 0), reverse=True)
 
+                logger.info(
+                    f"[semantic-filter] entity='{ent.get('text')}': {len(matches)} → {len(filtered)} candidates; "
+                    f"reason: {reason[:100]}"
+                )
+                
                 ent["semantic_matches"] = filtered
                 ent["top_match"] = filtered[0]
+                kept.append(ent)
+            
+            state.entities = kept
             # update count after filtering
             try:
                 for ent in state.entities:
                     ent["semantic_match_count"] = len(ent.get("semantic_matches") or [])
             except Exception:
                 pass
-
-                md = (filtered[0].get("metadata") or {})
-                if not ent.get("table") and md.get("table"):
-                    ent["table"] = md.get("table")
-                if not ent.get("column") and md.get("column"):
-                    ent["column"] = md.get("column")
-                kept.append(ent)
-                logger.info(f"[semantic-filter] entity='{ent.get('text')}' kept {len(filtered)}/{len(matches)}; reason={reason}")
-            state.entities = kept
+            
             logger.info("[semantic-filter] completed per-entity filtering")
             return state
         except Exception as e:

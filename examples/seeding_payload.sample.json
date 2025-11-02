@@ -1,0 +1,47 @@
+{
+  "application": "fund_accounting",
+  "tables": {
+    "funds": {
+      "description": "Master fund information",
+      "primary_key": "id",
+      "columns": {
+        "id": {"type": "int"},
+        "total_aum": {"type": "numeric", "aliases": ["aum"], "role": "measure"},
+        "fund_type": {"type": "text", "role": "attribute", "is_dimension": true, "synonyms": ["strategy", "asset_class"]},
+        "risk_rating": {"type": "text", "role": "attribute", "is_dimension": true}
+      },
+      "relationships": [
+        {"to_table": "fee_schedules", "from_column": "fee_schedule_id", "to_column": "id", "type": "many_to_one"}
+      ]
+    },
+    "clients": {
+      "description": "Client master",
+      "primary_key": "id",
+      "columns": {
+        "id": {"type": "int"},
+        "client_type": {"type": "text", "role": "attribute", "is_dimension": true, "synonyms": ["segment", "category"]}
+      }
+    }
+  },
+  "dimension_values": [
+    {"table": "funds", "column": "fund_type", "values": ["Equity", "Fixed Income", "Balanced", "Money Market"]},
+    {"table": "funds", "column": "risk_rating", "values": ["Conservative", "Moderate", "Aggressive"]},
+    {"table": "clients", "column": "client_type", "values": ["Retail", "Institutional"]}
+  ],
+  "business_context": {
+    "metrics": {
+      "total_aum": {"expression": "SUM(funds.total_aum)"}
+    },
+    "sample_queries": [
+      "Show AUM for all equity funds",
+      "List fees for TruePotential clients"
+    ]
+  },
+  "weights": {
+    "table": 1.0,
+    "column": 0.9,
+    "dimension_value": 0.8,
+    "relationship": 0.5,
+    "context": 0.4
+  }
+}
