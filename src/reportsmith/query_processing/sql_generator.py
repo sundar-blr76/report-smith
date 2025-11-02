@@ -127,10 +127,12 @@ class SQLGenerator:
     - Construct JOIN paths using knowledge graph relationships
     - Generate WHERE conditions from filters and dimension values
     - Add GROUP BY, ORDER BY, LIMIT based on intent
+    - Enrich with implicit context columns using LLM
     """
     
-    def __init__(self, knowledge_graph: SchemaKnowledgeGraph):
+    def __init__(self, knowledge_graph: SchemaKnowledgeGraph, llm_client=None):
         self.kg = knowledge_graph
+        self.llm_client = llm_client  # Optional LLM for column enrichment
     
     def generate(
         self,
@@ -162,6 +164,17 @@ class SQLGenerator:
             
             # Build query components
             select_columns = self._build_select_columns(entities, aggregations, intent_type)
+            
+            # Enrich with implicit context columns using LLM
+            if self.llm_client:
+                select_columns = self._enrich_with_context_columns(
+                    question=question,
+                    intent_type=intent_type,
+                    select_columns=select_columns,
+                    entities=entities,
+                    plan=plan,
+                )
+            
             from_table, joins = self._build_from_and_joins(plan)
             where_conditions = self._build_where_conditions(entities, filters)
             group_by = self._build_group_by(select_columns, intent_type)
@@ -506,6 +519,227 @@ class SQLGenerator:
             logger.debug(f"[sql-gen][limit] applying limit: {limit}")
         
         return limit
+    
+    def _enrich_with_context_columns(
+        self,
+        *,
+        question: str,
+        intent_type: str,
+        select_columns: List[SQLColumn],
+        entities: List[Dict[str, Any]],
+        plan: Dict[str, Any],
+    ) -> List[SQLColumn]:
+        """
+        Use LLM to identify and add implicit context columns that would make
+        the query output more meaningful for human consumption.
+        
+        For example, for a query like "top 5 clients by fees", this would add
+        client_name and client_id alongside the fee aggregation.
+        
+        Args:
+            question: Original user question
+            intent_type: Type of query intent
+            select_columns: Currently selected columns
+            entities: Discovered entities
+            plan: Query plan with tables
+        
+        Returns:
+            Enhanced list of SQLColumn objects with context columns added
+        """
+        import json
+        import time
+        
+        logger.info("[sql-gen][llm-enrich] analyzing query for implicit context columns")
+        
+        # Skip enrichment for simple list queries or if no LLM client
+        if not self.llm_client or intent_type == "list":
+            logger.debug("[sql-gen][llm-enrich] skipping (no LLM client or list query)")
+            return select_columns
+        
+        try:
+            # Build context about current columns and available schema
+            tables = plan.get("tables", [])
+            
+            # Get available columns for each table from knowledge graph
+            available_columns = {}
+            for table in tables:
+                table_node = self.kg.nodes.get(table)
+                if table_node:
+                    cols = []
+                    for node_name, node in self.kg.nodes.items():
+                        if node.type == "column" and node.table == table:
+                            col_info = {
+                                "name": node.name,
+                                "data_type": node.metadata.get("data_type", "unknown"),
+                                "description": node.metadata.get("description", ""),
+                                "is_pk": node.metadata.get("is_primary_key", False),
+                                "is_fk": node.metadata.get("is_foreign_key", False),
+                            }
+                            cols.append(col_info)
+                    available_columns[table] = cols
+            
+            # Current columns summary
+            current_cols = [
+                {
+                    "table": col.table,
+                    "column": col.column,
+                    "aggregation": col.aggregation,
+                    "alias": col.alias,
+                }
+                for col in select_columns
+            ]
+            
+            # Build LLM prompt
+            prompt = f"""You are a SQL expert helping to make query results more meaningful by identifying implicit context columns.
+
+User Question: "{question}"
+Query Intent: {intent_type}
+
+Currently Selected Columns:
+{json.dumps(current_cols, indent=2)}
+
+Available Schema (columns per table):
+{json.dumps(available_columns, indent=2)}
+
+Task: Identify additional columns that would make the query output more meaningful for human consumption.
+Consider adding:
+- Identifying columns (names, codes, IDs) for entities being aggregated
+- Descriptive columns that provide context
+- Columns that help interpret the results
+
+Return a JSON object with:
+{{
+  "add_columns": [
+    {{
+      "table": "table_name",
+      "column": "column_name",
+      "reason": "why this column makes output more meaningful"
+    }}
+  ],
+  "reasoning": "overall explanation of column selections"
+}}
+
+Guidelines:
+- Only suggest columns that truly add value
+- Don't suggest columns already selected
+- Prioritize human-readable identifiers (names over IDs when both exist)
+- Keep the list minimal (max 5 additional columns)
+- If aggregating, ensure suggested columns are compatible with GROUP BY
+"""
+            
+            t0 = time.perf_counter()
+            
+            # Detect provider type and call appropriately
+            provider_type = self._detect_llm_provider()
+            
+            if provider_type == "openai":
+                response = self.llm_client.chat.completions.create(
+                    model="gpt-4o-mini",  # Fast and cheap for this task
+                    messages=[
+                        {"role": "system", "content": "You are a SQL expert assistant."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                )
+                result_text = response.choices[0].message.content
+            
+            elif provider_type == "anthropic":
+                response = self.llm_client.messages.create(
+                    model="claude-3-haiku-20240307",  # Fast and cheap
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                )
+                result_text = response.content[0].text
+                # Extract JSON from response
+                start = result_text.find('{')
+                end = result_text.rfind('}') + 1
+                if start >= 0 and end > start:
+                    result_text = result_text[start:end]
+            
+            else:  # gemini
+                import google.generativeai as genai
+                gen_config = {
+                    "temperature": 0,
+                    "response_mime_type": "application/json",
+                }
+                response = self.llm_client.generate_content(
+                    prompt,
+                    generation_config=gen_config
+                )
+                result_text = response.text
+            
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            
+            # Parse response
+            result = json.loads(result_text)
+            add_columns = result.get("add_columns", [])
+            reasoning = result.get("reasoning", "")
+            
+            logger.info(
+                f"[sql-gen][llm-enrich] LLM suggested {len(add_columns)} context column(s) "
+                f"in {dt_ms:.1f}ms; reasoning: {reasoning[:100]}"
+            )
+            
+            # Add suggested columns
+            added_count = 0
+            for col_suggestion in add_columns:
+                table = col_suggestion.get("table")
+                column = col_suggestion.get("column")
+                reason = col_suggestion.get("reason", "")
+                
+                # Validate column exists in schema
+                if table not in available_columns:
+                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - table not in plan")
+                    continue
+                
+                col_exists = any(c["name"] == column for c in available_columns[table])
+                if not col_exists:
+                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - column not found")
+                    continue
+                
+                # Check if column already selected
+                already_selected = any(
+                    c.table == table and c.column == column
+                    for c in select_columns
+                )
+                if already_selected:
+                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - already selected")
+                    continue
+                
+                # Add the context column
+                new_col = SQLColumn(
+                    table=table,
+                    column=column,
+                    alias=column,  # Use column name as alias
+                )
+                select_columns.append(new_col)
+                added_count += 1
+                
+                logger.info(
+                    f"[sql-gen][llm-enrich] added context column: {table}.{column} "
+                    f"(reason: {reason})"
+                )
+            
+            logger.info(
+                f"[sql-gen][llm-enrich] enrichment complete: added {added_count} column(s)"
+            )
+            
+            return select_columns
+        
+        except Exception as e:
+            logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using original columns")
+            return select_columns
+    
+    def _detect_llm_provider(self) -> str:
+        """Detect which LLM provider is being used"""
+        if hasattr(self.llm_client, 'chat') and hasattr(self.llm_client.chat, 'completions'):
+            return "openai"
+        elif hasattr(self.llm_client, 'messages'):
+            return "anthropic"
+        else:
+            return "gemini"
     
     def _build_explanation(
         self,

@@ -39,9 +39,22 @@ class AgentNodes:
         self.intent_analyzer = intent_analyzer
         self.graph_builder = graph_builder
         self.knowledge_graph = knowledge_graph
-        self.sql_generator = SQLGenerator(knowledge_graph=knowledge_graph)
+        
+        # Pass LLM client to SQL generator for column enrichment
+        llm_client = None
+        if hasattr(intent_analyzer, 'llm_analyzer') and intent_analyzer.llm_analyzer:
+            llm_client = getattr(intent_analyzer.llm_analyzer, 'client', None)
+        
+        self.sql_generator = SQLGenerator(
+            knowledge_graph=knowledge_graph,
+            llm_client=llm_client
+        )
+        
         # output directory for debug payloads
+        self.debug_dir = "/home/sundar/sundar_projects/report-smith/logs/semantic_debug"
+    
     def _write_debug(self, filename: str, data: Any) -> None:
+        """Write debug data to file"""
         try:
             import os, json, tempfile
             os.makedirs(self.debug_dir, exist_ok=True)
@@ -54,8 +67,6 @@ class AgentNodes:
             os.replace(tmp_path, path)
         except Exception as e:
             logger.warning(f"[debug] failed to write {filename}: {e}")
-
-        self.debug_dir = "/home/sundar/sundar_projects/report-smith/logs/semantic_debug"
 
 
     # helper to dump state compactly for start logs
