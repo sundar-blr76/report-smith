@@ -12,6 +12,7 @@ tables:
   # ----------------------------------------------------------------------------
   funds:
     description: Master fund information
+    aliases: [fund, portfolio, portfolios, investment]
     primary_key: id
     estimated_rows: 100
     
@@ -57,10 +58,12 @@ tables:
       nav_per_share:
         type: numeric
         description: Current NAV per share
+        aliases: [nav, "net asset value", "fund value", "unit price"]
       
       total_aum:
         type: numeric
         description: Total assets under management
+        aliases: [aum, assets, "assets under management", "managed assets", "fund size"]
       
       minimum_investment:
         type: numeric
@@ -115,6 +118,7 @@ tables:
   # ----------------------------------------------------------------------------
   clients:
     description: Client master data
+    aliases: [client, customer, customers, investor, investors, "account holder", "account holders"]
     primary_key: id
     estimated_rows: 500
     
@@ -237,6 +241,7 @@ tables:
       total_balance:
         type: numeric
         default: 0
+        aliases: [balance, "account balance", holdings, position]
       
       available_balance:
         type: numeric
@@ -469,6 +474,7 @@ tables:
   # ----------------------------------------------------------------------------
   fee_transactions:
     description: Fee calculations and charges
+    aliases: [fees, fee, charges, "fee transactions"]
     primary_key: id
     estimated_rows: 5000
     
@@ -502,6 +508,7 @@ tables:
       
       fee_amount:
         type: numeric
+        aliases: [fee, fees, charges, "management fees", "advisory fees"]
       
       currency:
         type: varchar

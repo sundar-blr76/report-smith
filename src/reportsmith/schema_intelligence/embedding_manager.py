@@ -16,6 +16,7 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 from chromadb.utils import embedding_functions
 import hashlib
+import re
 
 from ..logger import get_logger
 
@@ -106,6 +107,120 @@ class EmbeddingManager:
         self._dimension_cache.clear()
     
     # ==========================================================================
+    # UTILITY FUNCTIONS
+    # ==========================================================================
+    
+    # List of generic column names to skip during embedding (too common/generic)
+    GENERIC_COLUMN_NAMES = {
+        'id', 'created_at', 'updated_at', 'deleted_at', 
+        'is_active', 'is_deleted', 'created_by', 'updated_by',
+        'timestamp', 'version', 'row_version', 'etag',
+        'status', 'type', 'name', 'code', 'value',
+        'date', 'amount', 'count', 'total', 'balance',
+        'number', 'description', 'notes', 'comment', 'remarks'
+    }
+    
+    @staticmethod
+    def _is_embeddable_dimension_value(value: str) -> bool:
+        """
+        Filter out generic or non-semantic dimension values.
+        
+        Skip values that are:
+        - Pure numbers (e.g., "123", "3.82", "-45.6")
+        - Generic IDs (e.g., "id", "ID", "Id")
+        - Too short (< 2 chars)
+        - UUIDs or hash-like strings
+        
+        Args:
+            value: The dimension value to check
+            
+        Returns:
+            True if the value should be embedded, False otherwise
+        """
+        value = str(value).strip()
+        
+        # Skip empty or too short
+        if len(value) < 2:
+            return False
+        
+        # Skip pure numbers (int or float)
+        if re.match(r'^-?\d+\.?\d*$', value):
+            return False
+        
+        # Skip generic ID-like values
+        if re.match(r'^id$|^[a-z_]*_?id$', value, re.IGNORECASE):
+            return False
+        
+        # Skip UUIDs (8-4-4-4-12 pattern)
+        if re.match(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$', value, re.IGNORECASE):
+            return False
+        
+        # Skip hash-like strings (long hex strings)
+        if len(value) >= 32 and re.match(r'^[a-f0-9]+$', value, re.IGNORECASE):
+            return False
+        
+        return True
+    
+    @staticmethod
+    def _is_embeddable_column_name(column_name: str) -> bool:
+        """
+        Filter out generic column names that don't provide semantic value.
+        
+        Skip columns like: id, created_at, updated_at, is_active, etc.
+        
+        Args:
+            column_name: The column name to check
+            
+        Returns:
+            True if the column should be embedded, False otherwise
+        """
+        col_lower = column_name.lower().strip()
+        
+        # Skip if in generic list
+        if col_lower in EmbeddingManager.GENERIC_COLUMN_NAMES:
+            return False
+        
+        # Skip if ends with common generic suffixes
+        generic_suffixes = ['_id', '_at', '_by', '_date', '_time', '_timestamp', '_status', '_flag']
+        for suffix in generic_suffixes:
+            if col_lower.endswith(suffix):
+                return False
+        
+        return True
+    
+    @staticmethod
+    def _should_embed_description(description: str) -> bool:
+        """
+        Check if a description is meaningful enough to embed.
+        
+        Skip descriptions that are:
+        - Too short (< 10 chars)
+        - Generic/boilerplate (e.g., "FK to...", "Record creation time")
+        
+        Args:
+            description: The description text
+            
+        Returns:
+            True if the description should be embedded
+        """
+        if not description or len(description.strip()) < 10:
+            return False
+        
+        desc_lower = description.lower().strip()
+        
+        # Skip generic/boilerplate descriptions
+        generic_phrases = [
+            'fk to', 'foreign key', 'primary key', 'unique identifier',
+            'record creation', 'last update', 'active status', 'timestamp'
+        ]
+        
+        for phrase in generic_phrases:
+            if phrase in desc_lower:
+                return False
+        
+        return True
+    
+    # ==========================================================================
     # SCHEMA METADATA EMBEDDINGS
     # ==========================================================================
     
@@ -190,9 +305,28 @@ class EmbeddingManager:
                         })
                         ids.append(self._generate_id(f"table_{app_id}_{table_name}_syn{idx}"))
             
+            # Embedding N+1: Description (if meaningful) - lower confidence
+            table_description = table_def.get("description", "")
+            if self._should_embed_description(table_description):
+                documents.append(table_description)
+                metadatas.append({
+                    **base_table_meta,
+                    "match_type": "description",
+                    "confidence_weight": 0.7,  # Lower weight for description matches
+                    "embedded_text": table_description
+                })
+                ids.append(self._generate_id(f"table_{app_id}_{table_name}_desc"))
+            
             # Embed each column with same minimal strategy
             columns = table_def.get("columns", {})
+            skipped_columns = []
+            
             for col_name, col_def in columns.items():
+                # Skip generic column names
+                if not self._is_embeddable_column_name(col_name):
+                    skipped_columns.append(col_name)
+                    continue
+                
                 # Gather column metadata (NOT in embedding text)
                 # ChromaDB doesn't support list metadata, so we serialize to JSON
                 base_col_meta = {
@@ -228,6 +362,25 @@ class EmbeddingManager:
                                 "embedded_text": syn_str
                             })
                             ids.append(self._generate_id(f"column_{app_id}_{table_name}_{col_name}_syn{idx}"))
+                
+                # Embedding N+1: Description (if meaningful) - lower confidence
+                col_description = col_def.get("description", "")
+                if self._should_embed_description(col_description):
+                    documents.append(col_description)
+                    metadatas.append({
+                        **base_col_meta,
+                        "match_type": "description",
+                        "confidence_weight": 0.7,  # Lower weight for description matches
+                        "embedded_text": col_description
+                    })
+                    ids.append(self._generate_id(f"column_{app_id}_{table_name}_{col_name}_desc"))
+            
+            # Log skipped generic columns if any
+            if skipped_columns:
+                logger.debug(
+                    f"Skipped {len(skipped_columns)} generic columns in {table_name}: "
+                    f"{', '.join(skipped_columns[:5])}{'...' if len(skipped_columns) > 5 else ''}"
+                )
         
         # Add to collection in batch
         if documents:
@@ -236,8 +389,15 @@ class EmbeddingManager:
                 metadatas=metadatas,
                 ids=ids
             )
+            
+            # Count embedding types for logging
+            primary_count = sum(1 for m in metadatas if m.get("match_type") == "primary")
+            synonym_count = sum(1 for m in metadatas if m.get("match_type") == "synonym")
+            desc_count = sum(1 for m in metadatas if m.get("match_type") == "description")
+            
             logger.info(
-                f"Loaded {len(documents)} minimal name-only embeddings for app: {app_id}"
+                f"Loaded {len(documents)} schema embeddings for app: {app_id} "
+                f"(primary={primary_count}, synonyms={synonym_count}, descriptions={desc_count})"
             )
     
     # ==========================================================================
@@ -273,6 +433,7 @@ class EmbeddingManager:
         documents = []
         metadatas = []
         ids = []
+        skipped_values = []
         
         for item in values:
             value = item["value"]
@@ -280,6 +441,11 @@ class EmbeddingManager:
             value_str = str(value).strip()
             
             if not value_str:
+                continue
+            
+            # Filter out generic/numeric values
+            if not self._is_embeddable_dimension_value(value_str):
+                skipped_values.append(value_str)
                 continue
             
             # Base metadata (full context, NOT in embedding)
@@ -327,12 +493,25 @@ class EmbeddingManager:
                 cache_key = f"{app_id}_{table}_{column}"
                 self._dimension_cache[cache_key] = datetime.now()
                 
-                logger.info(
-                    f"Loaded {len(documents)} minimal name-only dimension embeddings for "
+                log_msg = (
+                    f"Loaded {len(documents)} dimension value embeddings for "
                     f"{app_id}.{table}.{column}"
                 )
+                if skipped_values:
+                    log_msg += f" (skipped {len(skipped_values)} generic/numeric values)"
+                    logger.debug(f"Skipped values: {skipped_values[:10]}{'...' if len(skipped_values) > 10 else ''}")
+                
+                logger.info(log_msg)
             except Exception as e:
                 logger.error(f"Failed to load dimension values: {e}")
+        else:
+            # All values were filtered out
+            logger.warning(
+                f"No embeddable dimension values for {app_id}.{table}.{column} "
+                f"(all {len(skipped_values)} values were generic/numeric)"
+            )
+            if skipped_values:
+                logger.debug(f"Skipped values: {skipped_values[:10]}{'...' if len(skipped_values) > 10 else ''}")
     
     def is_dimension_stale(self, app_id: str, table: str, column: str) -> bool:
         """Check if dimension cache is stale."""
@@ -398,6 +577,18 @@ class EmbeddingManager:
                             "embedded_text": syn_str
                         })
                         ids.append(self._generate_id(f"metric_{app_id}_{metric_name}_syn{idx}"))
+            
+            # Embedding N+1: Description (if meaningful) - lower confidence
+            metric_description = metric_def.get("description", "")
+            if self._should_embed_description(metric_description):
+                documents.append(metric_description)
+                metadatas.append({
+                    **base_meta,
+                    "match_type": "description",
+                    "confidence_weight": 0.7,
+                    "embedded_text": metric_description
+                })
+                ids.append(self._generate_id(f"metric_{app_id}_{metric_name}_desc"))
         
         # Load sample queries - embed ONLY query name
         sample_queries = context_config.get("sample_queries", [])
@@ -421,8 +612,15 @@ class EmbeddingManager:
                 metadatas=metadatas,
                 ids=ids
             )
+            
+            # Count embedding types
+            primary_count = sum(1 for m in metadatas if m.get("match_type") == "primary")
+            synonym_count = sum(1 for m in metadatas if m.get("match_type") == "synonym")
+            desc_count = sum(1 for m in metadatas if m.get("match_type") == "description")
+            
             logger.info(
-                f"Loaded {len(documents)} minimal name-only business embeddings for app: {app_id}"
+                f"Loaded {len(documents)} business context embeddings for app: {app_id} "
+                f"(primary={primary_count}, synonyms={synonym_count}, descriptions={desc_count})"
             )
     
     # ==========================================================================
