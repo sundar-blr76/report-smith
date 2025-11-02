@@ -176,6 +176,14 @@ class EmbeddingManager:
         if "common_queries" in table_def:
             parts.append(f"Common queries: {', '.join(table_def['common_queries'])}")
         
+        # Optional hints to improve recall
+        aliases = table_def.get("aliases") or table_def.get("synonyms")
+        if aliases and isinstance(aliases, list):
+            parts.append(f"Aliases: {', '.join(map(str, aliases))}")
+        rels = table_def.get("relationships")
+        if rels and isinstance(rels, list):
+            parts.append(f"Relationships: {', '.join(map(str, rels))}")
+        
         return " | ".join(parts)
     
     def _create_column_document(
@@ -188,6 +196,14 @@ class EmbeddingManager:
             f"Type: {col_def.get('type', 'unknown')}",
             f"Description: {col_def.get('description', 'No description')}",
         ]
+        
+        # Optional recall hints
+        aliases = col_def.get("aliases") or col_def.get("synonyms")
+        if aliases and isinstance(aliases, list):
+            parts.append(f"Aliases: {', '.join(map(str, aliases))}")
+        tags = col_def.get("tags")
+        if tags and isinstance(tags, list):
+            parts.append(f"Tags: {', '.join(map(str, tags))}")
         
         if "examples" in col_def:
             examples = col_def["examples"]
