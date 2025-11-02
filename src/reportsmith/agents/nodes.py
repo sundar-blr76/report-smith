@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 import json
 
 from reportsmith.query_processing import HybridIntentAnalyzer
+from reportsmith.query_processing.sql_generator import SQLGenerator
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
 from reportsmith.logger import get_logger
@@ -19,6 +20,7 @@ class QueryState(BaseModel):
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     tables: List[str] = Field(default_factory=list)
     plan: Dict[str, Any] | None = None
+    sql: Dict[str, Any] | None = None
     result: Dict[str, Any] | None = None
     errors: List[str] = Field(default_factory=list)
     timings: Dict[str, float] = Field(default_factory=dict)
@@ -37,6 +39,7 @@ class AgentNodes:
         self.intent_analyzer = intent_analyzer
         self.graph_builder = graph_builder
         self.knowledge_graph = knowledge_graph
+        self.sql_generator = SQLGenerator(knowledge_graph=knowledge_graph)
         # output directory for debug payloads
     def _write_debug(self, filename: str, data: Any) -> None:
         try:
@@ -757,6 +760,55 @@ class AgentNodes:
             state.errors.append(f"plan_error: {e}")
             return state
 
+    # Node: generate SQL
+    def generate_sql(self, state: QueryState) -> QueryState:
+        logger.info("\x1b[1;36m=== NODE START: SQL GENERATION ===\x1b[0m")
+        logger.debug("[state@sql:start] " + self._dump_state(state))
+        logger.info("[supervisor] delegating to SQL generator")
+        import time
+        t0 = time.perf_counter()
+        try:
+            if not state.plan:
+                raise ValueError("No plan available for SQL generation")
+            if not state.intent:
+                raise ValueError("No intent available for SQL generation")
+            
+            # Generate SQL using the SQL generator
+            sql_result = self.sql_generator.generate(
+                question=state.question,
+                intent=state.intent,
+                entities=state.entities,
+                plan=state.plan,
+            )
+            
+            state.sql = sql_result
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            state.timings["sql_ms"] = round(dt_ms, 2)
+            
+            # Log generated SQL
+            sql_text = sql_result.get("sql", "")
+            logger.info(f"[sql-gen] generated SQL query ({len(sql_text)} chars) in {dt_ms:.1f}ms")
+            logger.info(f"[sql-gen] SQL:\n{sql_text}")
+            
+            # Log explanation
+            explanation = sql_result.get("explanation", "")
+            if explanation:
+                logger.debug(f"[sql-gen] Explanation:\n{explanation}")
+            
+            # Log metadata
+            metadata = sql_result.get("metadata", {})
+            logger.info(
+                f"[sql-gen] metadata: tables={metadata.get('tables')}, "
+                f"joins={metadata.get('join_count')}, filters={metadata.get('where_count')}, "
+                f"columns={metadata.get('columns_count')}"
+            )
+            
+            return state
+        except Exception as e:
+            logger.error(f"[sql-gen] error: {e}", exc_info=True)
+            state.errors.append(f"sql_generation_error: {e}")
+            return state
+
     # Node: finalize response (no execution)
     def finalize(self, state: QueryState) -> QueryState:
         logger.info("\x1b[1;37m=== NODE START: FINALIZE ===\x1b[0m")
@@ -765,9 +817,10 @@ class AgentNodes:
         import time
         t0 = time.perf_counter()
         state.result = {
-            "summary": "Planning complete (execution not implemented)",
+            "summary": "SQL generation complete (execution not implemented yet)",
             "tables": state.tables,
             "plan": state.plan,
+            "sql": state.sql,
         }
         dt_ms = (time.perf_counter() - t0) * 1000.0
         state.timings["finalize_ms"] = round(dt_ms, 2)

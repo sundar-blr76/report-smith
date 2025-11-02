@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from langgraph.graph import StateGraph, END
 from reportsmith.logger import get_logger
@@ -29,7 +29,7 @@ class MultiAgentOrchestrator:
             graph_builder=graph_builder,
             knowledge_graph=knowledge_graph,
         )
-        logger.info("[supervisor] building orchestration graph (intent -> schema -> plan -> finalize)")
+        logger.info("[supervisor] building orchestration graph (intent -> semantic -> filter -> refine -> schema -> plan -> sql -> finalize)")
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -42,6 +42,7 @@ class MultiAgentOrchestrator:
         g.add_node("refine", self.nodes.refine_entities)
         g.add_node("schema", self.nodes.map_schema)
         g.add_node("plan", self.nodes.plan_query)
+        g.add_node("sql", self.nodes.generate_sql)
         g.add_node("finalize", self.nodes.finalize)
 
         # Edges
@@ -50,7 +51,8 @@ class MultiAgentOrchestrator:
         g.add_edge("semantic_filter", "refine")
         g.add_edge("refine", "schema")
         g.add_edge("schema", "plan")
-        g.add_edge("plan", "finalize")
+        g.add_edge("plan", "sql")
+        g.add_edge("sql", "finalize")
         g.add_edge("finalize", END)
 
         # Entry
@@ -76,6 +78,7 @@ class MultiAgentOrchestrator:
             ("refine", self.nodes.refine_entities),
             ("schema", self.nodes.map_schema),
             ("plan", self.nodes.plan_query),
+            ("sql", self.nodes.generate_sql),
             ("finalize", self.nodes.finalize),
         ]
         for name, fn in steps:
