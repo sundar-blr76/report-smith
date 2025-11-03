@@ -10,7 +10,7 @@ st.set_page_config(page_title="ReportSmith UI", page_icon="📊", layout="wide")
 # Sidebar configuration
 st.sidebar.title("Settings")
 api_base: str = st.sidebar.text_input("API Base URL", value="http://127.0.0.1:8000")
-timeout_s: int = st.sidebar.number_input("Timeout (seconds)", min_value=1, max_value=120, value=30)
+timeout_s: int = st.sidebar.number_input("Timeout (seconds)", min_value=1, max_value=300, value=120)
 
 # Optional: manual refresh
 st.sidebar.button("Refresh status")
