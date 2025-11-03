@@ -627,6 +627,9 @@ Guidelines:
 - If aggregating, ensure suggested columns are compatible with GROUP BY
 """
             
+            # Log the prompt payload
+            logger.info(f"[sql-gen][llm-enrich] prompt payload (chars={len(prompt)}):\n{prompt}")
+            
             t0 = time.perf_counter()
             
             # Detect provider type and call appropriately
@@ -672,14 +675,16 @@ Guidelines:
             
             dt_ms = (time.perf_counter() - t0) * 1000.0
             
+            # Log the response
+            logger.info(f"[sql-gen][llm-enrich] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}")
+            
             # Parse response
             result = json.loads(result_text)
             add_columns = result.get("add_columns", [])
             reasoning = result.get("reasoning", "")
             
             logger.info(
-                f"[sql-gen][llm-enrich] LLM suggested {len(add_columns)} context column(s) "
-                f"in {dt_ms:.1f}ms; reasoning: {reasoning[:100]}"
+                f"[sql-gen][llm-enrich] LLM suggested {len(add_columns)} context column(s); reasoning: {reasoning}"
             )
             
             # Add suggested columns
