@@ -388,11 +388,52 @@ class SQLGenerator:
         """Build WHERE clause conditions"""
         conditions = []
         
-        # Add dimension value filters
+        # Parse intent filters first to detect negations
+        # Format examples: "fund_type != 'equity'", "risk_rating = 'High'", "amount > 1000"
+        filter_metadata = {}  # Maps column to (operator, values)
+        
+        for filter_str in filters:
+            try:
+                filter_str = filter_str.strip()
+                
+                # Parse filter to detect column, operator, and value
+                # Patterns: "column != value", "column = value", "table.column op value"
+                import re
+                
+                # Match patterns like: column_name != 'value' or table.column = value
+                pattern = r"([\w.]+)\s*(!=|=|>|<|>=|<=|NOT IN|IN|LIKE|NOT LIKE)\s*(.+)"
+                match = re.match(pattern, filter_str, re.IGNORECASE)
+                
+                if match:
+                    col_ref = match.group(1).strip()
+                    operator = match.group(2).strip().upper()
+                    value_part = match.group(3).strip()
+                    
+                    # Normalize column reference (remove table prefix if present)
+                    if '.' in col_ref:
+                        col_name = col_ref.split('.')[-1]
+                    else:
+                        col_name = col_ref
+                    
+                    # Store filter metadata to check for negations
+                    filter_metadata[col_name] = {
+                        'operator': operator,
+                        'value': value_part,
+                        'original': filter_str,
+                    }
+                    logger.debug(f"[sql-gen][where] parsed filter: column={col_name}, op={operator}, value={value_part}")
+                else:
+                    logger.debug(f"[sql-gen][where] could not parse filter pattern: {filter_str}")
+            
+            except Exception as e:
+                logger.warning(f"[sql-gen][where] failed to parse filter '{filter_str}': {e}")
+        
+        # Process dimension value entities
         dimension_entities = [e for e in entities if e.get("entity_type") == "dimension_value"]
         
         # Group dimension entities by table.column to handle multiple values (OR/IN)
         dim_groups: Dict[str, List[str]] = {}
+        dim_negations: Dict[str, bool] = {}  # Track which columns have negations
         
         for ent in dimension_entities:
             table = ent.get("table")
@@ -411,45 +452,65 @@ class SQLGenerator:
             
             if table and column and value:
                 key = f"{table}.{column}"
+                
+                # Check if this column has a negation filter from intent
+                filter_info = filter_metadata.get(column, {})
+                operator = filter_info.get('operator', '=')
+                is_negation = operator in ('!=', 'NOT IN', 'NOT LIKE')
+                
                 if key not in dim_groups:
                     dim_groups[key] = []
+                    dim_negations[key] = is_negation
+                
                 # Escape single quotes in value
                 safe_value = value.replace("'", "''")
                 dim_groups[key].append(safe_value)
         
         # Build conditions from grouped dimensions
         for key, values in dim_groups.items():
+            is_negation = dim_negations.get(key, False)
+            
             if len(values) == 1:
-                # Single value - simple equality
-                condition = f"{key} = '{values[0]}'"
+                # Single value - simple equality or inequality
+                if is_negation:
+                    condition = f"{key} != '{values[0]}'"
+                    logger.debug(f"[sql-gen][where] added dimension filter (negation): {condition}")
+                else:
+                    condition = f"{key} = '{values[0]}'"
+                    logger.debug(f"[sql-gen][where] added dimension filter: {condition}")
                 conditions.append(condition)
-                logger.debug(f"[sql-gen][where] added dimension filter: {condition}")
             else:
-                # Multiple values - use IN clause
+                # Multiple values - use IN/NOT IN clause
                 values_str = ", ".join(f"'{v}'" for v in values)
-                condition = f"{key} IN ({values_str})"
+                if is_negation:
+                    condition = f"{key} NOT IN ({values_str})"
+                    logger.debug(f"[sql-gen][where] added dimension filter (multi-value negation): {condition}")
+                else:
+                    condition = f"{key} IN ({values_str})"
+                    logger.debug(f"[sql-gen][where] added dimension filter (multi-value): {condition}")
                 conditions.append(condition)
-                logger.debug(f"[sql-gen][where] added dimension filter (multi-value): {condition}")
         
-        # Parse explicit filters from intent
-        # Format: "column op value" or "table.column op value"
+        # Add any remaining explicit filters not covered by dimension entities
+        processed_columns = {key.split('.')[-1] for key in dim_groups.keys()}
+        
         for filter_str in filters:
             try:
-                # Simple parsing - could be enhanced with proper parser
-                # Example: "fund_type = 'Equity'" or "risk_rating IN ('Low', 'Medium')"
                 filter_str = filter_str.strip()
                 
-                # Skip if already covered by dimension entities
-                if any(ent.get("text", "").lower() in filter_str.lower() for ent in dimension_entities):
-                    continue
+                # Check if this filter is for a column we already handled via dimension entities
+                covered = False
+                for col_name in processed_columns:
+                    if col_name in filter_str:
+                        covered = True
+                        break
                 
-                # Add filter as-is (assumes it's already in valid SQL format from intent analyzer)
-                # In production, would parse and validate
-                conditions.append(filter_str)
-                logger.debug(f"[sql-gen][where] added explicit filter: {filter_str}")
+                if not covered:
+                    # Add filter as-is (assumes it's already in valid SQL format from intent analyzer)
+                    conditions.append(filter_str)
+                    logger.debug(f"[sql-gen][where] added explicit filter: {filter_str}")
             
             except Exception as e:
-                logger.warning(f"[sql-gen][where] failed to parse filter '{filter_str}': {e}")
+                logger.warning(f"[sql-gen][where] failed to process filter '{filter_str}': {e}")
         
         return conditions
     
