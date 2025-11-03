@@ -91,7 +91,9 @@ class KnowledgeGraphBuilder:
                     'data_type': column_def.get('type', ''),
                     'description': column_def.get('description', ''),
                     'nullable': column_def.get('nullable', True),
-                    'is_dimension': column_def.get('is_dimension', False)
+                    'is_dimension': column_def.get('is_dimension', False),
+                    'default': column_def.get('default'),
+                    'auto_filter_on_default': column_def.get('auto_filter_on_default', False),
                 }
             )
             self.graph.add_node(node)

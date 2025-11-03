@@ -391,6 +391,7 @@ class SQLGenerator:
         # Parse intent filters first to detect negations
         # Format examples: "fund_type != 'equity'", "risk_rating = 'High'", "amount > 1000"
         filter_metadata = {}  # Maps column to (operator, values)
+        explicitly_filtered_columns = set()  # Track columns explicitly filtered by user
         
         for filter_str in filters:
             try:
@@ -411,9 +412,12 @@ class SQLGenerator:
                     
                     # Normalize column reference (remove table prefix if present)
                     if '.' in col_ref:
+                        table_name = col_ref.split('.')[0]
                         col_name = col_ref.split('.')[-1]
+                        explicitly_filtered_columns.add(f"{table_name}.{col_name}")
                     else:
                         col_name = col_ref
+                        explicitly_filtered_columns.add(col_name)
                     
                     # Store filter metadata to check for negations
                     filter_metadata[col_name] = {
@@ -465,6 +469,10 @@ class SQLGenerator:
                 # Escape single quotes in value
                 safe_value = value.replace("'", "''")
                 dim_groups[key].append(safe_value)
+                
+                # Track this as explicitly filtered
+                explicitly_filtered_columns.add(key)
+                explicitly_filtered_columns.add(column)
         
         # Build conditions from grouped dimensions
         for key, values in dim_groups.items():
@@ -512,7 +520,89 @@ class SQLGenerator:
             except Exception as e:
                 logger.warning(f"[sql-gen][where] failed to process filter '{filter_str}': {e}")
         
+        # Apply auto-filters for columns with auto_filter_on_default property
+        # This applies default filters unless user explicitly mentions inactive/deactivated records
+        auto_filter_conditions = self._build_auto_filter_conditions(entities, explicitly_filtered_columns)
+        conditions.extend(auto_filter_conditions)
+        
         return conditions
+    
+    def _build_auto_filter_conditions(
+        self,
+        entities: List[Dict[str, Any]],
+        explicitly_filtered_columns: set,
+    ) -> List[str]:
+        """
+        Build auto-filter conditions for columns marked with auto_filter_on_default.
+        
+        This applies default filters (e.g., is_active = true) unless the user
+        explicitly mentions inactive/deactive records in the query or filters.
+        
+        Args:
+            entities: List of discovered entities
+            explicitly_filtered_columns: Set of columns already filtered by user
+        
+        Returns:
+            List of auto-filter condition strings
+        """
+        auto_conditions = []
+        
+        # Get all tables from entities
+        tables = set()
+        for ent in entities:
+            table = ent.get("table")
+            if not table:
+                md = (ent.get("top_match") or {}).get("metadata") or {}
+                table = md.get("table")
+            if table:
+                tables.add(table)
+        
+        # For each table, check if it has columns with auto_filter_on_default
+        for table in tables:
+            table_node = self.kg.nodes.get(table)
+            if not table_node:
+                continue
+            
+            # Scan all columns in this table
+            for node_name, node in self.kg.nodes.items():
+                if node.type == "column" and node.table == table:
+                    # Check if this column has auto_filter_on_default property
+                    auto_filter = node.metadata.get("auto_filter_on_default", False)
+                    default_value = node.metadata.get("default")
+                    data_type = node.metadata.get("data_type", "").lower()
+                    
+                    if auto_filter and default_value is not None:
+                        col_name = node.name
+                        full_col_ref = f"{table}.{col_name}"
+                        
+                        # Skip if user explicitly filtered this column
+                        if full_col_ref in explicitly_filtered_columns or col_name in explicitly_filtered_columns:
+                            logger.debug(
+                                f"[sql-gen][auto-filter] skipping {full_col_ref} - "
+                                f"user explicitly filtered this column"
+                            )
+                            continue
+                        
+                        # Build filter condition based on data type
+                        if data_type in ["boolean", "bool"]:
+                            # Boolean: use true/false
+                            value_str = "true" if default_value else "false"
+                            condition = f"{full_col_ref} = {value_str}"
+                        elif data_type in ["varchar", "text", "char", "string"]:
+                            # String: quote the value
+                            safe_value = str(default_value).replace("'", "''")
+                            condition = f"{full_col_ref} = '{safe_value}'"
+                        else:
+                            # Numeric or other: use as-is
+                            condition = f"{full_col_ref} = {default_value}"
+                        
+                        auto_conditions.append(condition)
+                        logger.info(
+                            f"[sql-gen][auto-filter] applied default filter: {condition} "
+                            f"(auto_filter_on_default=true)"
+                        )
+        
+        return auto_conditions
     
     def _build_group_by(
         self,

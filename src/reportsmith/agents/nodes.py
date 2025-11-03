@@ -8,6 +8,7 @@ from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.query_processing.sql_generator import SQLGenerator
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
+from reportsmith.query_execution import SQLExecutor
 from reportsmith.logger import get_logger
 
 logger = get_logger(__name__)
@@ -49,6 +50,9 @@ class AgentNodes:
             knowledge_graph=knowledge_graph,
             llm_client=llm_client
         )
+        
+        # SQL executor for query execution
+        self.sql_executor = SQLExecutor()
         
         # output directory for debug payloads
         self.debug_dir = "/home/sundar/sundar_projects/report-smith/logs/semantic_debug"
@@ -820,18 +824,49 @@ class AgentNodes:
             state.errors.append(f"sql_generation_error: {e}")
             return state
 
-    # Node: finalize response (no execution)
+    # Node: finalize response with SQL execution
     def finalize(self, state: QueryState) -> QueryState:
         logger.info("\x1b[1;37m=== NODE START: FINALIZE ===\x1b[0m")
         logger.debug("[state@finalize:start] " + self._dump_state(state))
         logger.info("[supervisor] finalizing response")
         import time
         t0 = time.perf_counter()
+        
+        # Execute SQL if available
+        execution_result = None
+        if state.sql and state.sql.get("sql"):
+            sql_text = state.sql.get("sql")
+            logger.info("[finalize] executing SQL query")
+            
+            # Validate SQL first
+            validation = self.sql_executor.validate_sql(sql_text)
+            if validation.get("valid"):
+                logger.info("[finalize] SQL validation passed, executing query")
+                execution_result = self.sql_executor.execute_query(sql_text)
+                
+                if execution_result.get("error"):
+                    logger.error(f"[finalize] SQL execution failed: {execution_result.get('error')}")
+                else:
+                    logger.info(
+                        f"[finalize] SQL execution successful: "
+                        f"{execution_result.get('row_count')} rows returned"
+                    )
+            else:
+                logger.error(f"[finalize] SQL validation failed: {validation.get('error')}")
+                execution_result = {
+                    "error": f"SQL validation failed: {validation.get('error')}",
+                    "error_type": "validation_error",
+                    "columns": [],
+                    "rows": [],
+                    "row_count": 0,
+                }
+        
         state.result = {
-            "summary": "SQL generation complete (execution not implemented yet)",
+            "summary": "Query processed successfully" if not execution_result or not execution_result.get("error") else "Query processing completed with errors",
             "tables": state.tables,
             "plan": state.plan,
             "sql": state.sql,
+            "execution": execution_result,
         }
         dt_ms = (time.perf_counter() - t0) * 1000.0
         state.timings["finalize_ms"] = round(dt_ms, 2)

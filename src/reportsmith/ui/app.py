@@ -125,11 +125,55 @@ if submitted:
                     st.error(f"Request failed: {detail}")
                 else:
                     data = resp.json()
-                    st.subheader("Response")
-                    st.json(data)
-
-                    # Convenience views if present
+                    
+                    # Extract result data
                     result = data.get("data", {}) if isinstance(data, dict) else {}
+                    
+                    # Display query results in a table if available
+                    if result and result.get("result"):
+                        result_data = result["result"]
+                        execution = result_data.get("execution")
+                        
+                        if execution:
+                            if execution.get("error"):
+                                st.error(f"Query Execution Failed: {execution.get('error')}")
+                            else:
+                                st.success("Query executed successfully!")
+                                
+                                # Display results in a data table
+                                rows = execution.get("rows", [])
+                                columns = execution.get("columns", [])
+                                row_count = execution.get("row_count", 0)
+                                truncated = execution.get("truncated", False)
+                                
+                                if rows:
+                                    import pandas as pd
+                                    df = pd.DataFrame(rows, columns=columns)
+                                    
+                                    st.subheader(f"Query Results ({row_count} rows{' - truncated' if truncated else ''})")
+                                    st.dataframe(df, use_container_width=True, hide_index=True)
+                                    
+                                    # Download as CSV
+                                    csv = df.to_csv(index=False)
+                                    st.download_button(
+                                        label="Download as CSV",
+                                        data=csv,
+                                        file_name="query_results.csv",
+                                        mime="text/csv",
+                                    )
+                                else:
+                                    st.info("Query executed successfully but returned no rows.")
+                        
+                        # Show SQL query
+                        sql_data = result_data.get("sql")
+                        if sql_data and sql_data.get("sql"):
+                            with st.expander("Generated SQL", expanded=False):
+                                st.code(sql_data.get("sql"), language="sql")
+                                if sql_data.get("explanation"):
+                                    st.caption("Explanation:")
+                                    st.text(sql_data.get("explanation"))
+                    
+                    # Convenience views
                     if result:
                         with st.expander("Intent", expanded=False):
                             st.json(result.get("intent", {}))
@@ -139,6 +183,19 @@ if submitted:
                             st.json(result.get("tables", []))
                         with st.expander("Plan", expanded=False):
                             st.json(result.get("plan", {}))
+                        with st.expander("Timings", expanded=False):
+                            timings = result.get("timings_ms", {})
+                            if timings:
+                                import pandas as pd
+                                df_timings = pd.DataFrame([
+                                    {"Stage": k.replace("_ms", ""), "Time (ms)": v}
+                                    for k, v in timings.items()
+                                ])
+                                st.dataframe(df_timings, hide_index=True)
+                        with st.expander("LLM Summaries", expanded=False):
+                            st.json(result.get("llm_summaries", []))
+                        with st.expander("Full Response JSON", expanded=False):
+                            st.json(data)
                         if result.get("errors"):
                             st.error("Errors detected")
                             st.json(result.get("errors"))

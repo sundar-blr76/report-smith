@@ -91,6 +91,7 @@ tables:
         type: boolean
         default: true
         description: Active status
+        auto_filter_on_default: true  # Automatically filter to default value unless user specifies otherwise
       
       created_at:
         type: timestamp
@@ -624,6 +625,7 @@ tables:
       is_active:
         type: boolean
         default: true
+        auto_filter_on_default: true
       
       created_at:
         type: timestamp
@@ -698,6 +700,7 @@ tables:
       is_active:
         type: boolean
         default: true
+        auto_filter_on_default: true
       
       created_at:
         type: timestamp
