@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from reportsmith.logger import get_logger
 
@@ -47,7 +47,7 @@ class QueryValidator:
         question: str,
         intent: Dict[str, Any],
         sql: str,
-        entities: list[Dict[str, Any]],
+        entities: List[Dict[str, Any]],
         plan: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -130,7 +130,7 @@ class QueryValidator:
         question: str,
         intent: Dict[str, Any],
         sql: str,
-        entities: list[Dict[str, Any]],
+        entities: List[Dict[str, Any]],
         plan: Dict[str, Any],
     ) -> str:
         """Build LLM prompt for query validation."""

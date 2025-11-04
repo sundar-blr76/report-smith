@@ -7,7 +7,7 @@ to ensure correctness and prevent runtime errors.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
@@ -165,7 +165,7 @@ class SchemaValidator:
     
     def _validate_columns(
         self, sql: str, plan: Dict[str, Any]
-    ) -> tuple[List[str], List[Dict[str, str]]]:
+    ) -> Tuple[List[str], List[Dict[str, str]]]:
         """
         Validate columns referenced in SQL exist.
         
@@ -312,7 +312,7 @@ class SchemaValidator:
         warnings: List[str],
         plan: Dict[str, Any],
         entities: List[Dict[str, Any]],
-    ) -> tuple[str, List[str]]:
+    ) -> Tuple[str, List[str]]:
         """
         Attempt automatic corrections for common schema issues.
         
