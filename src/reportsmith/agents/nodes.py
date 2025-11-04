@@ -114,7 +114,11 @@ class AgentNodes:
                     "entity_type": e.entity_type,
                     "confidence": e.confidence,
                     "top_match": (e.semantic_matches[0] if e.semantic_matches else None),
-                    "table": getattr(e, "table", None),
+                    # For table entities, use canonical_name as table name if table is not set
+                    "table": (
+                        getattr(e, "table", None) or 
+                        (e.canonical_name if e.entity_type == "table" else None)
+                    ),
                     "column": getattr(e, "column", None),
                     "source": getattr(e, "source", None),
                     "local_mapping": getattr(e, "local_mapping", None),
@@ -597,8 +601,31 @@ class AgentNodes:
                 ent_text = (ent.get("text") or "").strip()
                 ent_type = ent.get("entity_type")
                 if ent_type == "table" and ent_text:
-                    mapped_table = ent_text
-                    reason = "entity_type=table"
+                    # First try to get actual table name from entity metadata
+                    mapped_table = ent.get("table")
+                    if mapped_table:
+                        reason = "entity.table"
+                    else:
+                        # Try top_match metadata
+                        match = ent.get("top_match") or {}
+                        md = match.get("metadata") or {}
+                        mapped_table = md.get("table")
+                        if mapped_table:
+                            reason = "top_match.metadata.table"
+                        else:
+                            # Try local_mapping canonical_name
+                            local_map = ent.get("local_mapping") or {}
+                            canonical = local_map.get("canonical_name")
+                            if canonical:
+                                mapped_table = canonical
+                                reason = "local_mapping.canonical_name"
+                            else:
+                                # Last resort: use entity text as-is (may be wrong!)
+                                mapped_table = ent_text
+                                reason = "entity_text_fallback"
+                                logger.warning(
+                                    f"[schema][map] table entity '{ent_text}' has no table/canonical_name mapping, using text as-is"
+                                )
                 else:
                     match = ent.get("top_match") or {}
                     md = match.get("metadata") or {}

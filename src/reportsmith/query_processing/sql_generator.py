@@ -380,6 +380,168 @@ class SQLGenerator:
         
         return from_table, joins
     
+    def _normalize_filter_value(self, value_str: str) -> str:
+        """
+        Normalize filter values to valid SQL format.
+        
+        Handles:
+        - Shorthand numeric values: 100M → 100000000, 1.5K → 1500, 2B → 2000000000
+        - Already quoted strings: leave as-is
+        - Plain numbers: leave as-is
+        
+        Args:
+            value_str: The value string from filter (e.g., "100M", "'equity'", "2024")
+        
+        Returns:
+            Normalized SQL-compatible value string
+        """
+        import re
+        
+        value_str = value_str.strip()
+        
+        # Pattern: number followed by K/M/B/T (thousands, millions, billions, trillions)
+        # Handles: 100M, 1.5K, 2B, 0.5M, etc.
+        shorthand_pattern = r'^(\d+(?:\.\d+)?)\s*([KMBT])$'
+        match = re.match(shorthand_pattern, value_str, re.IGNORECASE)
+        
+        if match:
+            number = float(match.group(1))
+            suffix = match.group(2).upper()
+            
+            multipliers = {
+                'K': 1_000,
+                'M': 1_000_000,
+                'B': 1_000_000_000,
+                'T': 1_000_000_000_000,
+            }
+            
+            result = number * multipliers[suffix]
+            
+            # Return as integer if it's a whole number, otherwise as float
+            if result == int(result):
+                normalized = str(int(result))
+            else:
+                normalized = str(result)
+            
+            logger.debug(f"[sql-gen][normalize] converted shorthand: {value_str} → {normalized}")
+            return normalized
+        
+        # Already a valid value (quoted string, number, boolean, etc.)
+        return value_str
+    
+    def _normalize_column_reference(
+        self,
+        col_ref: str,
+        entities: List[Dict[str, Any]],
+    ) -> str:
+        """
+        Normalize column references in filters to use actual table/column names.
+        
+        This maps entity text (e.g., "AUM", "customers") to actual schema names
+        (e.g., "funds.total_aum", "clients").
+        
+        Args:
+            col_ref: Column reference from filter (e.g., "AUM", "customers.type", "customer_type")
+            entities: List of discovered entities with mappings
+        
+        Returns:
+            Normalized column reference (e.g., "funds.total_aum", "clients.client_type")
+        """
+        # If already in table.column format, check if table needs mapping
+        if '.' in col_ref:
+            table_ref, col_name = col_ref.split('.', 1)
+            
+            # Check if table_ref is an entity text that needs mapping
+            for ent in entities:
+                if ent.get("text", "").lower() == table_ref.lower():
+                    actual_table = ent.get("table")
+                    if actual_table:
+                        return f"{actual_table}.{col_name}"
+            
+            return col_ref
+        
+        # Single word reference - could be column name or entity text
+        # First, try to find it as an entity text in the entities list
+        for ent in entities:
+            text = ent.get("text", "").lower()
+            entity_type = ent.get("entity_type")
+            
+            if text == col_ref.lower():
+                if entity_type == "column":
+                    table = ent.get("table")
+                    column = ent.get("column")
+                    if table and column:
+                        return f"{table}.{column}"
+                elif entity_type == "table":
+                    # Just return the actual table name
+                    actual_table = ent.get("table")
+                    if actual_table:
+                        return actual_table
+        
+        # Not found in entities - try to find column in knowledge graph
+        # This handles cases like "customer_type" → "clients.client_type"
+        col_lower = col_ref.lower()
+        
+        # Try exact match first
+        matching_nodes = []
+        for node in self.kg.nodes.values():
+            if node.type == "column" and node.name and node.name.lower() == col_lower:
+                matching_nodes.append(node)
+        
+        # If no exact match, try fuzzy match (e.g., "customer_type" matches "client_type")
+        if not matching_nodes:
+            # Try removing common prefixes/suffixes and checking similarity
+            import difflib
+            candidates = []
+            for node in self.kg.nodes.values():
+                if node.type == "column" and node.name:
+                    # Check similarity ratio
+                    ratio = difflib.SequenceMatcher(None, col_lower, node.name.lower()).ratio()
+                    if ratio > 0.5:  # 50% similarity threshold (relaxed from 70%)
+                        candidates.append((node, ratio))
+            
+            # Sort by similarity and take best matches
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            matching_nodes = [c[0] for c in candidates[:3]]  # Top 3 candidates
+        
+        # If we have matches, prefer ones from tables in our entity list
+        if matching_nodes:
+            # Get tables from entities
+            entity_tables = set()
+            for ent in entities:
+                table = ent.get("table")
+                if table:
+                    entity_tables.add(table)
+                # Also check metadata
+                md = (ent.get("top_match") or {}).get("metadata") or {}
+                table = md.get("table")
+                if table:
+                    entity_tables.add(table)
+            
+            # Prefer columns from tables in our query
+            for node in matching_nodes:
+                if node.table in entity_tables:
+                    logger.info(
+                        f"[sql-gen][normalize] mapped column '{col_ref}' → "
+                        f"'{node.table}.{node.name}' (from KG, fuzzy match)"
+                    )
+                    return f"{node.table}.{node.name}"
+            
+            # No match in our tables - use first match as fallback
+            node = matching_nodes[0]
+            logger.warning(
+                f"[sql-gen][normalize] mapped column '{col_ref}' → "
+                f"'{node.table}.{node.name}' (from KG, fuzzy match, table not in query)"
+            )
+            return f"{node.table}.{node.name}"
+        
+        # No mapping found - return as-is
+        logger.warning(
+            f"[sql-gen][normalize] could not normalize column reference '{col_ref}', "
+            f"using as-is (may cause SQL errors)"
+        )
+        return col_ref
+    
     def _build_where_conditions(
         self,
         entities: List[Dict[str, Any]],
@@ -402,7 +564,9 @@ class SQLGenerator:
                 import re
                 
                 # Match patterns like: column_name != 'value' or table.column = value
-                pattern = r"([\w.]+)\s*(!=|=|>|<|>=|<=|NOT IN|IN|LIKE|NOT LIKE)\s*(.+)"
+                # IMPORTANT: Use word boundaries (\b) to avoid matching "in" within words like "investors"
+                # Order matters: match longer operators first (NOT IN, NOT LIKE before IN, LIKE)
+                pattern = r"([\w.]+)\s*(\bNOT\s+IN\b|\bNOT\s+LIKE\b|!=|=|>|<|>=|<=|\bIN\b|\bLIKE\b)\s*(.+)"
                 match = re.match(pattern, filter_str, re.IGNORECASE)
                 
                 if match:
@@ -513,9 +677,61 @@ class SQLGenerator:
                         break
                 
                 if not covered:
-                    # Add filter as-is (assumes it's already in valid SQL format from intent analyzer)
-                    conditions.append(filter_str)
-                    logger.debug(f"[sql-gen][where] added explicit filter: {filter_str}")
+                    # Parse and normalize the filter
+                    import re
+                    # Use word boundaries (\b) to avoid matching "in" within words like "investors"
+                    # Order matters: match longer operators first (NOT IN, NOT LIKE before IN, LIKE)
+                    pattern = r"([\w.]+)\s*(\bNOT\s+IN\b|\bNOT\s+LIKE\b|!=|=|>|<|>=|<=|\bIN\b|\bLIKE\b)\s*(.+)"
+                    match = re.match(pattern, filter_str, re.IGNORECASE)
+                    
+                    if match:
+                        col_ref = match.group(1).strip()
+                        operator = match.group(2).strip()
+                        value_part = match.group(3).strip()
+                        
+                        # Normalize column reference (map entity text to actual table.column)
+                        normalized_col = self._normalize_column_reference(col_ref, entities)
+                        
+                        # Normalize value (handle 100M, 1K, etc.)
+                        normalized_value = self._normalize_filter_value(value_part)
+                        
+                        # Build normalized filter
+                        normalized_filter = f"{normalized_col} {operator} {normalized_value}"
+                        conditions.append(normalized_filter)
+                        
+                        if normalized_filter != filter_str:
+                            logger.info(
+                                f"[sql-gen][where] normalized filter: "
+                                f"'{filter_str}' → '{normalized_filter}'"
+                            )
+                        else:
+                            logger.debug(f"[sql-gen][where] added explicit filter: {filter_str}")
+                    else:
+                        # Could not parse - check if it's already covered by dimension entities
+                        # before skipping
+                        filter_terms = filter_str.lower().split()
+                        is_covered_by_dimension = False
+                        
+                        for ent in entities:
+                            if ent.get("entity_type") == "dimension_value":
+                                # Check if dimension entity text is in this filter
+                                ent_text = (ent.get("text") or "").lower()
+                                if ent_text and ent_text in filter_terms:
+                                    is_covered_by_dimension = True
+                                    break
+                        
+                        if is_covered_by_dimension:
+                            logger.info(
+                                f"[sql-gen][where] skipping unparsable filter '{filter_str}' - "
+                                f"already handled by dimension entities"
+                            )
+                        else:
+                            # Not covered by dimensions and can't parse - log warning and skip
+                            # (Don't add to avoid SQL syntax errors)
+                            logger.warning(
+                                f"[sql-gen][where] skipping unparsable filter '{filter_str}' - "
+                                f"no valid SQL pattern found and not covered by dimension entities"
+                            )
             
             except Exception as e:
                 logger.warning(f"[sql-gen][where] failed to process filter '{filter_str}': {e}")

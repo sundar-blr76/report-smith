@@ -126,7 +126,7 @@ dimension_values:
   truepotential:
     canonical_name: TruePotential
     table: management_companies
-    column: company_name
+    column: name
     value: TruePotential
     aliases: ["true potential", "tp", "truepot"]
     description: "TruePotential management company"
@@ -134,7 +134,7 @@ dimension_values:
   horizon:
     canonical_name: Horizon
     table: management_companies
-    column: company_name
+    column: name
     value: Horizon
     aliases: ["horizon capital", "horizon investments"]
     description: "Horizon management company"
