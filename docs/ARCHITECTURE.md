@@ -517,7 +517,7 @@ Startup → Config Loader → YAML Parsing → Validation → In-Memory Cache
 
 For detailed implementation notes, see:
 - [CURRENT_STATE.md](CURRENT_STATE.md) - Current status
-- [docs/archive/IMPLEMENTATION_HISTORY.md](docs/archive/IMPLEMENTATION_HISTORY.md) - Historical notes
+- [archive/IMPLEMENTATION_HISTORY.md](archive/IMPLEMENTATION_HISTORY.md) - Historical notes
 - [../REFACTORING_PROPOSAL.md](../REFACTORING_PROPOSAL.md) - Future plans
 
 ---

@@ -63,9 +63,12 @@ try:
         print()
         
         # Save full response to file
-        with open("/home/sundar/sundar_projects/report-smith/logs/test_sql_enrichment_result.json", "w") as f:
+        log_dir = Path(__file__).parent.parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / "test_sql_enrichment_result.json"
+        with open(log_file, "w") as f:
             json.dump(result, f, indent=2)
-        print("Full response saved to logs/test_sql_enrichment_result.json")
+        print(f"Full response saved to {log_file}")
         
     else:
         print(f"ERROR: Status code {response.status_code}")
