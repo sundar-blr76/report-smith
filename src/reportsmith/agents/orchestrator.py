@@ -29,7 +29,7 @@ class MultiAgentOrchestrator:
             graph_builder=graph_builder,
             knowledge_graph=knowledge_graph,
         )
-        logger.info("[supervisor] building orchestration graph (intent -> semantic -> filter -> refine -> schema -> plan -> sql -> finalize)")
+        logger.info("[supervisor] building orchestration graph (intent -> semantic -> filter -> refine -> schema -> plan -> sql -> validate_query -> validate_schema -> finalize)")
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -43,6 +43,8 @@ class MultiAgentOrchestrator:
         g.add_node("schema", self.nodes.map_schema)
         g.add_node("plan", self.nodes.plan_query)
         g.add_node("sql", self.nodes.generate_sql)
+        g.add_node("validate_query", self.nodes.validate_query)
+        g.add_node("validate_schema", self.nodes.validate_schema)
         g.add_node("finalize", self.nodes.finalize)
 
         # Edges
@@ -52,7 +54,9 @@ class MultiAgentOrchestrator:
         g.add_edge("refine", "schema")
         g.add_edge("schema", "plan")
         g.add_edge("plan", "sql")
-        g.add_edge("sql", "finalize")
+        g.add_edge("sql", "validate_query")
+        g.add_edge("validate_query", "validate_schema")
+        g.add_edge("validate_schema", "finalize")
         g.add_edge("finalize", END)
 
         # Entry
@@ -79,6 +83,8 @@ class MultiAgentOrchestrator:
             ("schema", self.nodes.map_schema),
             ("plan", self.nodes.plan_query),
             ("sql", self.nodes.generate_sql),
+            ("validate_query", self.nodes.validate_query),
+            ("validate_schema", self.nodes.validate_schema),
             ("finalize", self.nodes.finalize),
         ]
         for name, fn in steps:

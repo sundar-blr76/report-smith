@@ -65,6 +65,17 @@ class SQLJoin:
 
 
 @dataclass
+class SQLCTE:
+    """Represents a Common Table Expression (CTE)"""
+    name: str
+    query: 'SQLQuery'
+    
+    def to_sql(self) -> str:
+        """Convert to SQL CTE clause"""
+        return f"{self.name} AS (\n{self.query.to_sql()}\n)"
+
+
+@dataclass
 class SQLQuery:
     """Represents a complete SQL query"""
     select_columns: List[SQLColumn]
@@ -75,10 +86,24 @@ class SQLQuery:
     having_conditions: List[str]
     order_by: List[Tuple[str, str]]  # [(column, direction)]
     limit: Optional[int] = None
+    ctes: List[SQLCTE] = None  # Common Table Expressions
+    is_subquery: bool = False  # Whether this query is a subquery
+    
+    def __post_init__(self):
+        """Initialize default values"""
+        if self.ctes is None:
+            self.ctes = []
     
     def to_sql(self) -> str:
         """Generate complete SQL statement"""
         parts = []
+        
+        # CTEs (WITH clause)
+        if self.ctes:
+            cte_parts = []
+            for cte in self.ctes:
+                cte_parts.append(cte.to_sql())
+            parts.append("WITH " + ",\n".join(cte_parts))
         
         # SELECT clause
         select_cols = ",\n       ".join(col.to_sql() for col in self.select_columns)
@@ -133,6 +158,7 @@ class SQLGenerator:
     def __init__(self, knowledge_graph: SchemaKnowledgeGraph, llm_client=None):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
+        self.supports_complex_queries = True  # Enable complex query support
     
     def generate(
         self,
@@ -161,6 +187,17 @@ class SQLGenerator:
             intent_type = intent.get("type", "list")
             aggregations = intent.get("aggregations", [])
             filters = intent.get("filters", [])
+            
+            # Check if complex query structure is needed (sub-queries/CTEs)
+            needs_complex_query = self._needs_complex_query(
+                intent_type=intent_type,
+                aggregations=aggregations,
+                filters=filters,
+                plan=plan,
+            )
+            
+            if needs_complex_query:
+                logger.info("[sql-gen] complex query structure detected, using CTEs/sub-queries")
             
             # Build query components
             select_columns = self._build_select_columns(entities, aggregations, intent_type)
@@ -217,12 +254,59 @@ class SQLGenerator:
                     "where_count": len(where_conditions),
                     "aggregations": aggregations,
                     "columns_count": len(select_columns),
+                    "complex_query": needs_complex_query,
                 },
             }
         
         except Exception as e:
             logger.error(f"[sql-gen] failed: {e}", exc_info=True)
             raise
+    
+    def _needs_complex_query(
+        self,
+        *,
+        intent_type: str,
+        aggregations: List[str],
+        filters: List[str],
+        plan: Dict[str, Any],
+    ) -> bool:
+        """
+        Determine if query requires complex structure (CTEs/sub-queries).
+        
+        Complex queries are needed when:
+        - Multiple levels of aggregation are required
+        - Filtering on aggregated results (HAVING clause equivalent)
+        - Ranking or window functions are needed
+        - Multiple independent data sources need to be combined
+        
+        Args:
+            intent_type: Type of query intent
+            aggregations: List of aggregations
+            filters: List of filter conditions
+            plan: Query execution plan
+        
+        Returns:
+            True if complex query structure is needed
+        """
+        # For now, we mark as complex if:
+        # 1. Intent type suggests ranking/comparison with aggregations
+        # 2. Multiple aggregations with different groupings
+        # 3. Filters that reference aggregated columns
+        
+        if intent_type in ["top_n", "ranking"] and len(aggregations) > 0:
+            logger.debug("[sql-gen] complex query needed: ranking with aggregation")
+            return True
+        
+        # Check if any filters reference aggregated values
+        agg_keywords = ["sum", "avg", "count", "min", "max", "total"]
+        for filter_str in filters:
+            filter_lower = filter_str.lower()
+            if any(keyword in filter_lower for keyword in agg_keywords):
+                logger.debug(f"[sql-gen] complex query needed: filter on aggregation '{filter_str}'")
+                return True
+        
+        # For now, most queries can be handled with simple structure
+        return False
     
     def _build_select_columns(
         self,

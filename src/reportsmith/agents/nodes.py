@@ -6,6 +6,8 @@ import json
 
 from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.query_processing.sql_generator import SQLGenerator
+from reportsmith.query_processing.query_validator import QueryValidator
+from reportsmith.query_processing.schema_validator import SchemaValidator
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
 from reportsmith.query_execution import SQLExecutor
@@ -22,6 +24,8 @@ class QueryState(BaseModel):
     tables: List[str] = Field(default_factory=list)
     plan: Dict[str, Any] | None = None
     sql: Dict[str, Any] | None = None
+    validation: Dict[str, Any] | None = None  # Query validation results
+    schema_validation: Dict[str, Any] | None = None  # Schema validation results
     result: Dict[str, Any] | None = None
     errors: List[str] = Field(default_factory=list)
     timings: Dict[str, float] = Field(default_factory=dict)
@@ -43,12 +47,24 @@ class AgentNodes:
         
         # Pass LLM client to SQL generator for column enrichment
         llm_client = None
+        llm_provider = "gemini"  # default
         if hasattr(intent_analyzer, 'llm_analyzer') and intent_analyzer.llm_analyzer:
             llm_client = getattr(intent_analyzer.llm_analyzer, 'client', None)
+            llm_provider = getattr(intent_analyzer.llm_analyzer, 'provider', 'gemini')
         
         self.sql_generator = SQLGenerator(
             knowledge_graph=knowledge_graph,
             llm_client=llm_client
+        )
+        
+        # Initialize validators
+        self.query_validator = QueryValidator(
+            llm_client=llm_client,
+            provider=llm_provider
+        )
+        
+        self.schema_validator = SchemaValidator(
+            knowledge_graph=knowledge_graph
         )
         
         # SQL executor for query execution
@@ -851,6 +867,122 @@ class AgentNodes:
             state.errors.append(f"sql_generation_error: {e}")
             return state
 
+    # Node: validate query against user intent using LLM
+    def validate_query(self, state: QueryState) -> QueryState:
+        logger.info("\x1b[1;35m=== NODE START: QUERY VALIDATION ===\x1b[0m")
+        logger.debug("[state@validate:start] " + self._dump_state(state))
+        logger.info("[supervisor] validating SQL against user intent")
+        import time
+        t0 = time.perf_counter()
+        try:
+            if not state.sql or not state.sql.get("sql"):
+                logger.warning("[query-validation] no SQL available, skipping validation")
+                state.validation = {
+                    "is_valid": True,
+                    "issues": [],
+                    "reasoning": "Validation skipped - no SQL generated",
+                    "confidence": 0.0,
+                }
+                return state
+            
+            # Validate query against intent
+            validation_result = self.query_validator.validate(
+                question=state.question,
+                intent=state.intent or {},
+                sql=state.sql.get("sql"),
+                entities=state.entities,
+                plan=state.plan or {},
+            )
+            
+            state.validation = validation_result
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            state.timings["validation_ms"] = round(dt_ms, 2)
+            
+            # If corrected SQL is provided, update state
+            if validation_result.get("corrected_sql"):
+                logger.info("[query-validation] using corrected SQL from validator")
+                state.sql["sql"] = validation_result["corrected_sql"]
+                state.sql["corrected_by_validator"] = True
+            
+            logger.info(
+                f"[query-validation] validation complete in {dt_ms:.1f}ms: "
+                f"valid={validation_result.get('is_valid')}, "
+                f"issues={len(validation_result.get('issues', []))}"
+            )
+            
+            return state
+        except Exception as e:
+            logger.error(f"[query-validation] error: {e}", exc_info=True)
+            state.errors.append(f"query_validation_error: {e}")
+            # Don't block on validation errors
+            state.validation = {
+                "is_valid": True,
+                "issues": [str(e)],
+                "reasoning": f"Validation failed: {e}",
+                "confidence": 0.0,
+            }
+            return state
+
+    # Node: validate SQL against schema metadata
+    def validate_schema(self, state: QueryState) -> QueryState:
+        logger.info("\x1b[1;33m=== NODE START: SCHEMA VALIDATION ===\x1b[0m")
+        logger.debug("[state@schema-validate:start] " + self._dump_state(state))
+        logger.info("[supervisor] validating SQL against schema metadata")
+        import time
+        t0 = time.perf_counter()
+        try:
+            if not state.sql or not state.sql.get("sql"):
+                logger.warning("[schema-validation] no SQL available, skipping validation")
+                state.schema_validation = {
+                    "is_valid": True,
+                    "errors": [],
+                    "warnings": [],
+                    "corrections_applied": [],
+                }
+                return state
+            
+            # Validate against schema
+            schema_result = self.schema_validator.validate(
+                sql=state.sql.get("sql"),
+                plan=state.plan or {},
+                entities=state.entities,
+            )
+            
+            state.schema_validation = schema_result
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            state.timings["schema_validation_ms"] = round(dt_ms, 2)
+            
+            # If corrected SQL is provided, update state
+            if schema_result.get("corrected_sql"):
+                logger.info("[schema-validation] using corrected SQL from schema validator")
+                state.sql["sql"] = schema_result["corrected_sql"]
+                state.sql["corrected_by_schema_validator"] = True
+            
+            # Add errors to state.errors if validation failed
+            if not schema_result.get("is_valid"):
+                for error in schema_result.get("errors", []):
+                    state.errors.append(f"schema_validation: {error}")
+            
+            logger.info(
+                f"[schema-validation] validation complete in {dt_ms:.1f}ms: "
+                f"valid={schema_result.get('is_valid')}, "
+                f"errors={len(schema_result.get('errors', []))}, "
+                f"warnings={len(schema_result.get('warnings', []))}"
+            )
+            
+            return state
+        except Exception as e:
+            logger.error(f"[schema-validation] error: {e}", exc_info=True)
+            state.errors.append(f"schema_validation_error: {e}")
+            # Don't block on validation errors
+            state.schema_validation = {
+                "is_valid": True,
+                "errors": [str(e)],
+                "warnings": [],
+                "corrections_applied": [],
+            }
+            return state
+
     # Node: finalize response with SQL execution
     def finalize(self, state: QueryState) -> QueryState:
         logger.info("\x1b[1;37m=== NODE START: FINALIZE ===\x1b[0m")
@@ -893,6 +1025,8 @@ class AgentNodes:
             "tables": state.tables,
             "plan": state.plan,
             "sql": state.sql,
+            "validation": state.validation,
+            "schema_validation": state.schema_validation,
             "execution": execution_result,
         }
         dt_ms = (time.perf_counter() - t0) * 1000.0
