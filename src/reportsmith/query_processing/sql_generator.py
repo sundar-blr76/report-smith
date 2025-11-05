@@ -1,6 +1,7 @@
 """
 SQL Generator - Converts query plans to executable SQL statements.
 """
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +17,7 @@ logger = get_logger(__name__)
 
 class AggregationType(str, Enum):
     """Supported aggregation types"""
+
     SUM = "sum"
     AVG = "avg"
     COUNT = "count"
@@ -26,6 +28,7 @@ class AggregationType(str, Enum):
 
 class IntentType(str, Enum):
     """Query intent types"""
+
     LIST = "list"
     AGGREGATE = "aggregate"
     COMPARISON = "comparison"
@@ -36,11 +39,12 @@ class IntentType(str, Enum):
 @dataclass
 class SQLColumn:
     """Represents a column in SQL query"""
+
     table: str
     column: str
     alias: Optional[str] = None
     aggregation: Optional[str] = None
-    
+
     def to_sql(self) -> str:
         """Convert to SQL column expression"""
         if self.aggregation:
@@ -49,16 +53,19 @@ class SQLColumn:
             return f"{agg_expr} AS {self.alias or self.column}"
         else:
             col_ref = f"{self.table}.{self.column}"
-            return f"{col_ref} AS {self.alias or self.column}" if self.alias else col_ref
+            return (
+                f"{col_ref} AS {self.alias or self.column}" if self.alias else col_ref
+            )
 
 
 @dataclass
 class SQLJoin:
     """Represents a JOIN clause"""
+
     table: str
     join_type: str  # INNER, LEFT, RIGHT, etc.
     on_condition: str
-    
+
     def to_sql(self) -> str:
         """Convert to SQL JOIN clause"""
         return f"{self.join_type} JOIN {self.table} ON {self.on_condition}"
@@ -67,6 +74,7 @@ class SQLJoin:
 @dataclass
 class SQLQuery:
     """Represents a complete SQL query"""
+
     select_columns: List[SQLColumn]
     from_table: str
     joins: List[SQLJoin]
@@ -75,53 +83,55 @@ class SQLQuery:
     having_conditions: List[str]
     order_by: List[Tuple[str, str]]  # [(column, direction)]
     limit: Optional[int] = None
-    
+
     def to_sql(self) -> str:
         """Generate complete SQL statement"""
         parts = []
-        
+
         # SELECT clause
         select_cols = ",\n       ".join(col.to_sql() for col in self.select_columns)
         parts.append(f"SELECT {select_cols}")
-        
+
         # FROM clause
         parts.append(f"  FROM {self.from_table}")
-        
+
         # JOINs
         for join in self.joins:
             parts.append(f"  {join.to_sql()}")
-        
+
         # WHERE clause
         if self.where_conditions:
             where_clause = "\n   AND ".join(self.where_conditions)
             parts.append(f" WHERE {where_clause}")
-        
+
         # GROUP BY
         if self.group_by:
             group_clause = ", ".join(self.group_by)
             parts.append(f" GROUP BY {group_clause}")
-        
+
         # HAVING
         if self.having_conditions:
             having_clause = "\n   AND ".join(self.having_conditions)
             parts.append(f" HAVING {having_clause}")
-        
+
         # ORDER BY
         if self.order_by:
-            order_clause = ", ".join(f"{col} {direction}" for col, direction in self.order_by)
+            order_clause = ", ".join(
+                f"{col} {direction}" for col, direction in self.order_by
+            )
             parts.append(f" ORDER BY {order_clause}")
-        
+
         # LIMIT
         if self.limit:
             parts.append(f" LIMIT {self.limit}")
-        
+
         return "\n".join(parts)
 
 
 class SQLGenerator:
     """
     Generates SQL queries from query plans and entity metadata.
-    
+
     Responsibilities:
     - Build SELECT clause from entities (columns, aggregations)
     - Construct JOIN paths using knowledge graph relationships
@@ -129,11 +139,11 @@ class SQLGenerator:
     - Add GROUP BY, ORDER BY, LIMIT based on intent
     - Enrich with implicit context columns using LLM
     """
-    
+
     def __init__(self, knowledge_graph: SchemaKnowledgeGraph, llm_client=None):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
-    
+
     def generate(
         self,
         *,
@@ -144,27 +154,29 @@ class SQLGenerator:
     ) -> Dict[str, Any]:
         """
         Generate SQL query from query plan and entities.
-        
+
         Args:
             question: Original user question
             intent: Intent analysis result
             entities: Discovered entities with mappings
             plan: Query plan with tables and join paths
-        
+
         Returns:
             Dict with SQL query, explanation, and metadata
         """
         logger.info(f"[sql-gen] generating SQL for question: '{question}'")
-        
+
         try:
             # Extract intent details
             intent_type = intent.get("type", "list")
             aggregations = intent.get("aggregations", [])
             filters = intent.get("filters", [])
-            
+
             # Build query components
-            select_columns = self._build_select_columns(entities, aggregations, intent_type)
-            
+            select_columns = self._build_select_columns(
+                entities, aggregations, intent_type
+            )
+
             # Enrich with implicit context columns using LLM
             if self.llm_client:
                 select_columns = self._enrich_with_context_columns(
@@ -174,13 +186,13 @@ class SQLGenerator:
                     entities=entities,
                     plan=plan,
                 )
-            
+
             from_table, joins = self._build_from_and_joins(plan)
             where_conditions = self._build_where_conditions(entities, filters)
             group_by = self._build_group_by(select_columns, intent_type)
             order_by = self._build_order_by(select_columns, intent_type)
             limit = self._determine_limit(intent_type)
-            
+
             # Construct SQL query object
             sql_query = SQLQuery(
                 select_columns=select_columns,
@@ -192,12 +204,12 @@ class SQLGenerator:
                 order_by=order_by,
                 limit=limit,
             )
-            
+
             sql_text = sql_query.to_sql()
-            
+
             logger.info(f"[sql-gen] generated SQL ({len(sql_text)} chars)")
             logger.debug(f"[sql-gen] SQL:\n{sql_text}")
-            
+
             # Build explanation
             explanation = self._build_explanation(
                 question=question,
@@ -206,7 +218,7 @@ class SQLGenerator:
                 joins=joins,
                 where_conditions=where_conditions,
             )
-            
+
             return {
                 "sql": sql_text,
                 "explanation": explanation,
@@ -219,11 +231,11 @@ class SQLGenerator:
                     "columns_count": len(select_columns),
                 },
             }
-        
+
         except Exception as e:
             logger.error(f"[sql-gen] failed: {e}", exc_info=True)
             raise
-    
+
     def _build_select_columns(
         self,
         entities: List[Dict[str, Any]],
@@ -232,18 +244,19 @@ class SQLGenerator:
     ) -> List[SQLColumn]:
         """Build SELECT column list from entities"""
         columns = []
-        
+
         # Separate entities by type
         table_entities = [e for e in entities if e.get("entity_type") == "table"]
         column_entities = [e for e in entities if e.get("entity_type") == "column"]
-        dimension_entities = [e for e in entities if e.get("entity_type") == "dimension_value"]
-        
+        dimension_entities = [
+            e for e in entities if e.get("entity_type") == "dimension_value"
+        ]
+
         # Determine if we need aggregation based on intent type and presence of aggregations
         needs_aggregation = (
-            intent_type in ["aggregate", "comparison", "top_n"] 
-            or len(aggregations) > 0
+            intent_type in ["aggregate", "comparison", "top_n"] or len(aggregations) > 0
         )
-        
+
         # If we have explicit column entities, use them
         if column_entities:
             for ent in column_entities:
@@ -254,7 +267,7 @@ class SQLGenerator:
                     md = (ent.get("top_match") or {}).get("metadata") or {}
                     table = table or md.get("table")
                     column = column or md.get("column")
-                
+
                 if table and column:
                     # Check if this column needs aggregation
                     agg = None
@@ -263,20 +276,32 @@ class SQLGenerator:
                         # (More sophisticated logic could match specific aggs to specific columns)
                         md = (ent.get("top_match") or {}).get("metadata") or {}
                         data_type = md.get("data_type", "").lower()
-                        if data_type in ["numeric", "integer", "decimal", "float", "double", "money"]:
+                        if data_type in [
+                            "numeric",
+                            "integer",
+                            "decimal",
+                            "float",
+                            "double",
+                            "money",
+                        ]:
                             agg = aggregations[0] if aggregations else "sum"
-                    
+
                     # Generate alias from entity text
                     alias = ent.get("text") or column
-                    
-                    columns.append(SQLColumn(
-                        table=table,
-                        column=column,
-                        alias=alias,
-                        aggregation=agg,
-                    ))
-                    logger.debug(f"[sql-gen][select] added column: {table}.{column}" + (f" (agg={agg})" if agg else ""))
-        
+
+                    columns.append(
+                        SQLColumn(
+                            table=table,
+                            column=column,
+                            alias=alias,
+                            aggregation=agg,
+                        )
+                    )
+                    logger.debug(
+                        f"[sql-gen][select] added column: {table}.{column}"
+                        + (f" (agg={agg})" if agg else "")
+                    )
+
         # Add dimension columns for grouping
         dimension_tables = set()
         for ent in dimension_entities:
@@ -286,17 +311,19 @@ class SQLGenerator:
                 md = (ent.get("top_match") or {}).get("metadata") or {}
                 table = table or md.get("table")
                 column = column or md.get("column")
-            
+
             if table and column and table not in dimension_tables:
                 # Add the dimension column for grouping/filtering
-                columns.append(SQLColumn(
-                    table=table,
-                    column=column,
-                    alias=column,
-                ))
+                columns.append(
+                    SQLColumn(
+                        table=table,
+                        column=column,
+                        alias=column,
+                    )
+                )
                 dimension_tables.add(table)
                 logger.debug(f"[sql-gen][select] added dimension: {table}.{column}")
-        
+
         # If no columns yet but we have tables, select primary keys or common display columns
         if not columns and table_entities:
             for tent in table_entities:
@@ -309,126 +336,143 @@ class SQLGenerator:
                         pk = table_node.metadata.get("primary_key", "id")
                         columns.append(SQLColumn(table=table, column=pk))
                         logger.debug(f"[sql-gen][select] added PK: {table}.{pk}")
-                        
+
                         # Add a few common display columns (name, code, etc.)
-                        for col_name in ["name", f"{table[:-1]}_name", "code", f"{table[:-1]}_code"]:
+                        for col_name in [
+                            "name",
+                            f"{table[:-1]}_name",
+                            "code",
+                            f"{table[:-1]}_code",
+                        ]:
                             col_node = self.kg.nodes.get(f"{table}.{col_name}")
                             if col_node:
                                 columns.append(SQLColumn(table=table, column=col_name))
-                                logger.debug(f"[sql-gen][select] added display col: {table}.{col_name}")
+                                logger.debug(
+                                    f"[sql-gen][select] added display col: {table}.{col_name}"
+                                )
                                 break
-        
+
         return columns
-    
+
     def _build_from_and_joins(self, plan: Dict[str, Any]) -> Tuple[str, List[SQLJoin]]:
         """Build FROM and JOIN clauses from plan"""
         tables = plan.get("tables", [])
         if not tables:
             raise ValueError("No tables in plan")
-        
+
         # First table is FROM
         from_table = tables[0]
         logger.debug(f"[sql-gen][from] using base table: {from_table}")
-        
+
         joins = []
-        
+
         # Single table - no joins needed
         if len(tables) == 1:
             return from_table, joins
-        
+
         # Multi-table - use plan edges to construct joins
         strategy = plan.get("strategy", "")
         if strategy == "kg_shortest_paths":
             path_edges = plan.get("path_edges", [])
-            
+
             # Track which tables we've already joined
             joined_tables = {from_table}
-            
+
             for edge in path_edges:
                 from_node = edge.get("from")
                 to_node = edge.get("to")
                 from_col = edge.get("from_column")
                 to_col = edge.get("to_column")
                 rel_type = edge.get("type")
-                
+
                 # Determine which table to join (skip if already joined)
                 if to_node not in joined_tables and from_node in joined_tables:
                     # Join to_node to from_node
                     join_type = "INNER"  # Could be LEFT based on relationship
                     on_condition = f"{from_node}.{from_col} = {to_node}.{to_col}"
-                    
-                    joins.append(SQLJoin(
-                        table=to_node,
-                        join_type=join_type,
-                        on_condition=on_condition,
-                    ))
+
+                    joins.append(
+                        SQLJoin(
+                            table=to_node,
+                            join_type=join_type,
+                            on_condition=on_condition,
+                        )
+                    )
                     joined_tables.add(to_node)
-                    logger.debug(f"[sql-gen][join] {join_type} JOIN {to_node} ON {on_condition}")
-                
+                    logger.debug(
+                        f"[sql-gen][join] {join_type} JOIN {to_node} ON {on_condition}"
+                    )
+
                 elif from_node not in joined_tables and to_node in joined_tables:
                     # Join from_node to to_node (reverse direction)
                     join_type = "INNER"
                     on_condition = f"{to_node}.{to_col} = {from_node}.{from_col}"
-                    
-                    joins.append(SQLJoin(
-                        table=from_node,
-                        join_type=join_type,
-                        on_condition=on_condition,
-                    ))
+
+                    joins.append(
+                        SQLJoin(
+                            table=from_node,
+                            join_type=join_type,
+                            on_condition=on_condition,
+                        )
+                    )
                     joined_tables.add(from_node)
-                    logger.debug(f"[sql-gen][join] {join_type} JOIN {from_node} ON {on_condition}")
-        
+                    logger.debug(
+                        f"[sql-gen][join] {join_type} JOIN {from_node} ON {on_condition}"
+                    )
+
         return from_table, joins
-    
+
     def _normalize_filter_value(self, value_str: str) -> str:
         """
         Normalize filter values to valid SQL format.
-        
+
         Handles:
         - Shorthand numeric values: 100M → 100000000, 1.5K → 1500, 2B → 2000000000
         - Already quoted strings: leave as-is
         - Plain numbers: leave as-is
-        
+
         Args:
             value_str: The value string from filter (e.g., "100M", "'equity'", "2024")
-        
+
         Returns:
             Normalized SQL-compatible value string
         """
         import re
-        
+
         value_str = value_str.strip()
-        
+
         # Pattern: number followed by K/M/B/T (thousands, millions, billions, trillions)
         # Handles: 100M, 1.5K, 2B, 0.5M, etc.
-        shorthand_pattern = r'^(\d+(?:\.\d+)?)\s*([KMBT])$'
+        shorthand_pattern = r"^(\d+(?:\.\d+)?)\s*([KMBT])$"
         match = re.match(shorthand_pattern, value_str, re.IGNORECASE)
-        
+
         if match:
             number = float(match.group(1))
             suffix = match.group(2).upper()
-            
+
             multipliers = {
-                'K': 1_000,
-                'M': 1_000_000,
-                'B': 1_000_000_000,
-                'T': 1_000_000_000_000,
+                "K": 1_000,
+                "M": 1_000_000,
+                "B": 1_000_000_000,
+                "T": 1_000_000_000_000,
             }
-            
+
             result = number * multipliers[suffix]
-            
+
             # Return as integer if it's a whole number, otherwise as float
             if result == int(result):
                 normalized = str(int(result))
             else:
                 normalized = str(result)
-            
-            logger.debug(f"[sql-gen][normalize] converted shorthand: {value_str} → {normalized}")
+
+            logger.debug(
+                f"[sql-gen][normalize] converted shorthand: {value_str} → {normalized}"
+            )
             return normalized
-        
+
         # Already a valid value (quoted string, number, boolean, etc.)
         return value_str
-    
+
     def _normalize_column_reference(
         self,
         col_ref: str,
@@ -436,36 +480,36 @@ class SQLGenerator:
     ) -> str:
         """
         Normalize column references in filters to use actual table/column names.
-        
+
         This maps entity text (e.g., "AUM", "customers") to actual schema names
         (e.g., "funds.total_aum", "clients").
-        
+
         Args:
             col_ref: Column reference from filter (e.g., "AUM", "customers.type", "customer_type")
             entities: List of discovered entities with mappings
-        
+
         Returns:
             Normalized column reference (e.g., "funds.total_aum", "clients.client_type")
         """
         # If already in table.column format, check if table needs mapping
-        if '.' in col_ref:
-            table_ref, col_name = col_ref.split('.', 1)
-            
+        if "." in col_ref:
+            table_ref, col_name = col_ref.split(".", 1)
+
             # Check if table_ref is an entity text that needs mapping
             for ent in entities:
                 if ent.get("text", "").lower() == table_ref.lower():
                     actual_table = ent.get("table")
                     if actual_table:
                         return f"{actual_table}.{col_name}"
-            
+
             return col_ref
-        
+
         # Single word reference - could be column name or entity text
         # First, try to find it as an entity text in the entities list
         for ent in entities:
             text = ent.get("text", "").lower()
             entity_type = ent.get("entity_type")
-            
+
             if text == col_ref.lower():
                 if entity_type == "column":
                     table = ent.get("table")
@@ -477,33 +521,36 @@ class SQLGenerator:
                     actual_table = ent.get("table")
                     if actual_table:
                         return actual_table
-        
+
         # Not found in entities - try to find column in knowledge graph
         # This handles cases like "customer_type" → "clients.client_type"
         col_lower = col_ref.lower()
-        
+
         # Try exact match first
         matching_nodes = []
         for node in self.kg.nodes.values():
             if node.type == "column" and node.name and node.name.lower() == col_lower:
                 matching_nodes.append(node)
-        
+
         # If no exact match, try fuzzy match (e.g., "customer_type" matches "client_type")
         if not matching_nodes:
             # Try removing common prefixes/suffixes and checking similarity
             import difflib
+
             candidates = []
             for node in self.kg.nodes.values():
                 if node.type == "column" and node.name:
                     # Check similarity ratio
-                    ratio = difflib.SequenceMatcher(None, col_lower, node.name.lower()).ratio()
+                    ratio = difflib.SequenceMatcher(
+                        None, col_lower, node.name.lower()
+                    ).ratio()
                     if ratio > 0.5:  # 50% similarity threshold (relaxed from 70%)
                         candidates.append((node, ratio))
-            
+
             # Sort by similarity and take best matches
             candidates.sort(key=lambda x: x[1], reverse=True)
             matching_nodes = [c[0] for c in candidates[:3]]  # Top 3 candidates
-        
+
         # If we have matches, prefer ones from tables in our entity list
         if matching_nodes:
             # Get tables from entities
@@ -517,7 +564,7 @@ class SQLGenerator:
                 table = md.get("table")
                 if table:
                     entity_tables.add(table)
-            
+
             # Prefer columns from tables in our query
             for node in matching_nodes:
                 if node.table in entity_tables:
@@ -526,7 +573,7 @@ class SQLGenerator:
                         f"'{node.table}.{node.name}' (from KG, fuzzy match)"
                     )
                     return f"{node.table}.{node.name}"
-            
+
             # No match in our tables - use first match as fallback
             node = matching_nodes[0]
             logger.warning(
@@ -534,14 +581,14 @@ class SQLGenerator:
                 f"'{node.table}.{node.name}' (from KG, fuzzy match, table not in query)"
             )
             return f"{node.table}.{node.name}"
-        
+
         # No mapping found - return as-is
         logger.warning(
             f"[sql-gen][normalize] could not normalize column reference '{col_ref}', "
             f"using as-is (may cause SQL errors)"
         )
         return col_ref
-    
+
     def _build_where_conditions(
         self,
         entities: List[Dict[str, Any]],
@@ -549,169 +596,221 @@ class SQLGenerator:
     ) -> List[str]:
         """Build WHERE clause conditions"""
         conditions = []
-        
+
         # Parse intent filters first to detect negations
         # Format examples: "fund_type != 'equity'", "risk_rating = 'High'", "amount > 1000"
         filter_metadata = {}  # Maps column to (operator, values)
         explicitly_filtered_columns = set()  # Track columns explicitly filtered by user
-        
+
         for filter_str in filters:
             try:
                 filter_str = filter_str.strip()
-                
+
                 # Parse filter to detect column, operator, and value
                 # Patterns: "column != value", "column = value", "table.column op value"
                 import re
-                
+
                 # Match patterns like: column_name != 'value' or table.column = value
                 # IMPORTANT: Use word boundaries (\b) to avoid matching "in" within words like "investors"
                 # Order matters: match longer operators first (NOT IN, NOT LIKE before IN, LIKE)
                 pattern = r"([\w.]+)\s*(\bNOT\s+IN\b|\bNOT\s+LIKE\b|!=|=|>|<|>=|<=|\bIN\b|\bLIKE\b)\s*(.+)"
                 match = re.match(pattern, filter_str, re.IGNORECASE)
-                
+
                 if match:
                     col_ref = match.group(1).strip()
                     operator = match.group(2).strip().upper()
                     value_part = match.group(3).strip()
-                    
+
                     # Normalize column reference (remove table prefix if present)
-                    if '.' in col_ref:
-                        table_name = col_ref.split('.')[0]
-                        col_name = col_ref.split('.')[-1]
+                    if "." in col_ref:
+                        table_name = col_ref.split(".")[0]
+                        col_name = col_ref.split(".")[-1]
                         explicitly_filtered_columns.add(f"{table_name}.{col_name}")
                     else:
                         col_name = col_ref
                         explicitly_filtered_columns.add(col_name)
-                    
+
                     # Store filter metadata to check for negations
                     filter_metadata[col_name] = {
-                        'operator': operator,
-                        'value': value_part,
-                        'original': filter_str,
+                        "operator": operator,
+                        "value": value_part,
+                        "original": filter_str,
                     }
-                    logger.debug(f"[sql-gen][where] parsed filter: column={col_name}, op={operator}, value={value_part}")
+                    logger.debug(
+                        f"[sql-gen][where] parsed filter: column={col_name}, op={operator}, value={value_part}"
+                    )
                 else:
-                    logger.debug(f"[sql-gen][where] could not parse filter pattern: {filter_str}")
-            
+                    logger.debug(
+                        f"[sql-gen][where] could not parse filter pattern: {filter_str}"
+                    )
+
             except Exception as e:
-                logger.warning(f"[sql-gen][where] failed to parse filter '{filter_str}': {e}")
-        
+                logger.warning(
+                    f"[sql-gen][where] failed to parse filter '{filter_str}': {e}"
+                )
+
         # Process dimension value entities
-        dimension_entities = [e for e in entities if e.get("entity_type") == "dimension_value"]
-        
+        dimension_entities = [
+            e for e in entities if e.get("entity_type") == "dimension_value"
+        ]
+
         # Group dimension entities by table.column to handle multiple values (OR/IN)
         dim_groups: Dict[str, List[str]] = {}
         dim_negations: Dict[str, bool] = {}  # Track which columns have negations
-        
+
         for ent in dimension_entities:
             table = ent.get("table")
             column = ent.get("column")
             value = None
-            
+
             # Try to get value from entity metadata
             md = (ent.get("top_match") or {}).get("metadata") or {}
             if not table:
                 table = md.get("table")
             if not column:
                 column = md.get("column")
-            
+
             # Get the actual dimension value
             value = md.get("value") or ent.get("text")
-            
+
             if table and column and value:
                 key = f"{table}.{column}"
-                
+
                 # Check if this column has a negation filter from intent
                 filter_info = filter_metadata.get(column, {})
-                operator = filter_info.get('operator', '=')
-                is_negation = operator in ('!=', 'NOT IN', 'NOT LIKE')
-                
+                operator = filter_info.get("operator", "=")
+                is_negation = operator in ("!=", "NOT IN", "NOT LIKE")
+
                 if key not in dim_groups:
                     dim_groups[key] = []
                     dim_negations[key] = is_negation
-                
+
                 # Escape single quotes in value
                 safe_value = value.replace("'", "''")
                 dim_groups[key].append(safe_value)
-                
+
                 # Track this as explicitly filtered
                 explicitly_filtered_columns.add(key)
                 explicitly_filtered_columns.add(column)
-        
+
         # Build conditions from grouped dimensions
         for key, values in dim_groups.items():
             is_negation = dim_negations.get(key, False)
-            
+
             if len(values) == 1:
                 # Single value - simple equality or inequality
                 if is_negation:
                     condition = f"{key} != '{values[0]}'"
-                    logger.debug(f"[sql-gen][where] added dimension filter (negation): {condition}")
+                    logger.debug(
+                        f"[sql-gen][where] added dimension filter (negation): {condition}"
+                    )
                 else:
                     condition = f"{key} = '{values[0]}'"
-                    logger.debug(f"[sql-gen][where] added dimension filter: {condition}")
+                    logger.debug(
+                        f"[sql-gen][where] added dimension filter: {condition}"
+                    )
                 conditions.append(condition)
             else:
                 # Multiple values - use IN/NOT IN clause
                 values_str = ", ".join(f"'{v}'" for v in values)
                 if is_negation:
                     condition = f"{key} NOT IN ({values_str})"
-                    logger.debug(f"[sql-gen][where] added dimension filter (multi-value negation): {condition}")
+                    logger.debug(
+                        f"[sql-gen][where] added dimension filter (multi-value negation): {condition}"
+                    )
                 else:
                     condition = f"{key} IN ({values_str})"
-                    logger.debug(f"[sql-gen][where] added dimension filter (multi-value): {condition}")
+                    logger.debug(
+                        f"[sql-gen][where] added dimension filter (multi-value): {condition}"
+                    )
                 conditions.append(condition)
-        
+
         # Add any remaining explicit filters not covered by dimension entities
-        processed_columns = {key.split('.')[-1] for key in dim_groups.keys()}
-        
+        processed_columns = {key.split(".")[-1] for key in dim_groups.keys()}
+
         for filter_str in filters:
             try:
                 filter_str = filter_str.strip()
-                
+
                 # Check if this filter is for a column we already handled via dimension entities
                 covered = False
                 for col_name in processed_columns:
                     if col_name in filter_str:
                         covered = True
                         break
-                
+
                 if not covered:
                     # Parse and normalize the filter
                     import re
+
                     # Use word boundaries (\b) to avoid matching "in" within words like "investors"
                     # Order matters: match longer operators first (NOT IN, NOT LIKE before IN, LIKE)
                     pattern = r"([\w.]+)\s*(\bNOT\s+IN\b|\bNOT\s+LIKE\b|!=|=|>|<|>=|<=|\bIN\b|\bLIKE\b)\s*(.+)"
                     match = re.match(pattern, filter_str, re.IGNORECASE)
-                    
+
                     if match:
                         col_ref = match.group(1).strip()
                         operator = match.group(2).strip()
                         value_part = match.group(3).strip()
-                        
+
+                        # Check if this filter's value is already covered by dimension entities
+                        # E.g., "fund_type = 'conservative'" when "conservative" is a dimension_value
+                        # for risk_rating
+                        skip_filter = False
+                        value_cleaned = value_part.strip("'\"")
+
+                        for ent in dimension_entities:
+                            ent_text = (ent.get("text") or "").lower()
+                            ent_value = (
+                                ent.get("top_match", {})
+                                .get("metadata", {})
+                                .get("value")
+                                or ""
+                            ).lower()
+
+                            # If the filter value matches a dimension entity text/value
+                            if value_cleaned.lower() in [ent_text, ent_value]:
+                                # The dimension entity already handles this value
+                                skip_filter = True
+                                logger.info(
+                                    f"[sql-gen][where] skipping redundant filter '{filter_str}' - "
+                                    f"value '{value_cleaned}' already handled by dimension entity "
+                                    f"'{ent_text}' → {ent.get('table')}.{ent.get('column')}"
+                                )
+                                break
+
+                        if skip_filter:
+                            continue
+
                         # Normalize column reference (map entity text to actual table.column)
-                        normalized_col = self._normalize_column_reference(col_ref, entities)
-                        
+                        normalized_col = self._normalize_column_reference(
+                            col_ref, entities
+                        )
+
                         # Normalize value (handle 100M, 1K, etc.)
                         normalized_value = self._normalize_filter_value(value_part)
-                        
+
                         # Build normalized filter
-                        normalized_filter = f"{normalized_col} {operator} {normalized_value}"
+                        normalized_filter = (
+                            f"{normalized_col} {operator} {normalized_value}"
+                        )
                         conditions.append(normalized_filter)
-                        
+
                         if normalized_filter != filter_str:
                             logger.info(
                                 f"[sql-gen][where] normalized filter: "
                                 f"'{filter_str}' → '{normalized_filter}'"
                             )
                         else:
-                            logger.debug(f"[sql-gen][where] added explicit filter: {filter_str}")
+                            logger.debug(
+                                f"[sql-gen][where] added explicit filter: {filter_str}"
+                            )
                     else:
                         # Could not parse - check if it's already covered by dimension entities
                         # before skipping
                         filter_terms = filter_str.lower().split()
                         is_covered_by_dimension = False
-                        
+
                         for ent in entities:
                             if ent.get("entity_type") == "dimension_value":
                                 # Check if dimension entity text is in this filter
@@ -719,7 +818,7 @@ class SQLGenerator:
                                 if ent_text and ent_text in filter_terms:
                                     is_covered_by_dimension = True
                                     break
-                        
+
                         if is_covered_by_dimension:
                             logger.info(
                                 f"[sql-gen][where] skipping unparsable filter '{filter_str}' - "
@@ -732,17 +831,71 @@ class SQLGenerator:
                                 f"[sql-gen][where] skipping unparsable filter '{filter_str}' - "
                                 f"no valid SQL pattern found and not covered by dimension entities"
                             )
-            
+
             except Exception as e:
-                logger.warning(f"[sql-gen][where] failed to process filter '{filter_str}': {e}")
-        
+                logger.warning(
+                    f"[sql-gen][where] failed to process filter '{filter_str}': {e}"
+                )
+
         # Apply auto-filters for columns with auto_filter_on_default property
         # This applies default filters unless user explicitly mentions inactive/deactivated records
-        auto_filter_conditions = self._build_auto_filter_conditions(entities, explicitly_filtered_columns)
+        auto_filter_conditions = self._build_auto_filter_conditions(
+            entities, explicitly_filtered_columns
+        )
         conditions.extend(auto_filter_conditions)
-        
+
+        # OPTIMIZATION: Merge multiple equality filters for same column into IN clause
+        # This handles cases like: "col = 'A' AND col = 'B'" → "col IN ('A', 'B')"
+        conditions = self._merge_equality_filters(conditions)
+
         return conditions
-    
+
+    def _merge_equality_filters(self, conditions: List[str]) -> List[str]:
+        """
+        Merge multiple equality filters for same column into IN clause.
+
+        Example: ["col = 'A'", "col = 'B'"] → ["col IN ('A', 'B')"]
+        This fixes impossible conditions like "col = 'A' AND col = 'B'"
+        """
+        import re
+
+        # Group conditions by column for equality checks
+        equality_groups: Dict[str, List[str]] = {}  # column -> [values]
+        other_conditions = []
+
+        for condition in conditions:
+            # Match simple equality: table.column = 'value' or column = 'value'
+            match = re.match(r"^([\w.]+)\s*=\s*'([^']*)'$", condition.strip())
+            if match:
+                column = match.group(1)
+                value = match.group(2)
+
+                if column not in equality_groups:
+                    equality_groups[column] = []
+                equality_groups[column].append(value)
+            else:
+                # Not a simple equality - keep as is
+                other_conditions.append(condition)
+
+        # Build merged conditions
+        merged_conditions = other_conditions.copy()
+
+        for column, values in equality_groups.items():
+            if len(values) == 1:
+                # Single value - use simple equality
+                merged_conditions.append(f"{column} = '{values[0]}'")
+            else:
+                # Multiple values - use IN clause
+                values_str = ", ".join(f"'{v}'" for v in values)
+                in_clause = f"{column} IN ({values_str})"
+                merged_conditions.append(in_clause)
+                logger.info(
+                    f"[sql-gen][where] merged {len(values)} equality filters for '{column}' "
+                    f"into IN clause: {in_clause}"
+                )
+
+        return merged_conditions
+
     def _build_auto_filter_conditions(
         self,
         entities: List[Dict[str, Any]],
@@ -750,19 +903,19 @@ class SQLGenerator:
     ) -> List[str]:
         """
         Build auto-filter conditions for columns marked with auto_filter_on_default.
-        
+
         This applies default filters (e.g., is_active = true) unless the user
         explicitly mentions inactive/deactive records in the query or filters.
-        
+
         Args:
             entities: List of discovered entities
             explicitly_filtered_columns: Set of columns already filtered by user
-        
+
         Returns:
             List of auto-filter condition strings
         """
         auto_conditions = []
-        
+
         # Get all tables from entities
         tables = set()
         for ent in entities:
@@ -772,13 +925,13 @@ class SQLGenerator:
                 table = md.get("table")
             if table:
                 tables.add(table)
-        
+
         # For each table, check if it has columns with auto_filter_on_default
         for table in tables:
             table_node = self.kg.nodes.get(table)
             if not table_node:
                 continue
-            
+
             # Scan all columns in this table
             for node_name, node in self.kg.nodes.items():
                 if node.type == "column" and node.table == table:
@@ -786,19 +939,22 @@ class SQLGenerator:
                     auto_filter = node.metadata.get("auto_filter_on_default", False)
                     default_value = node.metadata.get("default")
                     data_type = node.metadata.get("data_type", "").lower()
-                    
+
                     if auto_filter and default_value is not None:
                         col_name = node.name
                         full_col_ref = f"{table}.{col_name}"
-                        
+
                         # Skip if user explicitly filtered this column
-                        if full_col_ref in explicitly_filtered_columns or col_name in explicitly_filtered_columns:
+                        if (
+                            full_col_ref in explicitly_filtered_columns
+                            or col_name in explicitly_filtered_columns
+                        ):
                             logger.debug(
                                 f"[sql-gen][auto-filter] skipping {full_col_ref} - "
                                 f"user explicitly filtered this column"
                             )
                             continue
-                        
+
                         # Build filter condition based on data type
                         if data_type in ["boolean", "bool"]:
                             # Boolean: use true/false
@@ -811,15 +967,15 @@ class SQLGenerator:
                         else:
                             # Numeric or other: use as-is
                             condition = f"{full_col_ref} = {default_value}"
-                        
+
                         auto_conditions.append(condition)
                         logger.info(
                             f"[sql-gen][auto-filter] applied default filter: {condition} "
                             f"(auto_filter_on_default=true)"
                         )
-        
+
         return auto_conditions
-    
+
     def _build_group_by(
         self,
         select_columns: List[SQLColumn],
@@ -828,21 +984,21 @@ class SQLGenerator:
         """Build GROUP BY clause"""
         # Only add GROUP BY if we have aggregations
         has_agg = any(col.aggregation for col in select_columns)
-        
+
         if not has_agg:
             return []
-        
+
         # Group by all non-aggregated columns
         group_by = []
         for col in select_columns:
             if not col.aggregation:
                 group_by.append(f"{col.table}.{col.column}")
-        
+
         if group_by:
             logger.debug(f"[sql-gen][group-by] grouping by: {group_by}")
-        
+
         return group_by
-    
+
     def _build_order_by(
         self,
         select_columns: List[SQLColumn],
@@ -850,7 +1006,7 @@ class SQLGenerator:
     ) -> List[Tuple[str, str]]:
         """Build ORDER BY clause"""
         order_by = []
-        
+
         # For TOP_N or RANKING queries, order by first column (usually the metric) DESC
         if intent_type in ["top_n", "ranking"]:
             if select_columns:
@@ -860,18 +1016,22 @@ class SQLGenerator:
                     order_by.append((f"{col.alias or col.column}", "DESC"))
                 else:
                     order_by.append((f"{col.table}.{col.column}", "DESC"))
-                logger.debug(f"[sql-gen][order-by] ranking ordering: {order_by[0][0]} DESC")
-        
+                logger.debug(
+                    f"[sql-gen][order-by] ranking ordering: {order_by[0][0]} DESC"
+                )
+
         # For COMPARISON, order by dimension columns
         elif intent_type == "comparison":
             non_agg_cols = [col for col in select_columns if not col.aggregation]
             if non_agg_cols:
                 col = non_agg_cols[0]
                 order_by.append((f"{col.table}.{col.column}", "ASC"))
-                logger.debug(f"[sql-gen][order-by] comparison ordering: {col.table}.{col.column} ASC")
-        
+                logger.debug(
+                    f"[sql-gen][order-by] comparison ordering: {col.table}.{col.column} ASC"
+                )
+
         return order_by
-    
+
     def _determine_limit(self, intent_type: str) -> Optional[int]:
         """Determine LIMIT value based on intent"""
         # Default limits by intent type
@@ -880,13 +1040,13 @@ class SQLGenerator:
             "top_n": 10,
             "ranking": 10,  # Add ranking as well
         }
-        
+
         limit = limits.get(intent_type)
         if limit:
             logger.debug(f"[sql-gen][limit] applying limit: {limit}")
-        
+
         return limit
-    
+
     def _enrich_with_context_columns(
         self,
         *,
@@ -899,34 +1059,36 @@ class SQLGenerator:
         """
         Use LLM to identify and add implicit context columns that would make
         the query output more meaningful for human consumption.
-        
+
         For example, for a query like "top 5 clients by fees", this would add
         client_name and client_id alongside the fee aggregation.
-        
+
         Args:
             question: Original user question
             intent_type: Type of query intent
             select_columns: Currently selected columns
             entities: Discovered entities
             plan: Query plan with tables
-        
+
         Returns:
             Enhanced list of SQLColumn objects with context columns added
         """
         import json
         import time
-        
-        logger.info("[sql-gen][llm-enrich] analyzing query for implicit context columns")
-        
+
+        logger.info(
+            "[sql-gen][llm-enrich] analyzing query for implicit context columns"
+        )
+
         # Skip enrichment for simple list queries or if no LLM client
         if not self.llm_client or intent_type == "list":
             logger.debug("[sql-gen][llm-enrich] skipping (no LLM client or list query)")
             return select_columns
-        
+
         try:
             # Build context about current columns and available schema
             tables = plan.get("tables", [])
-            
+
             # Get available columns for each table from knowledge graph
             available_columns = {}
             for table in tables:
@@ -944,7 +1106,7 @@ class SQLGenerator:
                             }
                             cols.append(col_info)
                     available_columns[table] = cols
-            
+
             # Current columns summary
             current_cols = [
                 {
@@ -955,7 +1117,7 @@ class SQLGenerator:
                 }
                 for col in select_columns
             ]
-            
+
             # Build LLM prompt
             prompt = f"""You are a SQL expert helping to make query results more meaningful by identifying implicit context columns.
 
@@ -993,27 +1155,32 @@ Guidelines:
 - Keep the list minimal (max 5 additional columns)
 - If aggregating, ensure suggested columns are compatible with GROUP BY
 """
-            
+
             # Log the prompt payload
-            logger.info(f"[sql-gen][llm-enrich] prompt payload (chars={len(prompt)}):\n{prompt}")
-            
+            logger.info(
+                f"[sql-gen][llm-enrich] prompt payload (chars={len(prompt)}):\n{prompt}"
+            )
+
             t0 = time.perf_counter()
-            
+
             # Detect provider type and call appropriately
             provider_type = self._detect_llm_provider()
-            
+
             if provider_type == "openai":
                 response = self.llm_client.chat.completions.create(
                     model="gpt-4o-mini",  # Fast and cheap for this task
                     messages=[
-                        {"role": "system", "content": "You are a SQL expert assistant."},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": "You are a SQL expert assistant.",
+                        },
+                        {"role": "user", "content": prompt},
                     ],
                     response_format={"type": "json_object"},
                     temperature=0,
                 )
                 result_text = response.choices[0].message.content
-            
+
             elif provider_type == "anthropic":
                 response = self.llm_client.messages.create(
                     model="claude-3-haiku-20240307",  # Fast and cheap
@@ -1023,63 +1190,70 @@ Guidelines:
                 )
                 result_text = response.content[0].text
                 # Extract JSON from response
-                start = result_text.find('{')
-                end = result_text.rfind('}') + 1
+                start = result_text.find("{")
+                end = result_text.rfind("}") + 1
                 if start >= 0 and end > start:
                     result_text = result_text[start:end]
-            
+
             else:  # gemini
                 import google.generativeai as genai
+
                 gen_config = {
                     "temperature": 0,
                     "response_mime_type": "application/json",
                 }
                 response = self.llm_client.generate_content(
-                    prompt,
-                    generation_config=gen_config
+                    prompt, generation_config=gen_config
                 )
                 result_text = response.text
-            
+
             dt_ms = (time.perf_counter() - t0) * 1000.0
-            
+
             # Log the response
-            logger.info(f"[sql-gen][llm-enrich] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}")
-            
+            logger.info(
+                f"[sql-gen][llm-enrich] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}"
+            )
+
             # Parse response
             result = json.loads(result_text)
             add_columns = result.get("add_columns", [])
             reasoning = result.get("reasoning", "")
-            
+
             logger.info(
                 f"[sql-gen][llm-enrich] LLM suggested {len(add_columns)} context column(s); reasoning: {reasoning}"
             )
-            
+
             # Add suggested columns
             added_count = 0
             for col_suggestion in add_columns:
                 table = col_suggestion.get("table")
                 column = col_suggestion.get("column")
                 reason = col_suggestion.get("reason", "")
-                
+
                 # Validate column exists in schema
                 if table not in available_columns:
-                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - table not in plan")
+                    logger.debug(
+                        f"[sql-gen][llm-enrich] skipping {table}.{column} - table not in plan"
+                    )
                     continue
-                
+
                 col_exists = any(c["name"] == column for c in available_columns[table])
                 if not col_exists:
-                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - column not found")
+                    logger.debug(
+                        f"[sql-gen][llm-enrich] skipping {table}.{column} - column not found"
+                    )
                     continue
-                
+
                 # Check if column already selected
                 already_selected = any(
-                    c.table == table and c.column == column
-                    for c in select_columns
+                    c.table == table and c.column == column for c in select_columns
                 )
                 if already_selected:
-                    logger.debug(f"[sql-gen][llm-enrich] skipping {table}.{column} - already selected")
+                    logger.debug(
+                        f"[sql-gen][llm-enrich] skipping {table}.{column} - already selected"
+                    )
                     continue
-                
+
                 # Add the context column
                 new_col = SQLColumn(
                     table=table,
@@ -1088,31 +1262,33 @@ Guidelines:
                 )
                 select_columns.append(new_col)
                 added_count += 1
-                
+
                 logger.info(
                     f"[sql-gen][llm-enrich] added context column: {table}.{column} "
                     f"(reason: {reason})"
                 )
-            
+
             logger.info(
                 f"[sql-gen][llm-enrich] enrichment complete: added {added_count} column(s)"
             )
-            
+
             return select_columns
-        
+
         except Exception as e:
             logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using original columns")
             return select_columns
-    
+
     def _detect_llm_provider(self) -> str:
         """Detect which LLM provider is being used"""
-        if hasattr(self.llm_client, 'chat') and hasattr(self.llm_client.chat, 'completions'):
+        if hasattr(self.llm_client, "chat") and hasattr(
+            self.llm_client.chat, "completions"
+        ):
             return "openai"
-        elif hasattr(self.llm_client, 'messages'):
+        elif hasattr(self.llm_client, "messages"):
             return "anthropic"
         else:
             return "gemini"
-    
+
     def _build_explanation(
         self,
         *,
@@ -1124,11 +1300,11 @@ Guidelines:
     ) -> str:
         """Build human-readable explanation of the SQL query"""
         parts = []
-        
+
         parts.append(f"Query Intent: {intent_type}")
         parts.append(f"Question: '{question}'")
         parts.append("")
-        
+
         # Columns
         parts.append("Selected Columns:")
         for col in select_columns:
@@ -1139,7 +1315,7 @@ Guidelines:
                 desc += f" as '{col.alias}'"
             parts.append(desc)
         parts.append("")
-        
+
         # Joins
         if joins:
             parts.append("Joins:")
@@ -1147,12 +1323,12 @@ Guidelines:
                 parts.append(f"  - {join.join_type} JOIN {join.table}")
                 parts.append(f"    ON {join.on_condition}")
             parts.append("")
-        
+
         # Filters
         if where_conditions:
             parts.append("Filters:")
             for cond in where_conditions:
                 parts.append(f"  - {cond}")
             parts.append("")
-        
+
         return "\n".join(parts)

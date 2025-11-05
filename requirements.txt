@@ -72,3 +72,6 @@ langgraph>=0.1.0
 # 
 # For production:
 # reportsmith-data-ingestion>=1.0.0
+
+# Optional: Redis for persistent embedding cache
+redis>=5.0.0  # Optional - enables persistent caching of embeddings

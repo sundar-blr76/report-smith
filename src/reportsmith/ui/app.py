@@ -5,15 +5,20 @@ from typing import Any, Dict, Optional
 import requests
 import streamlit as st
 
+from reportsmith.ui.json_viewer import render_json_in_expander
+
 st.set_page_config(page_title="ReportSmith UI", page_icon="📊", layout="wide")
 
 # Sidebar configuration
 st.sidebar.title("Settings")
 api_base: str = st.sidebar.text_input("API Base URL", value="http://127.0.0.1:8000")
-timeout_s: int = st.sidebar.number_input("Timeout (seconds)", min_value=1, max_value=300, value=120)
+timeout_s: int = st.sidebar.number_input(
+    "Timeout (seconds)", min_value=1, max_value=300, value=120
+)
 
 # Optional: manual refresh
 st.sidebar.button("Refresh status")
+
 
 # Small helper to check an endpoint with a couple retries (warm-up)
 def _check_endpoint(path: str, tries: int = 3, timeout: int = 10):
@@ -26,6 +31,7 @@ def _check_endpoint(path: str, tries: int = 3, timeout: int = 10):
             last_err = e
             time.sleep(1)
     raise last_err if last_err else RuntimeError("Unknown error")
+
 
 # Health check
 health_status = "unknown"
@@ -55,7 +61,9 @@ st.sidebar.markdown(f"**API Health:** {health_status}")
 st.sidebar.markdown(f"**API Ready:** {ready_status}")
 
 st.title("ReportSmith – Interactive Query")
-st.caption("Enter a natural language question, send to the API, and view structured JSON output.")
+st.caption(
+    "Enter a natural language question, send to the API, and view structured JSON output."
+)
 
 
 # Sample queries designed to trigger KG navigation and LLM refinement
@@ -90,7 +98,12 @@ with st.expander("Sample queries (graph + LLM refinement)", expanded=True):
 
 with st.form("query_form"):
     default_q = st.session_state.get("rs_sample_query") or ""
-    question = st.text_area("Question", value=default_q, placeholder="Show monthly fees for all equity funds", height=100)
+    question = st.text_area(
+        "Question",
+        value=default_q,
+        placeholder="Show monthly fees for all equity funds",
+        height=100,
+    )
     app_id = st.text_input("App ID (optional)", value="")
     submitted = st.form_submit_button("Send Query")
 
@@ -107,7 +120,9 @@ if submitted:
         with st.spinner("Sending request to API..."):
             start = time.time()
             try:
-                resp = requests.post(f"{api_base}/query", json=payload, timeout=timeout_s)
+                resp = requests.post(
+                    f"{api_base}/query", json=payload, timeout=timeout_s
+                )
                 elapsed = time.time() - start
                 st.caption(f"Completed in {elapsed:.2f}s (status {resp.status_code})")
 
@@ -125,34 +140,41 @@ if submitted:
                     st.error(f"Request failed: {detail}")
                 else:
                     data = resp.json()
-                    
+
                     # Extract result data
                     result = data.get("data", {}) if isinstance(data, dict) else {}
-                    
+
                     # Display query results in a table if available
                     if result and result.get("result"):
                         result_data = result["result"]
                         execution = result_data.get("execution")
-                        
+
                         if execution:
                             if execution.get("error"):
-                                st.error(f"Query Execution Failed: {execution.get('error')}")
+                                st.error(
+                                    f"Query Execution Failed: {execution.get('error')}"
+                                )
                             else:
                                 st.success("Query executed successfully!")
-                                
+
                                 # Display results in a data table
                                 rows = execution.get("rows", [])
                                 columns = execution.get("columns", [])
                                 row_count = execution.get("row_count", 0)
                                 truncated = execution.get("truncated", False)
-                                
+
                                 if rows:
                                     import pandas as pd
+
                                     df = pd.DataFrame(rows, columns=columns)
-                                    
-                                    st.subheader(f"Query Results ({row_count} rows{' - truncated' if truncated else ''})")
-                                    st.dataframe(df, use_container_width=True, hide_index=True)
-                                    
+
+                                    st.subheader(
+                                        f"Query Results ({row_count} rows{' - truncated' if truncated else ''})"
+                                    )
+                                    st.dataframe(
+                                        df, use_container_width=True, hide_index=True
+                                    )
+
                                     # Download as CSV
                                     csv = df.to_csv(index=False)
                                     st.download_button(
@@ -162,8 +184,10 @@ if submitted:
                                         mime="text/csv",
                                     )
                                 else:
-                                    st.info("Query executed successfully but returned no rows.")
-                        
+                                    st.info(
+                                        "Query executed successfully but returned no rows."
+                                    )
+
                         # Show SQL query
                         sql_data = result_data.get("sql")
                         if sql_data and sql_data.get("sql"):
@@ -172,33 +196,72 @@ if submitted:
                                 if sql_data.get("explanation"):
                                     st.caption("Explanation:")
                                     st.text(sql_data.get("explanation"))
-                    
+
                     # Convenience views
                     if result:
-                        with st.expander("Intent", expanded=False):
-                            st.json(result.get("intent", {}))
-                        with st.expander("Entities", expanded=False):
-                            st.json(result.get("entities", []))
-                        with st.expander("Tables", expanded=False):
-                            st.json(result.get("tables", []))
-                        with st.expander("Plan", expanded=False):
-                            st.json(result.get("plan", {}))
+                        render_json_in_expander(
+                            result.get("intent", {}),
+                            "Intent",
+                            key="intent_json",
+                            expanded=False,
+                            height=250,
+                        )
+                        render_json_in_expander(
+                            result.get("entities", []),
+                            "Entities",
+                            key="entities_json",
+                            expanded=False,
+                            height=300,
+                        )
+                        render_json_in_expander(
+                            result.get("tables", []),
+                            "Tables",
+                            key="tables_json",
+                            expanded=False,
+                            height=200,
+                        )
+                        render_json_in_expander(
+                            result.get("plan", {}),
+                            "Plan",
+                            key="plan_json",
+                            expanded=False,
+                            height=300,
+                        )
                         with st.expander("Timings", expanded=False):
                             timings = result.get("timings_ms", {})
                             if timings:
                                 import pandas as pd
-                                df_timings = pd.DataFrame([
-                                    {"Stage": k.replace("_ms", ""), "Time (ms)": v}
-                                    for k, v in timings.items()
-                                ])
+
+                                df_timings = pd.DataFrame(
+                                    [
+                                        {"Stage": k.replace("_ms", ""), "Time (ms)": v}
+                                        for k, v in timings.items()
+                                    ]
+                                )
                                 st.dataframe(df_timings, hide_index=True)
-                        with st.expander("LLM Summaries", expanded=False):
-                            st.json(result.get("llm_summaries", []))
-                        with st.expander("Full Response JSON", expanded=False):
-                            st.json(data)
+                        render_json_in_expander(
+                            result.get("llm_summaries", []),
+                            "LLM Summaries",
+                            key="llm_summaries_json",
+                            expanded=False,
+                            height=300,
+                        )
+                        render_json_in_expander(
+                            data,
+                            "Full Response JSON",
+                            key="full_response_json",
+                            expanded=False,
+                            height=500,
+                        )
                         if result.get("errors"):
                             st.error("Errors detected")
-                            st.json(result.get("errors"))
+                            render_json_in_expander(
+                                result.get("errors"),
+                                "Errors",
+                                key="errors_json",
+                                expanded=True,
+                                height=300,
+                            )
             except Exception as e:
                 st.error(f"Error calling API: {e}")
 
@@ -214,17 +277,33 @@ if st.button("Stream Query"):
         ph = st.empty()
         log = []
         try:
-            with requests.get(f"{api_base}/query/stream", params={"question": stream_q}, stream=True, timeout=timeout_s) as r:
+            with requests.get(
+                f"{api_base}/query/stream",
+                params={"question": stream_q},
+                stream=True,
+                timeout=timeout_s,
+            ) as r:
                 r.raise_for_status()
                 for line in r.iter_lines(decode_unicode=True):
                     if not line:
                         continue
                     if line.startswith("data: "):
                         import json as _json
+
                         obj = _json.loads(line[6:])
-                        evt = obj.get("event"); payload = obj.get("payload")
+                        evt = obj.get("event")
+                        payload = obj.get("payload")
                         log.append({"event": evt, "payload": payload})
-                        ph.json(log)
+                        # Update with JSON viewer
+                        with ph.container():
+                            st.subheader("Stream Events")
+                            from reportsmith.ui.json_viewer import render_json_viewer
+
+                            render_json_viewer(
+                                log,
+                                key="stream_json",
+                                height=400,
+                            )
         except Exception as e:
             st.error(f"Streaming error: {e}")
 
