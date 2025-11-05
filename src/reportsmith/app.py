@@ -62,7 +62,7 @@ class ReportSmithApp:
             )
             self.logger.info("Dimension loader initialized")
             
-            # Load all schema metadata and dimension values
+            # Load all schema metadata and domain values
             self._load_all_embeddings()
             
             self.logger.info("=" * 60)
@@ -74,8 +74,8 @@ class ReportSmithApp:
             raise
     
     def _load_all_embeddings(self) -> None:
-        """Load schema metadata and dimension values for all applications."""
-        self.logger.info("Loading schema metadata and dimension values...")
+        """Load schema metadata and domain values for all applications."""
+        self.logger.info("Loading schema metadata and domain values...")
         
         applications = self.config_manager.load_all_applications()
         
@@ -106,7 +106,7 @@ class ReportSmithApp:
                     }
                     self.embedding_manager.load_business_context(app.id, context_config)
                 
-                # Identify and load dimension values
+                # Identify and load domain values
                 self._load_dimensions_for_database(app.id, db.name, schema_config, db.dimensions or {})
         
         # Log final stats
@@ -116,7 +116,7 @@ class ReportSmithApp:
     def _load_dimensions_for_database(
         self, app_id: str, db_name: str, schema_config: dict, dimensions_config: dict
     ) -> None:
-        """Load dimension values for a specific database."""
+        """Load domain values for a specific database."""
         # Create schema config with dimensions
         enhanced_schema_config = {**schema_config, "dimensions": dimensions_config}
         
@@ -145,14 +145,14 @@ class ReportSmithApp:
             for dim in dimensions:
                 self.logger.info(f"    Loading dimension: {dim.table}.{dim.column}")
                 
-                values = self.dimension_loader.load_dimension_values(
+                values = self.dimension_loader.load_domain_values(
                     engine=engine,
                     dimension_config=dim
                 )
                 
                 if values:
                     # Store in embedding manager
-                    self.embedding_manager.load_dimension_values(
+                    self.embedding_manager.load_domain_values(
                         app_id=app_id,
                         table=dim.table,
                         column=dim.column,

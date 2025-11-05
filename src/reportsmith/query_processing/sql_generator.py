@@ -11,7 +11,7 @@ import re
 
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
-from reportsmith.query_processing.extraction_enhancer import ExtractionEnhancer
+from reportsmith.query_processing.sql_validator import SQLValidator
 
 logger = get_logger(__name__)
 
@@ -45,10 +45,16 @@ class SQLColumn:
     column: str
     alias: Optional[str] = None
     aggregation: Optional[str] = None
+    transformation: Optional[str] = (
+        None  # SQL expression for transformation (e.g., "EXTRACT(MONTH FROM table.column)")
+    )
 
     def to_sql(self) -> str:
         """Convert to SQL column expression"""
-        if self.aggregation:
+        # If transformation is specified, use it instead of table.column
+        if self.transformation:
+            base_expr = self.transformation
+        elif self.aggregation:
             col_ref = f"{self.table}.{self.column}"
             agg_expr = f"{self.aggregation.upper()}({col_ref})"
             return f"{agg_expr} AS {self.alias or self.column}"
@@ -57,6 +63,13 @@ class SQLColumn:
             return (
                 f"{col_ref} AS {self.alias or self.column}" if self.alias else col_ref
             )
+
+        # For transformations, apply aggregation if specified
+        if self.aggregation:
+            agg_expr = f"{self.aggregation.upper()}({base_expr})"
+            return f"{agg_expr} AS {self.alias or self.column}"
+        else:
+            return f"{base_expr} AS {self.alias or self.column}"
 
 
 @dataclass
@@ -136,7 +149,7 @@ class SQLGenerator:
     Responsibilities:
     - Build SELECT clause from entities (columns, aggregations)
     - Construct JOIN paths using knowledge graph relationships
-    - Generate WHERE conditions from filters and dimension values
+    - Generate WHERE conditions from filters and domain values
     - Add GROUP BY, ORDER BY, LIMIT based on intent
     - Enrich with implicit context columns using LLM
     """
@@ -149,16 +162,16 @@ class SQLGenerator:
     ):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
-        
-        # Initialize extraction enhancer if LLM client available
-        self.enhancer = None
+
+        # Initialize SQL validator if LLM client available
+        self.validator = None
         if llm_client and enable_extraction_enhancement:
-            self.enhancer = ExtractionEnhancer(
+            self.validator = SQLValidator(
                 llm_client=llm_client,
-                max_iterations=3,
+                max_iterations=10,
                 sample_size=10,
             )
-            logger.info("[sql-gen] extraction enhancer initialized")
+            logger.info("[sql-gen] SQL validator initialized")
 
     def generate(
         self,
@@ -203,6 +216,14 @@ class SQLGenerator:
                     plan=plan,
                 )
 
+                # Refine existing columns based on user query (e.g., timestamp -> month)
+                select_columns = self._refine_column_transformations(
+                    question=question,
+                    intent_type=intent_type,
+                    select_columns=select_columns,
+                    entities=entities,
+                )
+
             from_table, joins = self._build_from_and_joins(plan)
             where_conditions = self._build_where_conditions(entities, filters)
             group_by = self._build_group_by(select_columns, intent_type)
@@ -234,20 +255,10 @@ class SQLGenerator:
                 joins=joins,
                 where_conditions=where_conditions,
             )
-            
-            # Generate extraction summary using LLM (FR-1)
-            extraction_summary = None
-            if self.enhancer:
-                extraction_summary = self.enhancer.generate_summary(
-                    question=question,
-                    sql=sql_text,
-                    entities=entities,
-                    filters=filters,
-                )
-            
+
             # Determine column ordering using LLM (FR-2)
             column_ordering = None
-            if self.enhancer:
+            if self.validator:
                 column_metadata = [
                     {
                         "table": col.table,
@@ -257,10 +268,20 @@ class SQLGenerator:
                     }
                     for col in select_columns
                 ]
-                column_ordering = self.enhancer.determine_column_order(
+                column_ordering = self.validator.determine_column_order(
                     question=question,
                     columns=column_metadata,
                     intent_type=intent_type,
+                )
+
+            # Generate extraction summary using LLM (FR-1)
+            extraction_summary = None
+            if self.validator:
+                extraction_summary = self.validator.generate_summary(
+                    question=question,
+                    sql=sql_text,
+                    entities=entities,
+                    filters=filters,
                 )
 
             return {
@@ -311,7 +332,7 @@ class SQLGenerator:
         table_entities = [e for e in entities if e.get("entity_type") == "table"]
         column_entities = [e for e in entities if e.get("entity_type") == "column"]
         dimension_entities = [
-            e for e in entities if e.get("entity_type") == "dimension_value"
+            e for e in entities if e.get("entity_type") == "domain_value"
         ]
 
         # Determine if we need aggregation based on intent type and presence of aggregations
@@ -658,6 +679,8 @@ class SQLGenerator:
     ) -> List[str]:
         """Build WHERE clause conditions"""
         conditions = []
+        
+        logger.info(f"[sql-gen][where] Building WHERE conditions from {len(filters)} filter(s)")
 
         # Parse intent filters first to detect negations
         # Format examples: "fund_type != 'equity'", "risk_rating = 'High'", "amount > 1000"
@@ -667,6 +690,12 @@ class SQLGenerator:
         for filter_str in filters:
             try:
                 filter_str = filter_str.strip()
+                
+                # Log each filter being processed
+                is_temporal = any(keyword in filter_str.upper() for keyword in 
+                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'CAST', 'DATE_TRUNC'])
+                filter_type = "TEMPORAL" if is_temporal else "STANDARD"
+                logger.debug(f"[sql-gen][where] Processing [{filter_type}] filter: {filter_str}")
 
                 # Parse filter to detect column, operator, and value
                 # Patterns: "column != value", "column = value", "table.column op value"
@@ -711,9 +740,9 @@ class SQLGenerator:
                     f"[sql-gen][where] failed to parse filter '{filter_str}': {e}"
                 )
 
-        # Process dimension value entities
+        # Process domain value entities
         dimension_entities = [
-            e for e in entities if e.get("entity_type") == "dimension_value"
+            e for e in entities if e.get("entity_type") == "domain_value"
         ]
 
         # Group dimension entities by table.column to handle multiple values (OR/IN)
@@ -732,7 +761,7 @@ class SQLGenerator:
             if not column:
                 column = md.get("column")
 
-            # Get the actual dimension value
+            # Get the actual domain value
             value = md.get("value") or ent.get("text")
 
             if table and column and value:
@@ -789,6 +818,9 @@ class SQLGenerator:
 
         # Add any remaining explicit filters not covered by dimension entities
         processed_columns = {key.split(".")[-1] for key in dim_groups.keys()}
+        
+        # Track filters by column to detect contradictions
+        filters_by_column: Dict[str, List[Tuple[str, str, str]]] = {}  # col -> [(operator, value, filter_str)]
 
         for filter_str in filters:
             try:
@@ -804,6 +836,25 @@ class SQLGenerator:
                 if not covered:
                     # Parse and normalize the filter
                     import re
+                    
+                    # Check if this is a complex SQL expression (like EXTRACT, CAST, etc.)
+                    # that should be passed through as-is
+                    if any(keyword in filter_str.upper() for keyword in ['EXTRACT(', 'CAST(', 'DATE_TRUNC(', 'TO_DATE(', 'TO_CHAR(']):
+                        # This is a SQL function expression - pass through as-is
+                        logger.info(
+                            f"[predicate-resolution][sql-gen][where] ✓ Detected SQL expression filter - "
+                            f"passing through as-is: {filter_str}"
+                        )
+                        conditions.append(filter_str)
+                        
+                        # Extract table references for tracking
+                        table_refs = re.findall(r'(\w+)\.\w+', filter_str)
+                        if table_refs:
+                            logger.debug(
+                                f"[predicate-resolution][sql-gen][where] Filter references table(s): "
+                                f"{', '.join(set(table_refs))}"
+                            )
+                        continue
 
                     # Use word boundaries (\b) to avoid matching "in" within words like "investors"
                     # Order matters: match longer operators first (NOT IN, NOT LIKE before IN, LIKE)
@@ -814,10 +865,13 @@ class SQLGenerator:
                         col_ref = match.group(1).strip()
                         operator = match.group(2).strip()
                         value_part = match.group(3).strip()
+                        
+                        # Extract column name (without table prefix)
+                        col_name = col_ref.split(".")[-1] if "." in col_ref else col_ref
 
                         # Check if this filter's value is already covered by dimension entities
-                        # E.g., "fund_type = 'conservative'" when "conservative" is a dimension_value
-                        # for risk_rating
+                        # E.g., "fund_type = 'conservative'" when "conservative" is a domain_value
+                        # for fund_type
                         skip_filter = False
                         value_cleaned = value_part.strip("'\"")
 
@@ -843,30 +897,12 @@ class SQLGenerator:
 
                         if skip_filter:
                             continue
+                        
+                        # Track this filter by column to detect contradictions
+                        if col_name not in filters_by_column:
+                            filters_by_column[col_name] = []
+                        filters_by_column[col_name].append((operator, value_cleaned, filter_str))
 
-                        # Normalize column reference (map entity text to actual table.column)
-                        normalized_col = self._normalize_column_reference(
-                            col_ref, entities
-                        )
-
-                        # Normalize value (handle 100M, 1K, etc.)
-                        normalized_value = self._normalize_filter_value(value_part)
-
-                        # Build normalized filter
-                        normalized_filter = (
-                            f"{normalized_col} {operator} {normalized_value}"
-                        )
-                        conditions.append(normalized_filter)
-
-                        if normalized_filter != filter_str:
-                            logger.info(
-                                f"[sql-gen][where] normalized filter: "
-                                f"'{filter_str}' → '{normalized_filter}'"
-                            )
-                        else:
-                            logger.debug(
-                                f"[sql-gen][where] added explicit filter: {filter_str}"
-                            )
                     else:
                         # Could not parse - check if it's already covered by dimension entities
                         # before skipping
@@ -874,7 +910,7 @@ class SQLGenerator:
                         is_covered_by_dimension = False
 
                         for ent in entities:
-                            if ent.get("entity_type") == "dimension_value":
+                            if ent.get("entity_type") == "domain_value":
                                 # Check if dimension entity text is in this filter
                                 ent_text = (ent.get("text") or "").lower()
                                 if ent_text and ent_text in filter_terms:
@@ -898,6 +934,72 @@ class SQLGenerator:
                 logger.warning(
                     f"[sql-gen][where] failed to process filter '{filter_str}': {e}"
                 )
+        
+        # Now process the grouped filters to detect and fix contradictions
+        for col_name, col_filters in filters_by_column.items():
+            # Check for contradictory equality filters (e.g., col = 'A' AND col = 'B')
+            equality_filters = [(op, val, fs) for op, val, fs in col_filters if op == "="]
+            
+            if len(equality_filters) > 1:
+                # Multiple equality filters on same column - this is contradictory!
+                # Convert to IN clause instead
+                values = [val for op, val, fs in equality_filters]
+                unique_values = list(set(values))  # Remove duplicates
+                
+                # Find the best column reference from filters
+                # Prefer table-qualified reference if available
+                col_ref = col_name
+                for op, val, fs in equality_filters:
+                    match = re.match(r"([\w.]+)\s*=", fs)
+                    if match and "." in match.group(1):
+                        col_ref = match.group(1)
+                        break
+                
+                # Create IN clause
+                values_str = ", ".join(f"'{v}'" for v in unique_values)
+                merged_condition = f"{col_ref} IN ({values_str})"
+                conditions.append(merged_condition)
+                
+                logger.warning(
+                    f"[sql-gen][where] detected contradictory equality filters for {col_name}: "
+                    f"{[fs for op, val, fs in equality_filters]}. "
+                    f"Merged into: {merged_condition}"
+                )
+            else:
+                # No contradiction - add filters as-is
+                for operator, value, filter_str in col_filters:
+                    # Normalize column reference (map entity text to actual table.column)
+                    normalized_col = None
+                    for op, val, fs in col_filters:
+                        match = re.match(r"([\w.]+)\s*" + re.escape(operator), fs)
+                        if match:
+                            normalized_col = self._normalize_column_reference(
+                                match.group(1), entities
+                            )
+                            break
+                    
+                    if not normalized_col:
+                        # Fallback to column name
+                        normalized_col = self._normalize_column_reference(col_name, entities)
+                    
+                    # Normalize value (handle 100M, 1K, etc.)
+                    normalized_value = self._normalize_filter_value(f"'{value}'")
+
+                    # Build normalized filter
+                    normalized_filter = (
+                        f"{normalized_col} {operator} {normalized_value}"
+                    )
+                    conditions.append(normalized_filter)
+
+                    if normalized_filter != filter_str:
+                        logger.info(
+                            f"[sql-gen][where] normalized filter: "
+                            f"'{filter_str}' → '{normalized_filter}'"
+                        )
+                    else:
+                        logger.debug(
+                            f"[sql-gen][where] added explicit filter: {filter_str}"
+                        )
 
         # Apply auto-filters for columns with auto_filter_on_default property
         # This applies default filters unless user explicitly mentions inactive/deactivated records
@@ -909,6 +1011,17 @@ class SQLGenerator:
         # OPTIMIZATION: Merge multiple equality filters for same column into IN clause
         # This handles cases like: "col = 'A' AND col = 'B'" → "col IN ('A', 'B')"
         conditions = self._merge_equality_filters(conditions)
+        
+        # Log final WHERE conditions summary
+        logger.info(f"[sql-gen][where] Built {len(conditions)} WHERE condition(s)")
+        temporal_count = sum(1 for c in conditions if any(kw in c.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR']))
+        if temporal_count > 0:
+            logger.info(f"[predicate-resolution][sql-gen][where] ✓ {temporal_count} temporal condition(s) included")
+        
+        for i, cond in enumerate(conditions, 1):
+            is_temporal = any(kw in cond.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR'])
+            cond_type = "[TEMPORAL]" if is_temporal else "[STANDARD]"
+            logger.debug(f"[sql-gen][where] {cond_type} Condition {i}: {cond}")
 
         return conditions
 
@@ -1054,7 +1167,11 @@ class SQLGenerator:
         group_by = []
         for col in select_columns:
             if not col.aggregation:
-                group_by.append(f"{col.table}.{col.column}")
+                # Use transformation if present, otherwise use table.column
+                if col.transformation:
+                    group_by.append(col.transformation)
+                else:
+                    group_by.append(f"{col.table}.{col.column}")
 
         if group_by:
             logger.debug(f"[sql-gen][group-by] grouping by: {group_by}")
@@ -1214,7 +1331,7 @@ Guidelines:
 - Only suggest columns that truly add value
 - Don't suggest columns already selected
 - Prioritize human-readable identifiers (names over IDs when both exist)
-- Keep the list minimal (max 5 additional columns)
+- Keep the list focused (max 10 additional columns)
 - If aggregating, ensure suggested columns are compatible with GROUP BY
 """
 
@@ -1339,6 +1456,220 @@ Guidelines:
         except Exception as e:
             logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using original columns")
             return select_columns
+
+    def _refine_column_transformations(
+        self,
+        question: str,
+        intent_type: str,
+        select_columns: List[SQLColumn],
+        entities: List[Dict[str, Any]],
+    ) -> List[SQLColumn]:
+        """
+        Refine existing column selections based on user query.
+
+        For example:
+        - If user asks for "by month" but we selected timestamp, transform to MONTH(timestamp)
+        - If user asks for "year" but we selected date, transform to YEAR(date)
+        - If user asks for "day of week" but we selected date, transform to DAYOFWEEK(date)
+
+        Args:
+            question: Original user question
+            intent_type: Type of query intent
+            select_columns: Currently selected columns
+            entities: Discovered entities
+
+        Returns:
+            Refined list of SQLColumn objects with transformations applied
+        """
+        import json
+        import time
+
+        logger.info(
+            "[sql-gen][llm-refine] analyzing columns for potential transformations"
+        )
+
+        # Skip if no LLM client
+        if not self.llm_client:
+            logger.debug("[sql-gen][llm-refine] skipping (no LLM client)")
+            return select_columns
+
+        try:
+            # Build context about current columns
+            current_cols = [
+                {
+                    "table": col.table,
+                    "column": col.column,
+                    "aggregation": col.aggregation,
+                    "alias": col.alias,
+                    "data_type": self._get_column_data_type(col.table, col.column),
+                }
+                for col in select_columns
+            ]
+
+            prompt = f"""You are a SQL expert helping to refine column selections based on user intent.
+
+User Question: "{question}"
+Query Intent: {intent_type}
+
+Currently Selected Columns:
+{json.dumps(current_cols, indent=2)}
+
+Task: Identify if any columns should be transformed to better match the user's request.
+
+Examples of transformations:
+- User asks "by month" but timestamp selected → EXTRACT(MONTH FROM timestamp) AS month
+- User asks "by year" but date selected → EXTRACT(YEAR FROM date) AS year
+- User asks "day name" but date selected → TO_CHAR(date, 'Day') AS day_name
+- User asks "quarter" but date selected → EXTRACT(QUARTER FROM date) AS quarter
+- User asks "hour" but timestamp selected → EXTRACT(HOUR FROM timestamp) AS hour
+
+Return a JSON object with:
+{{
+  "transform_columns": [
+    {{
+      "table": "table_name",
+      "column": "original_column_name",
+      "transformation": "SQL expression (e.g., EXTRACT(MONTH FROM column_name))",
+      "new_alias": "suggested alias for transformed column",
+      "reason": "why this transformation matches user intent"
+    }}
+  ],
+  "reasoning": "overall explanation"
+}}
+
+Guidelines:
+- Only suggest transformations that match user's explicit or implicit intent
+- Use standard SQL functions (EXTRACT, TO_CHAR, DATE_TRUNC, etc.)
+- Preserve aggregations if they exist
+- Return empty list if no transformations needed
+- Focus on date/time transformations based on temporal granularity in question
+- Can suggest up to 10 transformations if needed
+"""
+
+            # Log the prompt payload
+            logger.info(
+                f"[sql-gen][llm-refine] prompt payload (chars={len(prompt)}):\n{prompt}"
+            )
+
+            t0 = time.perf_counter()
+
+            # Detect provider type and call appropriately
+            provider_type = self._detect_llm_provider()
+
+            if provider_type == "openai":
+                response = self.llm_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a SQL expert assistant.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                )
+                result_text = response.choices[0].message.content
+
+            elif provider_type == "anthropic":
+                response = self.llm_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                )
+                result_text = response.content[0].text
+                # Extract JSON
+                start = result_text.find("{")
+                end = result_text.rfind("}") + 1
+                if start >= 0 and end > start:
+                    result_text = result_text[start:end]
+
+            else:  # gemini
+                import google.generativeai as genai
+
+                gen_config = {
+                    "temperature": 0,
+                    "response_mime_type": "application/json",
+                }
+                response = self.llm_client.generate_content(
+                    prompt, generation_config=gen_config
+                )
+                result_text = response.text
+
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+
+            # Log the response
+            logger.info(
+                f"[sql-gen][llm-refine] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}"
+            )
+
+            # Parse response
+            result = json.loads(result_text)
+            transform_columns = result.get("transform_columns", [])
+            reasoning = result.get("reasoning", "")
+
+            if not transform_columns:
+                logger.info("[sql-gen][llm-refine] no column transformations suggested")
+                return select_columns
+
+            logger.info(
+                f"[sql-gen][llm-refine] LLM suggested {len(transform_columns)} transformation(s); reasoning: {reasoning}"
+            )
+
+            # Apply transformations
+            transformed_count = 0
+            new_columns = []
+
+            for col in select_columns:
+                # Check if this column should be transformed
+                transform = None
+                for t in transform_columns:
+                    if t.get("table") == col.table and t.get("column") == col.column:
+                        transform = t
+                        break
+
+                if transform:
+                    # Apply transformation
+                    transformation = transform.get("transformation")
+                    new_alias = transform.get("new_alias", col.alias)
+                    reason = transform.get("reason", "")
+
+                    logger.info(
+                        f"[sql-gen][llm-refine] transforming {col.table}.{col.column} → {transformation} AS {new_alias} (reason: {reason})"
+                    )
+
+                    # Create new column with transformation
+                    transformed_col = SQLColumn(
+                        table=col.table,
+                        column=col.column,
+                        alias=new_alias,
+                        aggregation=col.aggregation,  # Preserve aggregation
+                        transformation=transformation,  # Add transformation
+                    )
+                    new_columns.append(transformed_col)
+                    transformed_count += 1
+                else:
+                    # Keep original column
+                    new_columns.append(col)
+
+            logger.info(
+                f"[sql-gen][llm-refine] refinement complete: transformed {transformed_count} column(s)"
+            )
+
+            return new_columns
+
+        except Exception as e:
+            logger.warning(f"[sql-gen][llm-refine] failed: {e}; using original columns")
+            return select_columns
+
+    def _get_column_data_type(self, table: str, column: str) -> str:
+        """Get data type for a column from knowledge graph"""
+        node_name = f"{table}.{column}"
+        node = self.kg.nodes.get(node_name)
+        if node and node.metadata:
+            return node.metadata.get("data_type", "unknown")
+        return "unknown"
 
     def _detect_llm_provider(self) -> str:
         """Detect which LLM provider is being used"""

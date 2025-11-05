@@ -1,7 +1,7 @@
 """
 Dimension Loader for ReportSmith
 
-Loads dimension values from actual database tables to create embeddings.
+Loads domain values from actual database tables to create embeddings.
 Handles lazy loading and caching of dimension data.
 """
 
@@ -24,14 +24,14 @@ class DimensionConfig:
     
     # Dictionary table support for enhanced descriptions
     dictionary_table: Optional[str] = None  # Table containing value descriptions
-    dictionary_value_column: Optional[str] = None  # Column with the dimension value
+    dictionary_value_column: Optional[str] = None  # Column with the domain value
     dictionary_description_column: Optional[str] = None  # Column with description/label
     dictionary_predicates: Optional[List[str]] = None  # Additional WHERE conditions for dictionary table
 
 
 class DimensionLoader:
     """
-    Loads ALL dimension values from database tables.
+    Loads ALL domain values from database tables.
     
     Dimensions are now explicitly configured in YAML schema files.
     Supports optional dictionary tables for enhanced descriptions.
@@ -49,7 +49,7 @@ class DimensionLoader:
         self.connection_manager = connection_manager
         self.embedding_manager = embedding_manager
     
-    def load_dimension_values(
+    def load_domain_values(
         self,
         engine: sa.engine.Engine,
         dimension_config: DimensionConfig
@@ -67,7 +67,7 @@ class DimensionLoader:
         cache_key = f"{dimension_config.table}.{dimension_config.column}"
         
         try:
-            # Build base query for dimension values
+            # Build base query for domain values
             base_query = f"""
                 SELECT 
                     {dimension_config.column} as value,
@@ -84,12 +84,12 @@ class DimensionLoader:
                 dict_where_clause = "WHERE " + " AND ".join(dimension_config.dictionary_predicates) if dimension_config.dictionary_predicates else ""
                 
                 query_text = f"""
-                    WITH dimension_values AS ({base_query})
+                    WITH domain_values AS ({base_query})
                     SELECT 
                         dv.value,
                         dv.count,
                         COALESCE(dt.{dimension_config.dictionary_description_column}, dv.value) as description
-                    FROM dimension_values dv
+                    FROM domain_values dv
                     LEFT JOIN (
                         SELECT * FROM {dimension_config.dictionary_table} {dict_where_clause}
                     ) dt ON dv.value = dt.{dimension_config.dictionary_value_column}
@@ -118,13 +118,13 @@ class DimensionLoader:
             
             self._loaded_dimensions[cache_key] = True
             logger.info(
-                f"Loaded {len(values)} dimension values from {cache_key}"
+                f"Loaded {len(values)} domain values from {cache_key}"
             )
             
             return values
             
         except Exception as e:
-            logger.error(f"Failed to load dimension values from {cache_key}: {e}")
+            logger.error(f"Failed to load domain values from {cache_key}: {e}")
             return []
     
     def identify_dimension_columns(

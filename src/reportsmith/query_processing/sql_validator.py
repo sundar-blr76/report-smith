@@ -1,7 +1,7 @@
 """
-LLM-driven Extraction Enhancer for ReportSmith.
+LLM-driven SQL Validator for ReportSmith.
 
-This module implements enhanced extraction features including:
+This module implements SQL validation and refinement features including:
 - Natural language summary generation (FR-1)
 - LLM-driven column ordering (FR-2)
 - Sample-driven predicate coercion (FR-3)
@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from reportsmith.logger import get_logger
+from reportsmith.utils.llm_tracker import LLMTracker
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,7 @@ class ExtractionSummary:
     assumptions: List[str] = field(default_factory=list)
 
 
-class ExtractionEnhancer:
+class SQLValidator:
     """
     Enhances SQL extraction with LLM-driven features.
     
@@ -78,7 +79,7 @@ class ExtractionEnhancer:
     def __init__(
         self,
         llm_client=None,
-        max_iterations: int = 3,
+        max_iterations: int = 10,
         sample_size: int = 10,
         enable_validation: bool = True,
         enable_summary: bool = True,
@@ -86,13 +87,14 @@ class ExtractionEnhancer:
         enable_coercion: bool = True,
         rate_limit_rpm: int = 60,  # Requests per minute
         cost_cap_tokens: int = 100000,  # Max tokens per request
+        llm_tracker: Optional[LLMTracker] = None,  # For cost tracking
     ):
         """
-        Initialize extraction enhancer.
+        Initialize SQL validator.
         
         Args:
             llm_client: LLM client (OpenAI, Anthropic, or Gemini)
-            max_iterations: Maximum validation iterations (default: 3)
+            max_iterations: Maximum validation iterations (default: 10)
             sample_size: Sample rows for predicate coercion (default: 10)
             enable_validation: Enable iterative validation (FR-4)
             enable_summary: Enable summary generation (FR-1)
@@ -100,6 +102,7 @@ class ExtractionEnhancer:
             enable_coercion: Enable predicate coercion (FR-3)
             rate_limit_rpm: Rate limit in requests per minute (default: 60)
             cost_cap_tokens: Cost cap in total tokens per request (default: 100k)
+            llm_tracker: Optional LLM tracker for cost estimation
         """
         self.llm_client = llm_client
         self.max_iterations = max_iterations
@@ -110,6 +113,7 @@ class ExtractionEnhancer:
         self.enable_coercion = enable_coercion
         self.rate_limit_rpm = rate_limit_rpm
         self.cost_cap_tokens = cost_cap_tokens
+        self.llm_tracker = llm_tracker
         
         # Rate limiting state
         self._request_timestamps = []
@@ -118,7 +122,7 @@ class ExtractionEnhancer:
         # Detect LLM provider type
         self.provider = self._detect_provider()
         logger.info(
-            f"[extraction-enhancer] initialized with provider={self.provider}, "
+            f"[sql-validator] initialized with provider={self.provider}, "
             f"max_iterations={max_iterations}, sample_size={sample_size}, "
             f"rate_limit={rate_limit_rpm} rpm, cost_cap={cost_cap_tokens} tokens"
         )
@@ -140,7 +144,7 @@ class ExtractionEnhancer:
         
         if len(self._request_timestamps) >= self.rate_limit_rpm:
             logger.warning(
-                f"[extraction-enhancer] rate limit exceeded: "
+                f"[sql-validator] rate limit exceeded: "
                 f"{len(self._request_timestamps)}/{self.rate_limit_rpm} requests in last minute"
             )
             return False
@@ -161,7 +165,7 @@ class ExtractionEnhancer:
         
         if estimated_total > self.cost_cap_tokens:
             logger.warning(
-                f"[extraction-enhancer] cost cap exceeded: "
+                f"[sql-validator] cost cap exceeded: "
                 f"{estimated_total}/{self.cost_cap_tokens} tokens"
             )
             return False
@@ -172,7 +176,7 @@ class ExtractionEnhancer:
         """Reset usage tracking for new request."""
         self._request_timestamps = []
         self._total_tokens_used = 0
-        logger.debug("[extraction-enhancer] usage tracking reset")
+        logger.debug("[sql-validator] usage tracking reset")
     
     def _detect_provider(self) -> str:
         """Detect LLM provider type."""
@@ -216,6 +220,10 @@ class ExtractionEnhancer:
         
         # Record request timestamp for rate limiting
         self._request_timestamps.append(time.time())
+        
+        # Log LLM call request payload (FULL prompt for debugging)
+        logger.info(f"[sql-validator:llm] Sending refinement request to {self.provider}")
+        logger.info(f"[sql-validator:llm:request] Full Prompt ({len(prompt)} chars):\n{prompt}")
         
         try:
             if self.provider == "openai":
@@ -291,15 +299,33 @@ class ExtractionEnhancer:
                 "total_tokens_used": self._total_tokens_used,
             }
             
-            logger.debug(
-                f"[extraction-enhancer] LLM call: {tokens['total']} tokens, "
-                f"total used: {self._total_tokens_used}/{self.cost_cap_tokens}"
+            # Track LLM call for cost estimation
+            if self.llm_tracker:
+                self.llm_tracker.track_call(
+                    stage="sql_validation",
+                    provider=self.provider,
+                    model=model,
+                    prompt_tokens=tokens["prompt"],
+                    completion_tokens=tokens["completion"],
+                    latency_ms=dt_ms,
+                    prompt_chars=len(prompt),
+                    response_chars=len(result_text),
+                    request_payload=prompt,  # Store full prompt for debugging
+                    response_payload=result_text,  # Store full response for debugging
+                )
+            
+            # Log response payload (FULL response for debugging)
+            logger.info(
+                f"[sql-validator:llm:response] tokens={tokens['total']} "
+                f"(prompt={tokens['prompt']}, completion={tokens['completion']}) "
+                f"latency={dt_ms:.0f}ms total_used={self._total_tokens_used}/{self.cost_cap_tokens}"
             )
+            logger.info(f"[sql-validator:llm:response] Full Response ({len(result_text)} chars):\n{result_text}")
             
             return result_text, metrics
         
         except Exception as e:
-            logger.error(f"[extraction-enhancer] LLM call failed: {e}")
+            logger.error(f"[sql-validator] LLM call failed: {e}")
             raise
     
     def generate_summary(
@@ -327,7 +353,7 @@ class ExtractionEnhancer:
         if not self.enable_summary or not self.llm_client:
             return ExtractionSummary(summary="Query executed successfully.")
         
-        logger.info("[extraction-enhancer] generating extraction summary")
+        logger.info("[sql-validator] generating extraction summary")
         
         # Build context for LLM
         coercion_details = []
@@ -380,14 +406,14 @@ Return JSON:
             )
             
             logger.info(
-                f"[extraction-enhancer] summary generated: {summary.summary[:100]}... "
+                f"[sql-validator] summary generated: {summary.summary[:100]}... "
                 f"(latency={metrics['latency_ms']}ms)"
             )
             
             return summary
         
         except Exception as e:
-            logger.warning(f"[extraction-enhancer] summary generation failed: {e}")
+            logger.warning(f"[sql-validator] summary generation failed: {e}")
             return ExtractionSummary(summary="Query executed successfully.")
     
     def determine_column_order(
@@ -415,7 +441,7 @@ Return JSON:
                 reasoning="LLM ordering disabled, using original order",
             )
         
-        logger.info("[extraction-enhancer] determining column order")
+        logger.info("[sql-validator] determining column order")
         
         prompt = f"""Determine the optimal column ordering for query results.
 
@@ -449,14 +475,14 @@ Return JSON:
             )
             
             logger.info(
-                f"[extraction-enhancer] column ordering determined: {len(ordering.ordered_columns)} columns "
+                f"[sql-validator] column ordering determined: {len(ordering.ordered_columns)} columns "
                 f"(latency={metrics['latency_ms']}ms)"
             )
             
             return ordering
         
         except Exception as e:
-            logger.warning(f"[extraction-enhancer] column ordering failed: {e}")
+            logger.warning(f"[sql-validator] column ordering failed: {e}")
             return ColumnOrdering(
                 ordered_columns=[f"{c.get('table')}.{c.get('column')}" for c in columns],
                 reasoning=f"LLM ordering failed: {e}, using original order",
@@ -492,7 +518,7 @@ Return JSON:
                 reasoning="Coercion disabled, using original value",
             )
         
-        logger.info(f"[extraction-enhancer] coercing predicate: {column_name}={user_value}")
+        logger.info(f"[sql-validator] coercing predicate: {column_name}={user_value}")
         
         prompt = f"""Convert user-provided predicate value to database-compatible format.
 
@@ -537,7 +563,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             )
             
             logger.info(
-                f"[extraction-enhancer] coercion: '{user_value}' → '{coercion.canonical_value}' "
+                f"[sql-validator] coercion: '{user_value}' → '{coercion.canonical_value}' "
                 f"(type={coercion.value_type}, confidence={coercion.confidence}, "
                 f"latency={metrics['latency_ms']}ms)"
             )
@@ -545,7 +571,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             return coercion
         
         except Exception as e:
-            logger.warning(f"[extraction-enhancer] predicate coercion failed: {e}")
+            logger.warning(f"[sql-validator] predicate coercion failed: {e}")
             return PredicateCoercion(
                 original_value=user_value,
                 canonical_value=user_value,
@@ -581,11 +607,11 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         if not self.enable_validation or not self.llm_client:
             return sql, []
         
-        logger.info("[extraction-enhancer] starting iterative SQL validation")
+        logger.info("[sql-validator] starting iterative SQL validation")
         
         # Safety check: ensure SQL is read-only (no DDL/DML)
         if not self._is_read_only_sql(sql):
-            logger.error("[extraction-enhancer] SQL contains DDL/DML operations, rejecting")
+            logger.error("[sql-validator] SQL contains DDL/DML operations, rejecting")
             return sql, [
                 ValidationResult(
                     iteration=0,
@@ -597,9 +623,11 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         
         validation_history = []
         current_sql = sql
+        previous_attempts = []  # Track SQL attempts to avoid loops
         
         for iteration in range(self.max_iterations):
-            logger.info(f"[extraction-enhancer] validation iteration {iteration + 1}/{self.max_iterations}")
+            logger.info(f"[sql-validator] validation iteration {iteration + 1}/{self.max_iterations}")
+            logger.info(f"[sql-validator] Current SQL:\n{current_sql}")
             
             issues = []
             warnings = []
@@ -608,7 +636,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             validation = sql_executor.validate_sql(current_sql)
             if not validation.get("valid"):
                 issues.append(f"Syntax error: {validation.get('error')}")
-                logger.warning(f"[extraction-enhancer] SQL syntax invalid: {validation.get('error')}")
+                logger.warning(f"[sql-validator] SQL syntax invalid: {validation.get('error')}")
             
             # Step 2: Limited execution test (LIMIT 5) - sandboxed
             if validation.get("valid"):
@@ -617,20 +645,20 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                 # Double-check test SQL is still read-only
                 if not self._is_read_only_sql(test_sql):
                     issues.append("Safety violation: SQL modified to non-read-only")
-                    logger.error("[extraction-enhancer] Test SQL safety check failed")
+                    logger.error("[sql-validator] Test SQL safety check failed")
                 else:
                     exec_result = sql_executor.execute_query(test_sql, max_rows=5)
                     
                     if exec_result.get("error"):
                         issues.append(f"Execution error: {exec_result.get('error')}")
-                        logger.warning(f"[extraction-enhancer] SQL execution failed: {exec_result.get('error')}")
+                        logger.warning(f"[sql-validator] SQL execution failed: {exec_result.get('error')}")
                     else:
                         # Check for semantic issues
                         columns_returned = exec_result.get("columns", [])
                         rows_returned = exec_result.get("row_count", 0)
                         
                         logger.info(
-                            f"[extraction-enhancer] test execution: {rows_returned} rows, "
+                            f"[sql-validator] test execution: {rows_returned} rows, "
                             f"{len(columns_returned)} columns"
                         )
                         
@@ -643,7 +671,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             
             # If no issues, we're done
             if not issues and not warnings:
-                logger.info("[extraction-enhancer] validation successful")
+                logger.info("[sql-validator] validation successful")
                 validation_history.append(
                     ValidationResult(
                         iteration=iteration + 1,
@@ -657,7 +685,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             
             # Step 3: Ask LLM to refine SQL
             if issues or (warnings and iteration < self.max_iterations - 1):
-                logger.info("[extraction-enhancer] requesting LLM refinement")
+                logger.info("[sql-validator] requesting LLM refinement")
                 
                 refined_sql, refinement_metrics = self._refine_sql_with_llm(
                     question=question,
@@ -666,12 +694,31 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     warnings=warnings,
                     entities=entities,
                     intent=intent,
+                    previous_attempts=previous_attempts,  # Pass history to avoid loops
+                    schema_metadata=schema_metadata,  # Pass schema for context
                 )
                 
                 if refined_sql and refined_sql != current_sql:
+                    # Check if we've seen this SQL before (loop detection)
+                    if refined_sql in [attempt["sql"] for attempt in previous_attempts]:
+                        logger.warning(
+                            f"[sql-validator] Loop detected: LLM suggested previously failed SQL. "
+                            f"Stopping iterations at {iteration + 1}/{self.max_iterations}"
+                        )
+                        validation_history.append(
+                            ValidationResult(
+                                iteration=iteration + 1,
+                                valid=False,
+                                issues=issues,
+                                warnings=warnings,
+                                reasoning="Loop detected: LLM repeated a previous failed attempt",
+                            )
+                        )
+                        break
+                    
                     # Safety check refined SQL
                     if not self._is_read_only_sql(refined_sql):
-                        logger.error("[extraction-enhancer] Refined SQL contains unsafe operations, rejecting")
+                        logger.error("[sql-validator] Refined SQL contains unsafe operations, rejecting")
                         validation_history.append(
                             ValidationResult(
                                 iteration=iteration + 1,
@@ -683,7 +730,16 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                         )
                         break
                     
-                    logger.info("[extraction-enhancer] SQL refined by LLM")
+                    logger.info("[sql-validator] SQL refined by LLM")
+                    
+                    # Track this attempt before moving to it
+                    previous_attempts.append({
+                        "iteration": iteration + 1,
+                        "sql": current_sql,
+                        "issues": issues.copy(),
+                        "warnings": warnings.copy(),
+                    })
+                    
                     validation_history.append(
                         ValidationResult(
                             iteration=iteration + 1,
@@ -698,7 +754,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     current_sql = refined_sql
                 else:
                     # No refinement suggested, break
-                    logger.info("[extraction-enhancer] no further refinement suggested")
+                    logger.info("[sql-validator] no further refinement suggested")
                     validation_history.append(
                         ValidationResult(
                             iteration=iteration + 1,
@@ -711,7 +767,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     break
         
         logger.info(
-            f"[extraction-enhancer] validation complete after {len(validation_history)} iteration(s)"
+            f"[sql-validator] validation complete after {len(validation_history)} iteration(s)"
         )
         
         return current_sql, validation_history
@@ -744,7 +800,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             # e.g., don't match "INSERT" in column name "INSERT_DATE"
             if re.search(r'\b' + keyword + r'\b', sql_upper):
                 logger.warning(
-                    f"[extraction-enhancer] SQL contains forbidden keyword: {keyword}"
+                    f"[sql-validator] SQL contains forbidden keyword: {keyword}"
                 )
                 return False
         
@@ -771,6 +827,135 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     columns.append(col.lower())
         return columns
     
+    def _extract_tables_from_sql(self, sql: str) -> List[str]:
+        """
+        Extract table names from SQL query.
+        
+        Args:
+            sql: SQL query
+            
+        Returns:
+            List of table names found in SQL
+        """
+        tables = set()
+        sql_upper = sql.upper()
+        
+        # Pattern: FROM table_name or JOIN table_name
+        patterns = [
+            r'\bFROM\s+(\w+)',
+            r'\bJOIN\s+(\w+)',
+            r'\bINTO\s+(\w+)',
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, sql_upper)
+            tables.update(match.lower() for match in matches)
+        
+        return list(tables)
+    
+    def _build_schema_context(
+        self,
+        sql: str,
+        schema_metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Build schema context for LLM prompt showing relevant tables and columns.
+        
+        Args:
+            sql: SQL query to extract tables from
+            schema_metadata: Schema metadata dict
+            
+        Returns:
+            Formatted schema context string
+        """
+        if not schema_metadata or "tables" not in schema_metadata:
+            return ""
+        
+        # Extract tables used in SQL
+        tables_in_query = self._extract_tables_from_sql(sql)
+        if not tables_in_query:
+            return ""
+        
+        schema_context = "\n=== AVAILABLE SCHEMA ===\n"
+        schema_context += "Tables and columns in your query:\n\n"
+        
+        for table_name in tables_in_query:
+            table_info = schema_metadata["tables"].get(table_name, {})
+            if not table_info:
+                continue
+            
+            schema_context += f"Table: {table_name}\n"
+            
+            # Get columns
+            columns = table_info.get("columns", {})
+            if columns:
+                # Group columns by type for better readability
+                date_cols = []
+                numeric_cols = []
+                text_cols = []
+                other_cols = []
+                
+                for col_name, col_info in columns.items():
+                    col_type = col_info.get("type", "unknown")
+                    col_desc = col_info.get("description", "")
+                    aliases = col_info.get("aliases", [])
+                    
+                    col_entry = f"  - {col_name} ({col_type})"
+                    if col_desc:
+                        col_entry += f": {col_desc}"
+                    if aliases:
+                        col_entry += f" [aliases: {', '.join(aliases)}]"
+                    
+                    # Categorize by type
+                    if col_type in ["date", "datetime", "timestamp"]:
+                        # Add business context hints for date columns
+                        if col_name in ["created_at", "updated_at", "deleted_at"]:
+                            col_entry += " ⚠️ METADATA ONLY - Do not use for business logic"
+                        elif "payment" in col_name.lower():
+                            col_entry += " ✓ Business date - use for payment timing queries"
+                        elif "transaction" in col_name.lower():
+                            col_entry += " ✓ Business date - use for transaction timing queries"
+                        date_cols.append(col_entry)
+                    elif col_type in ["integer", "numeric", "decimal", "float", "money"]:
+                        numeric_cols.append(col_entry)
+                    elif col_type in ["varchar", "text", "char"]:
+                        text_cols.append(col_entry)
+                    else:
+                        other_cols.append(col_entry)
+                
+                # Output grouped columns
+                if date_cols:
+                    schema_context += "\n  Date/Time Columns:\n"
+                    schema_context += "\n".join(date_cols) + "\n"
+                
+                if numeric_cols:
+                    schema_context += "\n  Numeric Columns:\n"
+                    for col in numeric_cols[:10]:  # Limit to avoid too long prompt
+                        schema_context += col + "\n"
+                    if len(numeric_cols) > 10:
+                        schema_context += f"    ... and {len(numeric_cols) - 10} more\n"
+                
+                if text_cols:
+                    schema_context += "\n  Text Columns:\n"
+                    for col in text_cols[:8]:  # Limit to avoid too long prompt
+                        schema_context += col + "\n"
+                    if len(text_cols) > 8:
+                        schema_context += f"    ... and {len(text_cols) - 8} more\n"
+                
+                if other_cols:
+                    for col in other_cols[:5]:
+                        schema_context += col + "\n"
+            
+            schema_context += "\n"
+        
+        schema_context += "⚠️ IMPORTANT:\n"
+        schema_context += "- Use payment_date/transaction_date for business queries, NOT created_at\n"
+        schema_context += "- created_at/updated_at are metadata timestamps, not business dates\n"
+        schema_context += "- Check column descriptions to understand business meaning\n"
+        schema_context += "=========================\n"
+        
+        return schema_context
+    
     def _refine_sql_with_llm(
         self,
         *,
@@ -780,8 +965,29 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         warnings: List[str],
         entities: List[Dict[str, Any]],
         intent: Dict[str, Any],
+        previous_attempts: List[Dict[str, Any]] = None,
+        schema_metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Optional[str], Dict[str, Any]]:
-        """Ask LLM to refine SQL based on validation issues."""
+        """Ask LLM to refine SQL based on validation issues and previous failed attempts."""
+        
+        if previous_attempts is None:
+            previous_attempts = []
+        
+        # Build schema context
+        schema_context = self._build_schema_context(current_sql, schema_metadata)
+        
+        # Build previous attempts context
+        previous_context = ""
+        if previous_attempts:
+            previous_context = "\n\nPrevious Failed Attempts (DO NOT REPEAT THESE):\n"
+            for attempt in previous_attempts[-3:]:  # Only show last 3 to keep prompt manageable
+                previous_context += f"""
+Attempt #{attempt['iteration']}:
+SQL: {attempt['sql']}
+Issues: {', '.join(attempt['issues'])}
+Warnings: {', '.join(attempt['warnings'])}
+"""
+            previous_context += "\n⚠️ IMPORTANT: Do NOT suggest any of the above SQL queries again. They have already failed.\n"
         
         prompt = f"""Refine SQL query to address validation issues.
 
@@ -789,6 +995,8 @@ User Question: "{question}"
 
 Current SQL:
 {current_sql}
+
+{schema_context}
 
 Validation Issues:
 {json.dumps(issues, indent=2)}
@@ -800,7 +1008,7 @@ Expected Entities:
 {json.dumps([{"text": e.get("text"), "type": e.get("entity_type")} for e in entities], indent=2)}
 
 Query Intent:
-{json.dumps(intent, indent=2)}
+{json.dumps(intent, indent=2)}{previous_context}
 
 Task: Fix the SQL to address the issues while maintaining the intent.
 
@@ -809,6 +1017,8 @@ Common fixes:
 - Fix syntax errors
 - Ensure proper join conditions
 - Add necessary type casts
+- Check table and column names match schema exactly
+- Use business date columns (payment_date, transaction_date) NOT metadata timestamps (created_at, updated_at)
 
 Return JSON:
 {{
@@ -829,12 +1039,12 @@ If no refinement is needed or possible, return the original SQL.
             reasoning = result.get("reasoning", "")
             
             logger.info(
-                f"[extraction-enhancer] LLM refinement: {len(changes)} changes, "
+                f"[sql-validator] LLM refinement: {len(changes)} changes, "
                 f"reasoning: {reasoning[:100]}..."
             )
             
             return refined_sql, metrics
         
         except Exception as e:
-            logger.warning(f"[extraction-enhancer] SQL refinement failed: {e}")
+            logger.warning(f"[sql-validator] SQL refinement failed: {e}")
             return None, {}

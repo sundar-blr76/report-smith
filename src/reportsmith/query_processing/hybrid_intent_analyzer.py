@@ -28,7 +28,7 @@ class LocalEntityMapping:
     """Local mapping for a known term."""
     term: str  # User's term (e.g., "AUM", "fees")
     canonical_name: str  # Database name
-    entity_type: str  # table, column, dimension_value, metric
+    entity_type: str  # table, column, domain_value, metric
     table: Optional[str] = None
     column: Optional[str] = None
     value: Optional[str] = None
@@ -45,7 +45,7 @@ class EntityMappingConfig:
     """Configuration for local entity mappings."""
     tables: Dict[str, LocalEntityMapping] = field(default_factory=dict)
     columns: Dict[str, LocalEntityMapping] = field(default_factory=dict)
-    dimension_values: Dict[str, LocalEntityMapping] = field(default_factory=dict)
+    domain_values: Dict[str, LocalEntityMapping] = field(default_factory=dict)
     metrics: Dict[str, LocalEntityMapping] = field(default_factory=dict)
     business_terms: Dict[str, LocalEntityMapping] = field(default_factory=dict)
 
@@ -173,7 +173,7 @@ class HybridIntentAnalyzer:
             config = EntityMappingConfig()
             
             # Parse mappings by type
-            for entity_type in ['tables', 'columns', 'dimension_values', 'metrics', 'business_terms']:
+            for entity_type in ['tables', 'columns', 'domain_values', 'metrics', 'business_terms']:
                 type_data = data.get(entity_type, {})
                 mapping_dict = getattr(config, entity_type)
                 
@@ -198,7 +198,7 @@ class HybridIntentAnalyzer:
             total_count = sum([
                 len(config.tables),
                 len(config.columns),
-                len(config.dimension_values),
+                len(config.domain_values),
                 len(config.metrics),
                 len(config.business_terms)
             ])
@@ -214,7 +214,7 @@ class HybridIntentAnalyzer:
         """Build fast lookup indices including aliases."""
         self.term_to_mapping: Dict[str, LocalEntityMapping] = {}
         
-        for entity_type in ['tables', 'columns', 'dimension_values', 'metrics', 'business_terms']:
+        for entity_type in ['tables', 'columns', 'domain_values', 'metrics', 'business_terms']:
             mapping_dict = getattr(self.mappings, entity_type)
             
             for term, mapping in mapping_dict.items():
@@ -230,7 +230,7 @@ class HybridIntentAnalyzer:
         return sum([
             len(self.mappings.tables),
             len(self.mappings.columns),
-            len(self.mappings.dimension_values),
+            len(self.mappings.domain_values),
             len(self.mappings.metrics),
             len(self.mappings.business_terms)
         ])
@@ -495,7 +495,7 @@ class HybridIntentAnalyzer:
         
         # Search across all collections
         schema_results = self.embedding_manager.search_schema(search_text, top_k=3)
-        dim_results = self.embedding_manager.search_dimensions(search_text, top_k=3)
+        dim_results = self.embedding_manager.search_domains(search_text, top_k=3)
         
         all_matches = []
         best_confidence = 0.0
@@ -521,7 +521,7 @@ class HybridIntentAnalyzer:
                 })
                 if result.score > best_confidence:
                     best_confidence = result.score
-                    best_type = 'dimension_value'
+                    best_type = 'domain_value'
         
         return EnrichedEntity(
             text=entity_text,
@@ -563,7 +563,7 @@ columns:
     aliases: [fee, charges, "management fees"]
     description: "Fee amounts"
 
-dimension_values:
+domain_values:
   equity:
     canonical_name: Equity Growth
     table: funds

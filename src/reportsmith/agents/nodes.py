@@ -11,6 +11,7 @@ from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.query_processing.sql_generator import SQLGenerator
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
+from reportsmith.utils.llm_tracker import LLMTracker
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,7 @@ class QueryState(BaseModel):
     errors: List[str] = Field(default_factory=list)
     timings: Dict[str, float] = Field(default_factory=dict)
     llm_summaries: List[Dict[str, Any]] = Field(default_factory=list)
+    llm_usage: Dict[str, Any] = Field(default_factory=dict)  # LLM cost tracking
     debug_files: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -56,6 +58,9 @@ class AgentNodes:
 
         # output directory for debug payloads
         self.debug_dir = "/home/sundar/sundar_projects/report-smith/logs/semantic_debug"
+        
+        # LLM tracker for cost estimation (will be set per request)
+        self._llm_tracker: Optional[LLMTracker] = None
 
     def _write_debug(self, filename: str, data: Any) -> None:
         """Write debug data to file"""
@@ -269,10 +274,14 @@ class AgentNodes:
 
             updated = 0
             # Process results for each entity
-            for search_text, (schema_res, dim_res, ctx_res) in zip(
+            for idx, (search_text, (schema_res, dim_res, ctx_res)) in enumerate(zip(
                 search_texts, batch_results
-            ):
+            )):
                 ent = entity_map[search_text]
+                logger.debug(
+                    f"[semantic:batch] Processing entity {idx+1}/{len(search_texts)}: "
+                    f"'{search_text}' (entity_type={ent.get('entity_type')})"
+                )
                 try:
                     # Write semantic search input payload
                     self._write_debug(
@@ -309,7 +318,7 @@ class AgentNodes:
                                     "content": r.content,
                                     "metadata": r.metadata,
                                     "score": r.score,
-                                    "source_type": "dimension_value",
+                                    "source_type": "domain_value",
                                 }
                             )
                     for r in ctx_res:
@@ -334,7 +343,7 @@ class AgentNodes:
                             entity_key = f"table:{md.get('table')}"
                         elif md.get("entity_type") == "column":
                             entity_key = f"column:{md.get('table')}.{md.get('column')}"
-                        elif md.get("entity_type") == "dimension_value":
+                        elif md.get("entity_type") == "domain_value":
                             entity_key = f"dim:{md.get('table')}.{md.get('column')}={md.get('value')}"
                         elif md.get("entity_type") == "metric":
                             entity_key = f"metric:{md.get('metric_name')}"
@@ -423,7 +432,7 @@ class AgentNodes:
 
                     if not deduplicated_matches:
                         logger.info(
-                            f"[semantic] no matches for entity='{text}' (searched with threshold: schema={schema_thr}, dim={dim_thr}, ctx={ctx_thr})"
+                            f"[semantic] no matches for entity='{search_text}' (searched with threshold: schema={schema_thr}, dim={dim_thr}, ctx={ctx_thr})"
                         )
                     else:
                         # sort high to low
@@ -444,9 +453,10 @@ class AgentNodes:
                         col = md.get("column") or "?"
                         src_type = best.get("source_type", "?")
                         match_count = best.get("match_count", 1)
-                        embedded_txt = md.get("embedded_text", "?")
+                        # Get the matched text - could be from embedded_text, content, or entity_name
+                        embedded_txt = md.get("embedded_text") or best.get("content") or md.get("entity_name") or "?"
                         logger.info(
-                            f"[semantic] entity='{text}' → matched='{embedded_txt}' "
+                            f"[semantic] entity='{search_text}' → matched='{embedded_txt}' "
                             f"table={tb} col={col} score={best['score']:.3f} "
                             f"source={src_type} hits={match_count} total_candidates={len(deduplicated_matches)}"
                         )
@@ -580,7 +590,7 @@ class AgentNodes:
                         detail["column"] = md.get("column")
                         detail["description"] = md.get("description", "")
                         detail["data_type"] = md.get("data_type", "")
-                    elif md.get("entity_type") == "dimension_value":
+                    elif md.get("entity_type") == "domain_value":
                         detail["table"] = md.get("table")
                         detail["column"] = md.get("column")
                         detail["value"] = md.get("value")
@@ -801,8 +811,8 @@ class AgentNodes:
                                     tables.append(tb)
                             mapped_table = ",".join(cand_tables)
                             reason = "kg.column_lookup"
-                    # If still not mapped and it's a dimension value, attach using hints or KG
-                    if not mapped_table and ent_type == "dimension_value" and ent_text:
+                    # If still not mapped and it's a domain value, attach using hints or KG
+                    if not mapped_table and ent_type == "domain_value" and ent_text:
                         # Prefer explicit table hint from entity (if present)
                         ent_table_hint = ent.get("table")
                         if ent_table_hint:
@@ -847,7 +857,7 @@ class AgentNodes:
                         # Semantic dimension search to catch domain table or attr table links
                         if not mapped_table:
                             try:
-                                dim_results = self.intent_analyzer.embedding_manager.search_dimensions(
+                                dim_results = self.intent_analyzer.embedding_manager.search_domains(
                                     ent_text, top_k=3
                                 )
                                 cand_tables = []
@@ -897,12 +907,45 @@ class AgentNodes:
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["schema_ms"] = round(dt_ms, 2)
             if unmapped:
-                for e in unmapped:
-                    logger.warning(
-                        f"[schema][UNMAPPED] >>> {e.get('text')} (type={e.get('entity_type')}, conf={e.get('confidence')})"
-                    )
+                # Log unmapped entities with more context
                 logger.warning(
-                    f"[schema][UNMAPPED] {len(unmapped)} entity(ies) not mapped to any table: {[e.get('text') for e in unmapped]}"
+                    f"[predicate-resolution][schema][UNMAPPED] Found {len(unmapped)} unmapped entity(ies)"
+                )
+                for e in unmapped:
+                    entity_text = e.get('text', '')
+                    entity_type = e.get('entity_type', 'unknown')
+                    confidence = e.get('confidence', 0.0)
+                    
+                    # Check if this looks like a temporal predicate
+                    is_temporal = any(term in entity_text.upper() for term in 
+                                     ['Q1', 'Q2', 'Q3', 'Q4', 'QUARTER', 'MONTH', 'YEAR', '2025', '2024', '2023'])
+                    
+                    if is_temporal:
+                        logger.warning(
+                            f"[predicate-resolution][schema][UNMAPPED] >>> TEMPORAL entity '{entity_text}' "
+                            f"(type={entity_type}, conf={confidence:.2f}) - "
+                            f"This should have been resolved by LLM intent analyzer"
+                        )
+                        # Check if it's in the filters
+                        filters = state.intent.get('filters', []) if state.intent else []
+                        filter_match = any(entity_text in f for f in filters)
+                        if filter_match:
+                            logger.info(
+                                f"[predicate-resolution][schema] ✓ Entity '{entity_text}' appears to be "
+                                f"resolved in filters: {[f for f in filters if entity_text.lower() in f.lower()]}"
+                            )
+                        else:
+                            logger.warning(
+                                f"[predicate-resolution][schema] ✗ Entity '{entity_text}' NOT found in "
+                                f"filters - may cause SQL generation issues"
+                            )
+                    else:
+                        logger.warning(
+                            f"[schema][UNMAPPED] >>> {entity_text} (type={entity_type}, conf={confidence:.2f})"
+                        )
+                        
+                logger.warning(
+                    f"[schema][UNMAPPED] Summary: {[e.get('text') for e in unmapped]}"
                 )
             logger.info(
                 f"[schema] mapped entities to {len(tables)} table(s): {tables} in {dt_ms:.1f}ms"
@@ -1012,11 +1055,16 @@ class AgentNodes:
                 plan=state.plan,
             )
 
-            # Perform iterative validation and refinement if enhancer is available
+            # Perform iterative validation and refinement if validator is available
             validation_history = []
-            if hasattr(self.sql_generator, 'enhancer') and self.sql_generator.enhancer:
+            if hasattr(self.sql_generator, 'validator') and self.sql_generator.validator:
                 logger.info("[sql-gen] performing iterative validation")
-                refined_sql, validation_history = self.sql_generator.enhancer.validate_and_refine_sql(
+                
+                # Pass LLM tracker to validator if available
+                if self._llm_tracker:
+                    self.sql_generator.validator.llm_tracker = self._llm_tracker
+                
+                refined_sql, validation_history = self.sql_generator.validator.validate_and_refine_sql(
                     question=state.question,
                     sql=sql_result.get("sql", ""),
                     entities=state.entities,

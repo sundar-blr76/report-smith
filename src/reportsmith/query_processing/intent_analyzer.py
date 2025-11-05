@@ -58,7 +58,7 @@ class AggregationType(Enum):
 class ExtractedEntity:
     """An entity extracted from the query."""
     text: str  # Original text from query
-    entity_type: str  # Type: table, column, dimension_value, metric
+    entity_type: str  # Type: table, column, domain_value, metric
     semantic_matches: List[Dict[str, Any]] = field(default_factory=list)  # Matches from embedding search
     confidence: float = 0.0  # Confidence score 0-1
 
@@ -268,13 +268,13 @@ class QueryIntentAnalyzer:
                     confidence=result.score
                 ))
         
-        # Search dimension values
-        dimension_results = self.embedding_manager.search_dimensions(query, top_k=5)
+        # Search domain values
+        dimension_results = self.embedding_manager.search_domains(query, top_k=5)
         for result in dimension_results:
             if result.score > 0.3:
                 entities.append(ExtractedEntity(
                     text=result.content,
-                    entity_type='dimension_value',
+                    entity_type='domain_value',
                     semantic_matches=[{
                         'content': result.content,
                         'metadata': result.metadata,

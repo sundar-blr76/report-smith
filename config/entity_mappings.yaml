@@ -79,7 +79,7 @@ columns:
     source_notes: "Historical snapshot - prefer funds.total_aum for current AUM values"
 
 # Dimension Values - Map to specific values in dimension columns
-dimension_values:
+domain_values:
   # Fund Types
   equity:
     canonical_name: Equity Growth

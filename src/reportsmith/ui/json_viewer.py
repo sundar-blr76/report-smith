@@ -1,6 +1,5 @@
 """
-JSON viewer component using native Streamlit components.
-Simple and reliable - no custom state management, just uses st.json and st.code.
+JSON viewer component using native Streamlit components with expand/collapse controls.
 """
 
 import json
@@ -17,27 +16,35 @@ def render_json_in_expander(
     height: int = 300,
 ) -> None:
     """
-    Render JSON data inside an expander.
-
-    Uses native st.json which provides built-in expand/collapse for nested items.
-    Users can click the ▼ arrows next to each item to expand/collapse.
+    Render JSON data inside an expander with expand/collapse all controls.
 
     Args:
         data: The data to display as JSON
         title: Title for the expander
-        key: Unique key for this viewer instance (unused, kept for compatibility)
+        key: Unique key for this viewer instance
         expanded: Whether the expander should be initially expanded
-        height: Height of the JSON viewer (unused, kept for compatibility)
+        height: Height of the JSON viewer
     """
     with st.expander(title, expanded=expanded):
-        # Simple info about how to use the viewer
-        st.caption(
-            "💡 Click ▼ arrows to expand/collapse individual items | Use Copy button to copy JSON"
-        )
-
-        # Use native st.json - it has built-in expand/collapse
-        # The expanded parameter controls initial state of nested items
-        st.json(data, expanded=True)
+        # Initialize session state for this viewer if not present
+        expand_state_key = f"{key}_expanded_state"
+        if expand_state_key not in st.session_state:
+            st.session_state[expand_state_key] = 1  # 1 = expanded, 0 = collapsed
+        
+        # Controls for expand/collapse all
+        col1, col2, col3 = st.columns([1, 1, 6])
+        
+        with col1:
+            if st.button("▼ Expand All", key=f"btn_expand_{key}", use_container_width=True):
+                st.session_state[expand_state_key] = 1
+        
+        with col2:
+            if st.button("▶ Collapse All", key=f"btn_collapse_{key}", use_container_width=True):
+                st.session_state[expand_state_key] = 0
+        
+        # Render JSON with appropriate expansion state
+        # Use the session state value directly as the expanded parameter
+        st.json(data, expanded=st.session_state[expand_state_key])
 
 
 def render_json_viewer(
@@ -46,12 +53,28 @@ def render_json_viewer(
     height: int = 300,
 ) -> None:
     """
-    Render JSON data without expander.
+    Render JSON data without expander but with expand/collapse controls.
 
     Args:
         data: The data to display as JSON
-        key: Unique key for this viewer instance (unused, kept for compatibility)
-        height: Height of the viewer (unused, kept for compatibility)
+        key: Unique key for this viewer instance
+        height: Height of the viewer
     """
-    st.caption("💡 Click ▼ arrows to expand/collapse individual items")
-    st.json(data, expanded=True)
+    # Initialize session state for this viewer if not present
+    expand_state_key = f"{key}_expanded_state"
+    if expand_state_key not in st.session_state:
+        st.session_state[expand_state_key] = 1  # 1 = expanded, 0 = collapsed
+    
+    # Controls for expand/collapse all
+    col1, col2, col3 = st.columns([1, 1, 6])
+    
+    with col1:
+        if st.button("▼ Expand All", key=f"btn_expand_{key}", use_container_width=True):
+            st.session_state[expand_state_key] = 1
+    
+    with col2:
+        if st.button("▶ Collapse All", key=f"btn_collapse_{key}", use_container_width=True):
+            st.session_state[expand_state_key] = 0
+    
+    # Render JSON with appropriate expansion state
+    st.json(data, expanded=st.session_state[expand_state_key])

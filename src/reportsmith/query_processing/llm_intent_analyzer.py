@@ -54,7 +54,7 @@ class AggregationType(str, Enum):
 class EntityMatch(BaseModel):
     """An entity matched from the query."""
     text: str = Field(description="The text that matched")
-    entity_type: str = Field(description="Type: table, column, dimension_value, metric")
+    entity_type: str = Field(description="Type: table, column, domain_value, metric")
     table: Optional[str] = Field(None, description="Table name if applicable")
     column: Optional[str] = Field(None, description="Column name if applicable")
     value: Optional[str] = Field(None, description="Value if dimension")
@@ -135,18 +135,25 @@ class LLMIntentAnalyzer:
     Uses OpenAI or Anthropic with JSON schema for reliable extraction.
     """
     
-    SYSTEM_PROMPT = """You are a SQL query intent analyzer for a financial data system.
+    SYSTEM_PROMPT_BASE = """You are a SQL query intent analyzer for a financial data system.
 
 Your task is to analyze natural language queries and extract structured information:
 1. Primary intent (retrieval, aggregation, filtering, comparison, ranking, trend)
-2. Key entities mentioned (tables, columns, dimension values)
+2. Key entities mentioned (tables, columns, domain values)
 3. Time scope (daily, monthly, yearly, etc.)
 4. Aggregation operations (sum, count, average, etc.)
 5. Filter conditions
 6. Limit/ordering requirements
 
 Be precise and extract only what's explicitly mentioned or clearly implied.
-For entities, use the exact terms from the query when possible."""
+For entities, use the exact terms from the query when possible.
+
+IMPORTANT: For temporal filters (quarters, months, years, dates):
+- Identify which table's temporal column should be used (fee_period_start, payment_date, created_at, etc.)
+- Format filters as: "EXTRACT(QUARTER FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
+- For months: "EXTRACT(MONTH FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
+- For date ranges: "table.column >= 'YYYY-MM-DD' AND table.column <= 'YYYY-MM-DD'"
+- Choose the most relevant temporal column based on query context (e.g., fee_period_start for fee queries)"""
 
     def __init__(
         self, 
@@ -209,6 +216,97 @@ For entities, use the exact terms from the query when possible."""
         
         logger.info(f"Initialized LLM Intent Analyzer with {llm_provider}/{self.model}")
     
+    def _build_temporal_schema_context(self, query: str) -> str:
+        """
+        Build a concise schema context focused on temporal columns.
+        Searches for relevant tables based on query and extracts their temporal columns.
+        
+        Args:
+            query: User query to determine relevant tables
+            
+        Returns:
+            Formatted schema context string
+        """
+        # Search for relevant tables using semantic search
+        try:
+            logger.info(f"[predicate-resolution] Building temporal schema context for query")
+            schema_results = self.embedding_manager.search_schema(
+                query, 
+                top_k=20  # Get more results to find temporal columns
+            )
+            
+            logger.debug(f"[predicate-resolution] Found {len(schema_results)} schema results")
+            
+            # Extract temporal column information
+            temporal_info = {}
+            temporal_cols_found = 0
+            for result in schema_results:
+                # SearchResult is a dataclass, access attributes directly
+                metadata = result.metadata
+                entity_type = metadata.get("entity_type")
+                
+                if entity_type == "column":
+                    col_type = metadata.get("data_type", "").lower()
+                    # Check if this is a temporal column
+                    if any(t in col_type for t in ["date", "time", "timestamp"]):
+                        table = metadata.get("table")
+                        column = metadata.get("entity_name")
+                        description = metadata.get("description", "")
+                        
+                        # Ensure we have both table and column
+                        if not table:
+                            logger.debug(
+                                f"[predicate-resolution] Skipping temporal column {column} - no table info"
+                            )
+                            continue
+                        if not column:
+                            logger.debug(
+                                f"[predicate-resolution] Skipping temporal column - no column name"
+                            )
+                            continue
+                        
+                        if table not in temporal_info:
+                            temporal_info[table] = []
+                        temporal_info[table].append({
+                            "column": column,
+                            "type": col_type,
+                            "description": description
+                        })
+                        temporal_cols_found += 1
+                        logger.debug(
+                            f"[predicate-resolution] Found temporal column: "
+                            f"{table}.{column} ({col_type})"
+                        )
+            
+            # Build context string
+            if not temporal_info:
+                logger.warning(
+                    f"[predicate-resolution] No temporal columns found in schema search. "
+                    f"Temporal predicates may not be resolved correctly."
+                )
+                return ""
+            
+            logger.info(
+                f"[predicate-resolution] Built temporal context with {temporal_cols_found} columns "
+                f"from {len(temporal_info)} tables: {list(temporal_info.keys())}"
+            )
+            
+            context_parts = ["\n\nAvailable Temporal Columns:"]
+            for table, columns in temporal_info.items():
+                context_parts.append(f"\n{table}:")
+                for col_info in columns:
+                    desc = f" - {col_info['description']}" if col_info['description'] else ""
+                    context_parts.append(f"  - {col_info['column']} ({col_info['type']}){desc}")
+            
+            schema_context = "".join(context_parts)
+            logger.debug(f"[predicate-resolution] Schema context:\n{schema_context}")
+            
+            return schema_context
+            
+        except Exception as e:
+            logger.warning(f"[predicate-resolution] Failed to build temporal schema context: {e}")
+            return ""
+    
     def analyze(self, query: str) -> QueryIntent:
         """
         Analyze a natural language query using LLM.
@@ -223,6 +321,19 @@ For entities, use the exact terms from the query when possible."""
         
         # Step 1: Get structured intent from LLM
         llm_intent = self._extract_with_llm(query)
+        
+        # Log extracted filters to show predicate resolution
+        if llm_intent.filters:
+            logger.info(
+                f"[predicate-resolution] LLM extracted {len(llm_intent.filters)} filter(s):"
+            )
+            for i, filter_str in enumerate(llm_intent.filters, 1):
+                is_temporal = any(keyword in filter_str.upper() for keyword in 
+                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'DATE'])
+                filter_type = "TEMPORAL" if is_temporal else "STANDARD"
+                logger.info(f"[predicate-resolution]   [{filter_type}] Filter {i}: {filter_str}")
+        else:
+            logger.debug("[predicate-resolution] No filters extracted by LLM")
         
         # Step 2: Enrich entities with semantic search
         enriched_entities = self._enrich_entities(llm_intent.entities, query)
@@ -254,6 +365,10 @@ For entities, use the exact terms from the query when possible."""
         logger.info(f"LLM Intent Extraction Request for query: '{query}'")
         logger.debug(f"Request - Provider: {self.llm_provider}, Model: {self.model}")
         
+        # Build schema context with temporal columns
+        schema_context = self._build_temporal_schema_context(query)
+        system_prompt = self.SYSTEM_PROMPT_BASE + schema_context
+        
         if self.llm_provider == "openai":
             def _trunc(s: str) -> str:
                 if not isinstance(s, str):
@@ -264,7 +379,7 @@ For entities, use the exact terms from the query when possible."""
             request_payload = {
                 "model": self.model,
                 "messages": [
-                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Analyze this query: {query}"}
                 ],
                 "response_format": "LLMQueryIntent (structured output)",
@@ -277,7 +392,7 @@ For entities, use the exact terms from the query when possible."""
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Analyze this query: {query}"}
                 ],
                 response_format=LLMQueryIntent,
@@ -318,7 +433,7 @@ Return only valid JSON, no other text."""
                 "model": self.model,
                 "max_tokens": 1024,
                 "temperature": 0,
-                "system": self.SYSTEM_PROMPT,
+                "system": system_prompt,
                 "messages": [{
                     "role": "user",
                     "content": user_content
@@ -327,7 +442,7 @@ Return only valid JSON, no other text."""
             logger.debug(f"Anthropic Intent Extraction Request Payload: {json.dumps({k: v if k != 'messages' else '[see user_content]' for k, v in request_payload.items()}, indent=2)}")
             if self.debug_prompts:
                 logger.debug(f"Anthropic Prompt (trunc): {_trunc(user_content)}")
-            prompt_chars = len(user_content) + len(self.SYSTEM_PROMPT)
+            prompt_chars = len(user_content) + len(system_prompt)
             
             response = self.client.messages.create(**request_payload)
             
@@ -361,7 +476,7 @@ Return only valid JSON, no other text."""
             # Gemini uses JSON schema for structured output
             schema_description = LLMQueryIntent.model_json_schema()
             
-            prompt = f"""{self.SYSTEM_PROMPT}
+            prompt = f"""{system_prompt}
 
 Analyze this query and return a JSON object matching this schema:
 {json.dumps(schema_description, indent=2)}
@@ -377,6 +492,14 @@ Return only valid JSON, no other text."""
             prompt_chars = len(prompt)
             logger.debug(f"Gemini Intent Extraction Request - Prompt length: {len(prompt)} chars")
             logger.debug(f"Gemini Intent Extraction Request - Generation config: {json.dumps(generation_config, indent=2)}")
+            
+            def _trunc(s: str) -> str:
+                if not isinstance(s, str):
+                    return str(s)
+                if len(s) <= getattr(self, 'max_log_chars', 500):
+                    return s
+                return s[: getattr(self, 'max_log_chars', 500)] + f"... [truncated {len(s) - getattr(self, 'max_log_chars', 500)} chars]"
+            
             if self.debug_prompts:
                 logger.debug(f"Gemini Prompt (trunc): {_trunc(prompt)}")
             
@@ -440,7 +563,7 @@ Return only valid JSON, no other text."""
             schema_results = self.embedding_manager.search_schema(
                 search_text, top_k=self.max_search_results
             )
-            dim_results = self.embedding_manager.search_dimensions(
+            dim_results = self.embedding_manager.search_domains(
                 search_text, top_k=self.max_search_results
             )
             context_results = self.embedding_manager.search_business_context(
@@ -472,11 +595,11 @@ Return only valid JSON, no other text."""
                         'content': result.content,
                         'metadata': result.metadata,
                         'score': result.score,
-                        'type': 'dimension_value'
+                        'type': 'domain_value'
                     })
                     if result.score > best_confidence:
                         best_confidence = result.score
-                        best_type = 'dimension_value'
+                        best_type = 'domain_value'
             
             # Process business context results
             for result in context_results:

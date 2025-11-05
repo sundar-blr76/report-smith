@@ -57,7 +57,7 @@ class EmbeddingManager:
 
     Collections:
     - schema_metadata: Table and column metadata from YAML
-    - dimension_values: Actual values from dimension tables
+    - domain_values: Actual values from dimension tables
     - business_context: Metrics, rules, and sample queries
 
     Caching Strategy:
@@ -181,7 +181,7 @@ class EmbeddingManager:
         """Initialize ChromaDB collections."""
         collection_configs = {
             "schema_metadata": "Table and column metadata",
-            "dimension_values": "Dimension value embeddings",
+            "domain_values": "Dimension value embeddings",
             "business_context": "Business metrics and rules",
         }
 
@@ -236,9 +236,9 @@ class EmbeddingManager:
     }
 
     @staticmethod
-    def _is_embeddable_dimension_value(value: str) -> bool:
+    def _is_embeddable_domain_value(value: str) -> bool:
         """
-        Filter out generic or non-semantic dimension values.
+        Filter out generic or non-semantic domain values.
 
         Skip values that are:
         - Pure numbers (e.g., "123", "3.82", "-45.6")
@@ -247,7 +247,7 @@ class EmbeddingManager:
         - UUIDs or hash-like strings
 
         Args:
-            value: The dimension value to check
+            value: The domain value to check
 
         Returns:
             True if the value should be embedded, False otherwise
@@ -583,7 +583,7 @@ class EmbeddingManager:
     # DIMENSION VALUE EMBEDDINGS
     # ==========================================================================
 
-    def load_dimension_values(
+    def load_domain_values(
         self,
         app_id: str,
         table: str,
@@ -593,7 +593,7 @@ class EmbeddingManager:
         synonyms: Optional[Dict[str, List[str]]] = None,
     ):
         """
-        Load dimension values from database query results.
+        Load domain values from database query results.
 
         **NEW STRATEGY**: Embed ONLY the value name (minimal)
         Store domain metadata and column/table context in metadata.
@@ -607,7 +607,7 @@ class EmbeddingManager:
             context: Optional business context/description
             synonyms: Optional dict mapping value -> list of synonyms
         """
-        collection = self.collections["dimension_values"]
+        collection = self.collections["domain_values"]
 
         documents = []
         metadatas = []
@@ -623,13 +623,13 @@ class EmbeddingManager:
                 continue
 
             # Filter out generic/numeric values
-            if not self._is_embeddable_dimension_value(value_str):
+            if not self._is_embeddable_domain_value(value_str):
                 skipped_values.append(value_str)
                 continue
 
             # Base metadata (full context, NOT in embedding)
             base_meta = {
-                "entity_type": "dimension_value",
+                "entity_type": "domain_value",
                 "entity_name": value_str,
                 "application": app_id,
                 "table": table,
@@ -679,7 +679,7 @@ class EmbeddingManager:
                 self._dimension_cache[cache_key] = datetime.now()
 
                 log_msg = (
-                    f"Loaded {len(documents)} dimension value embeddings for "
+                    f"Loaded {len(documents)} domain value embeddings for "
                     f"{app_id}.{table}.{column}"
                 )
                 if skipped_values:
@@ -692,11 +692,11 @@ class EmbeddingManager:
 
                 logger.info(log_msg)
             except Exception as e:
-                logger.error(f"Failed to load dimension values: {e}")
+                logger.error(f"Failed to load domain values: {e}")
         else:
             # All values were filtered out
             logger.warning(
-                f"No embeddable dimension values for {app_id}.{table}.{column} "
+                f"No embeddable domain values for {app_id}.{table}.{column} "
                 f"(all {len(skipped_values)} values were generic/numeric)"
             )
             if skipped_values:
@@ -999,7 +999,7 @@ class EmbeddingManager:
 
         return self._format_results(results)
 
-    def search_dimensions(
+    def search_domains(
         self,
         query: str,
         app_id: Optional[str] = None,
@@ -1007,7 +1007,7 @@ class EmbeddingManager:
         top_k: int = 3,
     ) -> List[SearchResult]:
         """
-        Search for dimension values.
+        Search for domain values.
 
         Args:
             query: Search term (e.g., "equity")
@@ -1018,7 +1018,7 @@ class EmbeddingManager:
         Returns:
             List of SearchResult objects
         """
-        collection = self.collections["dimension_values"]
+        collection = self.collections["domain_values"]
 
         # ChromaDB requires where clause with single level dict
         where = None
@@ -1067,7 +1067,7 @@ class EmbeddingManager:
         """
         Search all collections (schema, dimensions, context) with a SINGLE embedding.
 
-        This is more efficient than calling search_schema, search_dimensions, and
+        This is more efficient than calling search_schema, search_domains, and
         search_business_context separately, as it only generates the embedding once.
 
         Uses multi-level caching (request cache + Redis cache) for maximum efficiency.
@@ -1095,7 +1095,7 @@ class EmbeddingManager:
 
         # Search dimension collection
         dim_where = {"application": app_id} if app_id else None
-        dim_results = self.collections["dimension_values"].query(
+        dim_results = self.collections["domain_values"].query(
             query_embeddings=[query_embedding],
             n_results=dimension_top_k,
             where=dim_where,
@@ -1157,7 +1157,7 @@ class EmbeddingManager:
 
             # Search dimension collection
             dim_where = {"application": app_id} if app_id else None
-            dim_results = self.collections["dimension_values"].query(
+            dim_results = self.collections["domain_values"].query(
                 query_embeddings=[query_embedding],
                 n_results=dimension_top_k,
                 where=dim_where,

@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from langgraph.graph import StateGraph, END
 from reportsmith.logger import get_logger
+from reportsmith.utils.llm_tracker import LLMTracker
 
 logger = get_logger(__name__)
 
@@ -61,8 +62,42 @@ class MultiAgentOrchestrator:
 
     def run(self, question: str, app_id: str | None = None) -> QueryState:
         logger.info("[supervisor] received payload; starting orchestration")
+        
+        # Initialize LLM tracker for this request
+        llm_tracker = LLMTracker()
+        
+        # Set tracker in nodes so SQL validator can use it
+        self.nodes._llm_tracker = llm_tracker
+        
         state = QueryState(question=question, app_id=app_id)
-        final: QueryState = self.graph.invoke(state)  # type: ignore
+        result = self.graph.invoke(state)
+        
+        # Handle both dict and QueryState returns from LangGraph
+        if isinstance(result, dict):
+            # Convert dict to QueryState
+            final = QueryState(**result)
+        else:
+            final = result
+        
+        # Get LLM usage summary and add to state
+        llm_summary = llm_tracker.get_summary()
+        final.llm_usage = llm_summary
+        
+        # Log summary
+        logger.info(
+            f"💰 [llm-tracker:summary] Total: {llm_summary['total_calls']} calls, "
+            f"{llm_summary['total_tokens']:,} tokens, "
+            f"${llm_summary['total_cost_usd']:.6f}, "
+            f"{llm_summary['total_latency_ms']:.1f}ms"
+        )
+        
+        # Log by stage
+        for stage, data in llm_summary.get('by_stage', {}).items():
+            logger.info(
+                f"💰 [llm-tracker:stage:{stage}] {data['calls']} calls, "
+                f"{data['tokens']:,} tokens, ${data['cost_usd']:.6f}"
+            )
+        
         logger.info("[supervisor] orchestration complete")
         return final
 
