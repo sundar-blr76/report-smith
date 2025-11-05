@@ -32,6 +32,8 @@ Successfully implemented comprehensive LLM-driven enhancements to the NL→SQL e
 - Captures filters, transformations, and assumptions separately
 - Supports all predicate coercion formats (dates, currency, booleans)
 
+**UI Integration Note**: The extraction summary information should be exposed to users in the UI to provide transparency about what data was retrieved and any transformations applied.
+
 **Test Coverage**: 4 test cases
 - Basic summary generation
 - Date coercion summary (Q4 2025)

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,7 +41,7 @@ class ColumnOrdering:
 
 
 @dataclass
-class ValidationResult:
+class SqlValidationResult:
     """Result of SQL validation iteration."""
     
     iteration: int
@@ -55,7 +54,7 @@ class ValidationResult:
 
 
 @dataclass
-class ExtractionSummary:
+class ReportExtractionSummary:
     """Natural language summary of extraction action."""
     
     summary: str
@@ -64,7 +63,7 @@ class ExtractionSummary:
     assumptions: List[str] = field(default_factory=list)
 
 
-class ExtractionEnhancer:
+class SqlEnhancer:
     """
     Enhances SQL extraction with LLM-driven features.
     
@@ -310,7 +309,7 @@ class ExtractionEnhancer:
         entities: List[Dict[str, Any]],
         filters: List[str],
         coercions: Optional[List[PredicateCoercion]] = None,
-    ) -> ExtractionSummary:
+    ) -> ReportExtractionSummary:
         """
         Generate natural language summary of extraction (FR-1).
         
@@ -322,10 +321,10 @@ class ExtractionEnhancer:
             coercions: Predicate coercions applied
             
         Returns:
-            ExtractionSummary with human-readable description
+            ReportExtractionSummary with human-readable description
         """
         if not self.enable_summary or not self.llm_client:
-            return ExtractionSummary(summary="Query executed successfully.")
+            return ReportExtractionSummary(summary="Query executed successfully.")
         
         logger.info("[extraction-enhancer] generating extraction summary")
         
@@ -372,7 +371,7 @@ Return JSON:
             result_text, metrics = self._call_llm(prompt)
             result = json.loads(result_text)
             
-            summary = ExtractionSummary(
+            summary = ReportExtractionSummary(
                 summary=result.get("summary", "Query executed."),
                 filters_applied=result.get("filters_applied", []),
                 transformations=result.get("transformations", []),
@@ -388,7 +387,7 @@ Return JSON:
         
         except Exception as e:
             logger.warning(f"[extraction-enhancer] summary generation failed: {e}")
-            return ExtractionSummary(summary="Query executed successfully.")
+            return ReportExtractionSummary(summary="Query executed successfully.")
     
     def determine_column_order(
         self,
@@ -563,7 +562,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         intent: Dict[str, Any],
         sql_executor,
         schema_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[str, List[ValidationResult]]:
+    ) -> Tuple[str, List[SqlValidationResult]]:
         """
         Iteratively validate and refine SQL (FR-4).
         
@@ -587,7 +586,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         if not self._is_read_only_sql(sql):
             logger.error("[extraction-enhancer] SQL contains DDL/DML operations, rejecting")
             return sql, [
-                ValidationResult(
+                SqlValidationResult(
                     iteration=0,
                     valid=False,
                     issues=["SQL contains unsafe DDL/DML operations"],
@@ -645,7 +644,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             if not issues and not warnings:
                 logger.info("[extraction-enhancer] validation successful")
                 validation_history.append(
-                    ValidationResult(
+                    SqlValidationResult(
                         iteration=iteration + 1,
                         valid=True,
                         issues=[],
@@ -673,7 +672,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     if not self._is_read_only_sql(refined_sql):
                         logger.error("[extraction-enhancer] Refined SQL contains unsafe operations, rejecting")
                         validation_history.append(
-                            ValidationResult(
+                            SqlValidationResult(
                                 iteration=iteration + 1,
                                 valid=False,
                                 issues=issues + ["Refined SQL contains unsafe DDL/DML operations"],
@@ -685,7 +684,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     
                     logger.info("[extraction-enhancer] SQL refined by LLM")
                     validation_history.append(
-                        ValidationResult(
+                        SqlValidationResult(
                             iteration=iteration + 1,
                             valid=False,
                             issues=issues,
@@ -700,7 +699,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                     # No refinement suggested, break
                     logger.info("[extraction-enhancer] no further refinement suggested")
                     validation_history.append(
-                        ValidationResult(
+                        SqlValidationResult(
                             iteration=iteration + 1,
                             valid=len(issues) == 0,
                             issues=issues,
@@ -758,7 +757,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             sql = re.sub(r'\bLIMIT\s+\d+', f'LIMIT {limit}', sql, flags=re.IGNORECASE)
         else:
             # Add LIMIT
-            sql = f"{sql}\n LIMIT {limit}"
+            sql = f"{sql}\nLIMIT {limit}"
         return sql
     
     def _extract_expected_columns(self, entities: List[Dict[str, Any]]) -> List[str]:

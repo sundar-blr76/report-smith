@@ -11,7 +11,7 @@ import re
 
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
-from reportsmith.query_processing.extraction_enhancer import ExtractionEnhancer
+from reportsmith.query_processing.extraction_enhancer import SqlEnhancer
 
 logger = get_logger(__name__)
 
@@ -153,7 +153,7 @@ class SQLGenerator:
         # Initialize extraction enhancer if LLM client available
         self.enhancer = None
         if llm_client and enable_extraction_enhancement:
-            self.enhancer = ExtractionEnhancer(
+            self.enhancer = SqlEnhancer(
                 llm_client=llm_client,
                 max_iterations=3,
                 sample_size=10,

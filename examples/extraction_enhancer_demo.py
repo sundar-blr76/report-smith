@@ -24,7 +24,7 @@ def example_summary_generation():
     
     # from openai import OpenAI
     # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    # enhancer = ExtractionEnhancer(llm_client=client)
+    # enhancer = SqlEnhancer(llm_client=client)
     
     # For demonstration, we'll show the expected behavior
     print("\nScenario: User asks 'Show AUM for equity funds in Q4 2025'")

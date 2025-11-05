@@ -10,19 +10,19 @@ Tests cover:
 
 import json
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 from reportsmith.query_processing.extraction_enhancer import (
-    ExtractionEnhancer,
+    SqlEnhancer,
     PredicateCoercion,
     ColumnOrdering,
-    ValidationResult,
-    ExtractionSummary,
+    SqlValidationResult,
+    ReportExtractionSummary,
 )
 
 
-class TestExtractionEnhancer:
-    """Test suite for ExtractionEnhancer class."""
+class TestSqlEnhancer:
+    """Test suite for SqlEnhancer class."""
     
     @pytest.fixture
     def mock_llm_client(self):
@@ -37,8 +37,8 @@ class TestExtractionEnhancer:
     
     @pytest.fixture
     def enhancer(self, mock_llm_client):
-        """Create ExtractionEnhancer instance for testing."""
-        return ExtractionEnhancer(
+        """Create SqlEnhancer instance for testing."""
+        return SqlEnhancer(
             llm_client=mock_llm_client,
             max_iterations=3,
             sample_size=10,
@@ -55,26 +55,26 @@ class TestExtractionEnhancer:
     
     def test_provider_detection_openai(self, mock_llm_client):
         """Test OpenAI provider detection."""
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         assert enhancer.provider == "openai"
     
     def test_provider_detection_anthropic(self):
         """Test Anthropic provider detection."""
         client = Mock()
         client.messages = Mock()
-        enhancer = ExtractionEnhancer(llm_client=client)
+        enhancer = SqlEnhancer(llm_client=client)
         assert enhancer.provider == "anthropic"
     
     def test_provider_detection_gemini(self):
         """Test Gemini provider detection."""
         client = Mock()
         # No chat.completions or messages attribute
-        enhancer = ExtractionEnhancer(llm_client=client)
+        enhancer = SqlEnhancer(llm_client=client)
         assert enhancer.provider == "gemini"
     
     def test_provider_detection_none(self):
         """Test no provider case."""
-        enhancer = ExtractionEnhancer(llm_client=None)
+        enhancer = SqlEnhancer(llm_client=None)
         assert enhancer.provider == "none"
 
 
@@ -109,7 +109,7 @@ class TestSummaryGeneration:
     
     def test_summary_generation_basic(self, mock_llm_client):
         """Test basic summary generation."""
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         summary = enhancer.generate_summary(
             question="Show AUM for equity funds",
@@ -121,7 +121,7 @@ class TestSummaryGeneration:
             filters=["fund_type = 'Equity Growth'"],
         )
         
-        assert isinstance(summary, ExtractionSummary)
+        assert isinstance(summary, ReportExtractionSummary)
         assert "AUM" in summary.summary or "equity" in summary.summary.lower()
         assert len(summary.filters_applied) > 0
     
@@ -144,7 +144,7 @@ class TestSummaryGeneration:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercions = [
             PredicateCoercion(
@@ -184,7 +184,7 @@ class TestSummaryGeneration:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercions = [
             PredicateCoercion(
@@ -207,7 +207,7 @@ class TestSummaryGeneration:
     
     def test_summary_disabled(self):
         """Test summary generation when disabled."""
-        enhancer = ExtractionEnhancer(llm_client=None, enable_summary=False)
+        enhancer = SqlEnhancer(llm_client=None, enable_summary=False)
         
         summary = enhancer.generate_summary(
             question="Test",
@@ -252,7 +252,7 @@ class TestColumnOrdering:
     
     def test_column_ordering_basic(self, mock_llm_client):
         """Test basic column ordering."""
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         columns = [
             {"table": "funds", "column": "total_aum", "aggregation": "sum"},
@@ -276,7 +276,7 @@ class TestColumnOrdering:
     
     def test_column_ordering_disabled(self):
         """Test column ordering when disabled."""
-        enhancer = ExtractionEnhancer(llm_client=None, enable_ordering=False)
+        enhancer = SqlEnhancer(llm_client=None, enable_ordering=False)
         
         columns = [
             {"table": "funds", "column": "total_aum"},
@@ -322,7 +322,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="report_date",
@@ -356,7 +356,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="transaction_date",
@@ -386,7 +386,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="total_aum",
@@ -417,7 +417,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="amount",
@@ -447,7 +447,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="is_active",
@@ -477,7 +477,7 @@ class TestPredicateCoercion:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="is_verified",
@@ -491,7 +491,7 @@ class TestPredicateCoercion:
     
     def test_predicate_coercion_disabled(self):
         """Test predicate coercion when disabled."""
-        enhancer = ExtractionEnhancer(llm_client=None, enable_coercion=False)
+        enhancer = SqlEnhancer(llm_client=None, enable_coercion=False)
         
         coercion = enhancer.coerce_predicate_value(
             column_name="test",
@@ -541,7 +541,7 @@ class TestSQLValidation:
     
     def test_validation_success_no_iteration(self, mock_llm_client, mock_sql_executor):
         """Test validation succeeds without iteration."""
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client)
         
         sql = "SELECT fund_id, fund_name, total_aum FROM funds WHERE is_active = true"
         
@@ -585,7 +585,7 @@ class TestSQLValidation:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client, max_iterations=2)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client, max_iterations=2)
         
         sql = "SELECTT fund_id FROM funds"
         
@@ -626,7 +626,7 @@ class TestSQLValidation:
         
         mock_llm_client.chat.completions.create = Mock(return_value=mock_response)
         
-        enhancer = ExtractionEnhancer(llm_client=mock_llm_client, max_iterations=3)
+        enhancer = SqlEnhancer(llm_client=mock_llm_client, max_iterations=3)
         
         sql = "SELECT * FROM funds"
         
@@ -643,7 +643,7 @@ class TestSQLValidation:
     
     def test_validation_disabled(self, mock_sql_executor):
         """Test validation when disabled."""
-        enhancer = ExtractionEnhancer(llm_client=None, enable_validation=False)
+        enhancer = SqlEnhancer(llm_client=None, enable_validation=False)
         
         sql = "SELECT * FROM funds"
         
@@ -668,7 +668,7 @@ class TestSafetyAndCompliance:
         client = Mock()
         client.chat = Mock()
         client.chat.completions = Mock()
-        return ExtractionEnhancer(
+        return SqlEnhancer(
             llm_client=client,
             rate_limit_rpm=10,
             cost_cap_tokens=1000,
@@ -774,7 +774,7 @@ class TestSafetyAndCompliance:
         client.chat = Mock()
         client.chat.completions = Mock()
         
-        enhancer = ExtractionEnhancer(llm_client=client)
+        enhancer = SqlEnhancer(llm_client=client)
         
         sql_executor = Mock()
         
