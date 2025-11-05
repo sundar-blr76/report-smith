@@ -662,24 +662,137 @@ class TestSQLValidation:
 class TestSafetyAndCompliance:
     """Test safety features and compliance requirements."""
     
-    def test_no_ddl_execution(self):
-        """Ensure no DDL/DML is executed during validation."""
-        # This is enforced by using EXPLAIN and read-only execution
-        # The validate_sql method should use EXPLAIN, not actual execution
-        # The execute_query should be called with LIMIT clause for safety
-        pass  # Implementation verified in validation flow
+    @pytest.fixture
+    def enhancer(self):
+        """Create enhancer for testing."""
+        client = Mock()
+        client.chat = Mock()
+        client.chat.completions = Mock()
+        return ExtractionEnhancer(
+            llm_client=client,
+            rate_limit_rpm=10,
+            cost_cap_tokens=1000,
+        )
     
-    def test_rate_limiting_placeholder(self):
-        """Placeholder for rate limiting tests."""
-        # Rate limiting should be implemented at the LLM client level
-        # or in the enhancer's _call_llm method
-        pass
+    def test_read_only_sql_select(self, enhancer):
+        """Test read-only check passes for SELECT."""
+        sql = "SELECT * FROM funds WHERE is_active = true"
+        assert enhancer._is_read_only_sql(sql) is True
     
-    def test_cost_cap_placeholder(self):
-        """Placeholder for cost cap tests."""
-        # Cost caps should track token usage across iterations
-        # and stop if budget is exceeded
-        pass
+    def test_read_only_sql_with_cte(self, enhancer):
+        """Test read-only check passes for WITH (CTE)."""
+        sql = """
+        WITH fund_totals AS (
+            SELECT fund_type, SUM(total_aum) AS total
+            FROM funds
+            GROUP BY fund_type
+        )
+        SELECT * FROM fund_totals
+        """
+        assert enhancer._is_read_only_sql(sql) is True
+    
+    def test_read_only_sql_insert(self, enhancer):
+        """Test read-only check fails for INSERT."""
+        sql = "INSERT INTO funds (fund_name) VALUES ('Test')"
+        assert enhancer._is_read_only_sql(sql) is False
+    
+    def test_read_only_sql_update(self, enhancer):
+        """Test read-only check fails for UPDATE."""
+        sql = "UPDATE funds SET is_active = false WHERE fund_id = 1"
+        assert enhancer._is_read_only_sql(sql) is False
+    
+    def test_read_only_sql_delete(self, enhancer):
+        """Test read-only check fails for DELETE."""
+        sql = "DELETE FROM funds WHERE fund_id = 1"
+        assert enhancer._is_read_only_sql(sql) is False
+    
+    def test_read_only_sql_drop(self, enhancer):
+        """Test read-only check fails for DROP."""
+        sql = "DROP TABLE funds"
+        assert enhancer._is_read_only_sql(sql) is False
+    
+    def test_read_only_sql_create(self, enhancer):
+        """Test read-only check fails for CREATE."""
+        sql = "CREATE TABLE test (id INT)"
+        assert enhancer._is_read_only_sql(sql) is False
+    
+    def test_read_only_sql_column_with_insert_keyword(self, enhancer):
+        """Test read-only check doesn't false positive on column names."""
+        # Column named INSERT_DATE should not trigger false positive
+        sql = "SELECT fund_id, INSERT_DATE FROM funds"
+        assert enhancer._is_read_only_sql(sql) is True
+    
+    def test_rate_limiting(self, enhancer):
+        """Test rate limiting functionality."""
+        import time
+        
+        # Reset tracking
+        enhancer.reset_usage_tracking()
+        
+        # Should allow initial requests up to limit
+        for i in range(10):
+            assert enhancer._check_rate_limit() is True
+            enhancer._request_timestamps.append(time.time())
+        
+        # 11th request should fail
+        assert enhancer._check_rate_limit() is False
+    
+    def test_cost_cap(self, enhancer):
+        """Test cost cap functionality."""
+        # Reset tracking
+        enhancer.reset_usage_tracking()
+        
+        # Use 500 tokens
+        assert enhancer._check_cost_cap(500) is True
+        enhancer._total_tokens_used = 500
+        
+        # Another 400 tokens should pass (900 total)
+        assert enhancer._check_cost_cap(400) is True
+        enhancer._total_tokens_used = 900
+        
+        # Another 200 tokens should fail (would be 1100 total, over 1000 cap)
+        assert enhancer._check_cost_cap(200) is False
+    
+    def test_usage_tracking_reset(self, enhancer):
+        """Test usage tracking reset."""
+        import time
+        
+        # Add some usage
+        enhancer._request_timestamps.append(time.time())
+        enhancer._total_tokens_used = 500
+        
+        # Reset
+        enhancer.reset_usage_tracking()
+        
+        # Should be cleared
+        assert len(enhancer._request_timestamps) == 0
+        assert enhancer._total_tokens_used == 0
+    
+    def test_validation_rejects_unsafe_sql(self):
+        """Test validation rejects SQL with DDL/DML."""
+        client = Mock()
+        client.chat = Mock()
+        client.chat.completions = Mock()
+        
+        enhancer = ExtractionEnhancer(llm_client=client)
+        
+        sql_executor = Mock()
+        
+        # Try to validate an INSERT statement
+        sql = "INSERT INTO funds (fund_name) VALUES ('Malicious')"
+        
+        final_sql, history = enhancer.validate_and_refine_sql(
+            question="Test",
+            sql=sql,
+            entities=[],
+            intent={"type": "list"},
+            sql_executor=sql_executor,
+        )
+        
+        # Should reject immediately
+        assert len(history) == 1
+        assert history[0].valid is False
+        assert any("DDL/DML" in issue for issue in history[0].issues)
 
 
 if __name__ == "__main__":

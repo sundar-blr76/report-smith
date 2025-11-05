@@ -84,6 +84,8 @@ class ExtractionEnhancer:
         enable_summary: bool = True,
         enable_ordering: bool = True,
         enable_coercion: bool = True,
+        rate_limit_rpm: int = 60,  # Requests per minute
+        cost_cap_tokens: int = 100000,  # Max tokens per request
     ):
         """
         Initialize extraction enhancer.
@@ -96,6 +98,8 @@ class ExtractionEnhancer:
             enable_summary: Enable summary generation (FR-1)
             enable_ordering: Enable column ordering (FR-2)
             enable_coercion: Enable predicate coercion (FR-3)
+            rate_limit_rpm: Rate limit in requests per minute (default: 60)
+            cost_cap_tokens: Cost cap in total tokens per request (default: 100k)
         """
         self.llm_client = llm_client
         self.max_iterations = max_iterations
@@ -104,13 +108,71 @@ class ExtractionEnhancer:
         self.enable_summary = enable_summary
         self.enable_ordering = enable_ordering
         self.enable_coercion = enable_coercion
+        self.rate_limit_rpm = rate_limit_rpm
+        self.cost_cap_tokens = cost_cap_tokens
+        
+        # Rate limiting state
+        self._request_timestamps = []
+        self._total_tokens_used = 0
         
         # Detect LLM provider type
         self.provider = self._detect_provider()
         logger.info(
             f"[extraction-enhancer] initialized with provider={self.provider}, "
-            f"max_iterations={max_iterations}, sample_size={sample_size}"
+            f"max_iterations={max_iterations}, sample_size={sample_size}, "
+            f"rate_limit={rate_limit_rpm} rpm, cost_cap={cost_cap_tokens} tokens"
         )
+    
+    def _check_rate_limit(self) -> bool:
+        """
+        Check if rate limit is exceeded.
+        
+        Returns:
+            True if within rate limit, False if exceeded
+        """
+        import time
+        
+        now = time.time()
+        # Remove timestamps older than 1 minute
+        self._request_timestamps = [
+            ts for ts in self._request_timestamps if now - ts < 60
+        ]
+        
+        if len(self._request_timestamps) >= self.rate_limit_rpm:
+            logger.warning(
+                f"[extraction-enhancer] rate limit exceeded: "
+                f"{len(self._request_timestamps)}/{self.rate_limit_rpm} requests in last minute"
+            )
+            return False
+        
+        return True
+    
+    def _check_cost_cap(self, additional_tokens: int = 0) -> bool:
+        """
+        Check if cost cap is exceeded.
+        
+        Args:
+            additional_tokens: Estimated tokens for next request
+            
+        Returns:
+            True if within cost cap, False if exceeded
+        """
+        estimated_total = self._total_tokens_used + additional_tokens
+        
+        if estimated_total > self.cost_cap_tokens:
+            logger.warning(
+                f"[extraction-enhancer] cost cap exceeded: "
+                f"{estimated_total}/{self.cost_cap_tokens} tokens"
+            )
+            return False
+        
+        return True
+    
+    def reset_usage_tracking(self):
+        """Reset usage tracking for new request."""
+        self._request_timestamps = []
+        self._total_tokens_used = 0
+        logger.debug("[extraction-enhancer] usage tracking reset")
     
     def _detect_provider(self) -> str:
         """Detect LLM provider type."""
@@ -138,7 +200,22 @@ class ExtractionEnhancer:
         if not self.llm_client:
             raise ValueError("LLM client not configured")
         
+        # Check rate limit
+        if not self._check_rate_limit():
+            raise RuntimeError("Rate limit exceeded, please retry later")
+        
+        # Estimate token usage (rough approximation: 1 token ~= 4 chars)
+        estimated_tokens = len(prompt) // 4 + 200  # Prompt + expected response
+        
+        # Check cost cap
+        if not self._check_cost_cap(estimated_tokens):
+            raise RuntimeError("Cost cap exceeded for this request")
+        
+        import time
         t0 = time.perf_counter()
+        
+        # Record request timestamp for rate limiting
+        self._request_timestamps.append(time.time())
         
         try:
             if self.provider == "openai":
@@ -158,6 +235,8 @@ class ExtractionEnhancer:
                     "completion": response.usage.completion_tokens,
                     "total": response.usage.total_tokens,
                 }
+                # Update total tokens used
+                self._total_tokens_used += tokens["total"]
             
             elif self.provider == "anthropic":
                 model = model or "claude-3-haiku-20240307"
@@ -178,6 +257,8 @@ class ExtractionEnhancer:
                     "completion": response.usage.output_tokens,
                     "total": response.usage.input_tokens + response.usage.output_tokens,
                 }
+                # Update total tokens used
+                self._total_tokens_used += tokens["total"]
             
             else:  # gemini
                 import google.generativeai as genai
@@ -189,7 +270,14 @@ class ExtractionEnhancer:
                 response = self.llm_client.generate_content(prompt, generation_config=gen_config)
                 result_text = response.text
                 # Gemini doesn't provide token counts in the same way
-                tokens = {"prompt": 0, "completion": 0, "total": 0}
+                # Use rough estimate
+                tokens = {
+                    "prompt": len(prompt) // 4,
+                    "completion": len(result_text) // 4,
+                    "total": (len(prompt) + len(result_text)) // 4,
+                }
+                # Update total tokens used (estimate)
+                self._total_tokens_used += tokens["total"]
             
             dt_ms = (time.perf_counter() - t0) * 1000.0
             
@@ -200,7 +288,13 @@ class ExtractionEnhancer:
                 "prompt_chars": len(prompt),
                 "response_chars": len(result_text),
                 "tokens": tokens,
+                "total_tokens_used": self._total_tokens_used,
             }
+            
+            logger.debug(
+                f"[extraction-enhancer] LLM call: {tokens['total']} tokens, "
+                f"total used: {self._total_tokens_used}/{self.cost_cap_tokens}"
+            )
             
             return result_text, metrics
         
@@ -489,6 +583,18 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         
         logger.info("[extraction-enhancer] starting iterative SQL validation")
         
+        # Safety check: ensure SQL is read-only (no DDL/DML)
+        if not self._is_read_only_sql(sql):
+            logger.error("[extraction-enhancer] SQL contains DDL/DML operations, rejecting")
+            return sql, [
+                ValidationResult(
+                    iteration=0,
+                    valid=False,
+                    issues=["SQL contains unsafe DDL/DML operations"],
+                    reasoning="Safety violation: only SELECT queries are allowed",
+                )
+            ]
+        
         validation_history = []
         current_sql = sql
         
@@ -504,30 +610,36 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                 issues.append(f"Syntax error: {validation.get('error')}")
                 logger.warning(f"[extraction-enhancer] SQL syntax invalid: {validation.get('error')}")
             
-            # Step 2: Limited execution test (LIMIT 5)
+            # Step 2: Limited execution test (LIMIT 5) - sandboxed
             if validation.get("valid"):
                 test_sql = self._add_limit(current_sql, 5)
-                exec_result = sql_executor.execute_query(test_sql, max_rows=5)
                 
-                if exec_result.get("error"):
-                    issues.append(f"Execution error: {exec_result.get('error')}")
-                    logger.warning(f"[extraction-enhancer] SQL execution failed: {exec_result.get('error')}")
+                # Double-check test SQL is still read-only
+                if not self._is_read_only_sql(test_sql):
+                    issues.append("Safety violation: SQL modified to non-read-only")
+                    logger.error("[extraction-enhancer] Test SQL safety check failed")
                 else:
-                    # Check for semantic issues
-                    columns_returned = exec_result.get("columns", [])
-                    rows_returned = exec_result.get("row_count", 0)
+                    exec_result = sql_executor.execute_query(test_sql, max_rows=5)
                     
-                    logger.info(
-                        f"[extraction-enhancer] test execution: {rows_returned} rows, "
-                        f"{len(columns_returned)} columns"
-                    )
-                    
-                    # Check if expected entities are in output
-                    expected_columns = self._extract_expected_columns(entities)
-                    missing_columns = [col for col in expected_columns if col not in columns_returned]
-                    
-                    if missing_columns:
-                        warnings.append(f"Missing expected columns: {missing_columns}")
+                    if exec_result.get("error"):
+                        issues.append(f"Execution error: {exec_result.get('error')}")
+                        logger.warning(f"[extraction-enhancer] SQL execution failed: {exec_result.get('error')}")
+                    else:
+                        # Check for semantic issues
+                        columns_returned = exec_result.get("columns", [])
+                        rows_returned = exec_result.get("row_count", 0)
+                        
+                        logger.info(
+                            f"[extraction-enhancer] test execution: {rows_returned} rows, "
+                            f"{len(columns_returned)} columns"
+                        )
+                        
+                        # Check if expected entities are in output
+                        expected_columns = self._extract_expected_columns(entities)
+                        missing_columns = [col for col in expected_columns if col not in columns_returned]
+                        
+                        if missing_columns:
+                            warnings.append(f"Missing expected columns: {missing_columns}")
             
             # If no issues, we're done
             if not issues and not warnings:
@@ -557,6 +669,20 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                 )
                 
                 if refined_sql and refined_sql != current_sql:
+                    # Safety check refined SQL
+                    if not self._is_read_only_sql(refined_sql):
+                        logger.error("[extraction-enhancer] Refined SQL contains unsafe operations, rejecting")
+                        validation_history.append(
+                            ValidationResult(
+                                iteration=iteration + 1,
+                                valid=False,
+                                issues=issues + ["Refined SQL contains unsafe DDL/DML operations"],
+                                warnings=warnings,
+                                reasoning="Refined SQL rejected due to safety violation",
+                            )
+                        )
+                        break
+                    
                     logger.info("[extraction-enhancer] SQL refined by LLM")
                     validation_history.append(
                         ValidationResult(
@@ -589,6 +715,40 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         )
         
         return current_sql, validation_history
+    
+    def _is_read_only_sql(self, sql: str) -> bool:
+        """
+        Check if SQL is read-only (SELECT only, no DDL/DML).
+        
+        Args:
+            sql: SQL query to check
+            
+        Returns:
+            True if read-only, False otherwise
+        """
+        sql_upper = sql.upper().strip()
+        
+        # Must start with SELECT or WITH (for CTEs)
+        if not (sql_upper.startswith("SELECT") or sql_upper.startswith("WITH")):
+            return False
+        
+        # Forbidden keywords that indicate DDL/DML
+        forbidden_keywords = [
+            "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER",
+            "TRUNCATE", "REPLACE", "MERGE", "GRANT", "REVOKE",
+            "EXEC", "EXECUTE", "CALL", "PROCEDURE",
+        ]
+        
+        for keyword in forbidden_keywords:
+            # Use word boundaries to avoid false positives
+            # e.g., don't match "INSERT" in column name "INSERT_DATE"
+            if re.search(r'\b' + keyword + r'\b', sql_upper):
+                logger.warning(
+                    f"[extraction-enhancer] SQL contains forbidden keyword: {keyword}"
+                )
+                return False
+        
+        return True
     
     def _add_limit(self, sql: str, limit: int) -> str:
         """Add LIMIT clause to SQL if not present."""
