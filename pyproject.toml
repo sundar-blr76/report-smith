@@ -69,6 +69,9 @@ disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Add src to Python path for test imports
+# Note: This works alongside editable install (pip install -e .)
+pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

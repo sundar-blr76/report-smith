@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
 Test script for SQL generation with LLM context column enrichment.
+
+Note: This is a standalone integration test script, not a pytest test.
+It requires the API server to be running.
 """
 import requests
 import json
 import time
+from pathlib import Path
 
 # Test query that should trigger context column enrichment
 test_query = "List the top 5 clients by total fees paid on bond funds in Q1 2025"
@@ -62,10 +66,13 @@ try:
         print(explanation)
         print()
         
-        # Save full response to file
-        with open("/home/sundar/sundar_projects/report-smith/logs/test_sql_enrichment_result.json", "w") as f:
+        # Save full response to file (portable path from project root)
+        log_dir = Path(__file__).parent.parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / "test_sql_enrichment_result.json"
+        with open(log_file, "w") as f:
             json.dump(result, f, indent=2)
-        print("Full response saved to logs/test_sql_enrichment_result.json")
+        print(f"Full response saved to {log_file}")
         
     else:
         print(f"ERROR: Status code {response.status_code}")

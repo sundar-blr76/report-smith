@@ -27,10 +27,9 @@ def test_local_entity_mapping_with_priority():
     assert mapping.source_notes == "Primary source for AUM"
 
 
-def test_entity_mappings_loaded_with_priority():
+def test_entity_mappings_loaded_with_priority(project_root):
     """Test that entity mappings are loaded with priority information from YAML."""
     # Find the entity mappings file
-    project_root = Path(__file__).parent.parent
     mappings_file = project_root / "config" / "entity_mappings.yaml"
     
     if not mappings_file.exists():

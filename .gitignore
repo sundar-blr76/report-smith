@@ -79,10 +79,30 @@ api_keys.txt
 temp/
 tmp/
 .tmp/
+
 # User-specific profile and preferences (private)
 config/user_profile.yaml
 user_profile.yaml
 *.user.yaml
+
+# Example logs
 examples/logs/
-# Ignore example logs
 examples/logs/*.log
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Debug files
+logs/semantic_debug/
+*.debug.json
+
