@@ -1012,6 +1012,35 @@ class AgentNodes:
                 plan=state.plan,
             )
 
+            # Perform iterative validation and refinement if enhancer is available
+            validation_history = []
+            if hasattr(self.sql_generator, 'enhancer') and self.sql_generator.enhancer:
+                logger.info("[sql-gen] performing iterative validation")
+                refined_sql, validation_history = self.sql_generator.enhancer.validate_and_refine_sql(
+                    question=state.question,
+                    sql=sql_result.get("sql", ""),
+                    entities=state.entities,
+                    intent=state.intent,
+                    sql_executor=self.sql_executor,
+                )
+                
+                if refined_sql != sql_result.get("sql"):
+                    logger.info("[sql-gen] SQL refined through validation")
+                    sql_result["sql"] = refined_sql
+                
+                # Add validation history to result
+                sql_result["validation_history"] = [
+                    {
+                        "iteration": v.iteration,
+                        "valid": v.valid,
+                        "issues": v.issues,
+                        "warnings": v.warnings,
+                        "reasoning": v.reasoning,
+                        "token_usage": v.token_usage,
+                    }
+                    for v in validation_history
+                ]
+            
             state.sql = sql_result
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["sql_ms"] = round(dt_ms, 2)
@@ -1022,6 +1051,26 @@ class AgentNodes:
                 f"[sql-gen] generated SQL query ({len(sql_text)} chars) in {dt_ms:.1f}ms"
             )
             logger.info(f"[sql-gen] SQL:\n{sql_text}")
+
+            # Log extraction summary if available
+            summary = sql_result.get("extraction_summary")
+            if summary:
+                logger.info(f"[sql-gen] extraction summary: {summary.get('summary')}")
+            
+            # Log column ordering if available
+            ordering = sql_result.get("column_ordering")
+            if ordering:
+                logger.info(
+                    f"[sql-gen] column ordering: {len(ordering.get('ordered_columns', []))} columns, "
+                    f"reasoning: {ordering.get('reasoning', '')[:100]}"
+                )
+            
+            # Log validation results if available
+            if validation_history:
+                logger.info(
+                    f"[sql-gen] validation: {len(validation_history)} iteration(s), "
+                    f"final status: {'valid' if validation_history[-1].valid else 'issues remaining'}"
+                )
 
             # Log explanation
             explanation = sql_result.get("explanation", "")

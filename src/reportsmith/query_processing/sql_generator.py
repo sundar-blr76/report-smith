@@ -11,6 +11,7 @@ import re
 
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
+from reportsmith.query_processing.extraction_enhancer import ExtractionEnhancer
 
 logger = get_logger(__name__)
 
@@ -140,9 +141,24 @@ class SQLGenerator:
     - Enrich with implicit context columns using LLM
     """
 
-    def __init__(self, knowledge_graph: SchemaKnowledgeGraph, llm_client=None):
+    def __init__(
+        self,
+        knowledge_graph: SchemaKnowledgeGraph,
+        llm_client=None,
+        enable_extraction_enhancement: bool = True,
+    ):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
+        
+        # Initialize extraction enhancer if LLM client available
+        self.enhancer = None
+        if llm_client and enable_extraction_enhancement:
+            self.enhancer = ExtractionEnhancer(
+                llm_client=llm_client,
+                max_iterations=3,
+                sample_size=10,
+            )
+            logger.info("[sql-gen] extraction enhancer initialized")
 
     def generate(
         self,
@@ -218,6 +234,34 @@ class SQLGenerator:
                 joins=joins,
                 where_conditions=where_conditions,
             )
+            
+            # Generate extraction summary using LLM (FR-1)
+            extraction_summary = None
+            if self.enhancer:
+                extraction_summary = self.enhancer.generate_summary(
+                    question=question,
+                    sql=sql_text,
+                    entities=entities,
+                    filters=filters,
+                )
+            
+            # Determine column ordering using LLM (FR-2)
+            column_ordering = None
+            if self.enhancer:
+                column_metadata = [
+                    {
+                        "table": col.table,
+                        "column": col.column,
+                        "aggregation": col.aggregation,
+                        "alias": col.alias,
+                    }
+                    for col in select_columns
+                ]
+                column_ordering = self.enhancer.determine_column_order(
+                    question=question,
+                    columns=column_metadata,
+                    intent_type=intent_type,
+                )
 
             return {
                 "sql": sql_text,
@@ -230,6 +274,24 @@ class SQLGenerator:
                     "aggregations": aggregations,
                     "columns_count": len(select_columns),
                 },
+                "extraction_summary": (
+                    {
+                        "summary": extraction_summary.summary,
+                        "filters_applied": extraction_summary.filters_applied,
+                        "transformations": extraction_summary.transformations,
+                        "assumptions": extraction_summary.assumptions,
+                    }
+                    if extraction_summary
+                    else None
+                ),
+                "column_ordering": (
+                    {
+                        "ordered_columns": column_ordering.ordered_columns,
+                        "reasoning": column_ordering.reasoning,
+                    }
+                    if column_ordering
+                    else None
+                ),
             }
 
         except Exception as e:
