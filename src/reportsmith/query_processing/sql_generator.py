@@ -786,35 +786,67 @@ class SQLGenerator:
         for ent in dimension_entities:
             table = ent.get("table")
             column = ent.get("column")
-            value = None
-
+            
             # Try to get value from entity metadata
             md = (ent.get("top_match") or {}).get("metadata") or {}
             if not table:
                 table = md.get("table")
             if not column:
                 column = md.get("column")
-
-            # Get the actual domain value
-            value = md.get("value") or ent.get("text")
-
-            if table and column and value:
-                key = f"{table}.{column}"
-
-                # Check if this column has a negation filter from intent
-                filter_info = filter_metadata.get(column, {})
-                operator = filter_info.get("operator", "=")
-                is_negation = operator in ("!=", "NOT IN", "NOT LIKE")
-
-                if key not in dim_groups:
-                    dim_groups[key] = []
-                    dim_negations[key] = is_negation
-
-                # Escape single quotes in value
-                safe_value = value.replace("'", "''")
-                dim_groups[key].append(safe_value)
-
-                # Track this as explicitly filtered
+            
+            if not (table and column):
+                continue
+            
+            key = f"{table}.{column}"
+            
+            # Check if this column has a negation filter from intent
+            filter_info = filter_metadata.get(column, {})
+            operator = filter_info.get("operator", "=")
+            is_negation = operator in ("!=", "NOT IN", "NOT LIKE")
+            
+            if key not in dim_groups:
+                dim_groups[key] = []
+                dim_negations[key] = is_negation
+            
+            # Get ALL semantic matches for this entity (for partial matches like "equity" → ["Equity Growth", "Equity Value"])
+            semantic_matches = ent.get("semantic_matches", [])
+            
+            # Use a threshold to determine which matches to include
+            # If top match score is low (< 0.5), include all matches with similar scores
+            top_score = (ent.get("top_match") or {}).get("score", 0.0)
+            score_threshold = max(0.3, top_score * 0.8)  # Include matches within 80% of top score, min 0.3
+            
+            values_added = set()
+            for match in semantic_matches:
+                match_table = match.get("metadata", {}).get("table")
+                match_column = match.get("metadata", {}).get("column")
+                match_value = match.get("metadata", {}).get("value") or match.get("content")
+                match_score = match.get("score", 0.0)
+                
+                # Only include if it's for the same column and score is close to top match
+                if (match_table == table and match_column == column and 
+                    match_value and match_score >= score_threshold and
+                    match_value not in values_added):
+                    
+                    safe_value = match_value.replace("'", "''")
+                    dim_groups[key].append(safe_value)
+                    values_added.add(match_value)
+                    
+                    logger.debug(
+                        f"[sql-gen][where] added domain value for partial match: "
+                        f"{key} = '{match_value}' (score={match_score:.3f})"
+                    )
+            
+            # If no values were added from semantic matches, use top_match
+            if not values_added:
+                value = md.get("value") or ent.get("text")
+                if value:
+                    safe_value = value.replace("'", "''")
+                    dim_groups[key].append(safe_value)
+                    values_added.add(value)
+            
+            # Track this as explicitly filtered
+            if values_added:
                 explicitly_filtered_columns.add(key)
                 explicitly_filtered_columns.add(column)
 
