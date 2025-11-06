@@ -434,6 +434,40 @@ class SQLGenerator:
                                     f"[sql-gen][select] added display col: {table}.{col_name}"
                                 )
                                 break
+        
+        # Add essential context columns for financial queries
+        # If aggregating monetary amounts, include currency
+        monetary_columns = {'fee_amount', 'amount', 'fees', 'charges', 'price', 'cost', 'value', 'balance'}
+        has_monetary_aggregation = any(
+            col.aggregation and col.column in monetary_columns
+            for col in columns
+        )
+        
+        if has_monetary_aggregation:
+            # Find the table with currency column
+            currency_added = False
+            for col in columns:
+                if col.aggregation and col.column in monetary_columns:
+                    # Check if this table has a currency column
+                    currency_node = self.kg.nodes.get(f"{col.table}.currency")
+                    if currency_node and not any(c.column == 'currency' and c.table == col.table for c in columns):
+                        columns.append(
+                            SQLColumn(
+                                table=col.table,
+                                column='currency',
+                                alias='currency'
+                            )
+                        )
+                        logger.info(
+                            f"[sql-gen][select] ✓ Auto-added currency column for monetary aggregation: {col.table}.currency"
+                        )
+                        currency_added = True
+                        break
+            
+            if not currency_added:
+                logger.warning(
+                    "[sql-gen][select] ⚠️  Monetary aggregation detected but no currency column found in schema"
+                )
 
         return columns
 
