@@ -411,14 +411,25 @@ class HybridIntentAnalyzer:
         entities = []
         query_lower = query.lower()
         
+        # Tokenize query for comparison
+        import re
+        # Split on word boundaries, keeping alphanumeric and basic punctuation
+        query_tokens = set(re.findall(r'\b\w+\b', query_lower))
+        
+        # Track which tokens were matched
+        matched_tokens = set()
+        
         # Check for each known term in the query
         matched_terms = set()
         
         for term, mapping in self.term_to_mapping.items():
             # Check if term appears in query (whole word match)
-            import re
             pattern = r'\b' + re.escape(term) + r'\b'
             if re.search(pattern, query_lower):
+                # Track which tokens this term covers
+                term_tokens = set(re.findall(r'\b\w+\b', term))
+                matched_tokens.update(term_tokens)
+                
                 # Avoid duplicates from aliases
                 key = (mapping.canonical_name, mapping.entity_type)
                 if key not in matched_terms:
@@ -435,6 +446,35 @@ class HybridIntentAnalyzer:
                         confidence=1.0,  # Local mappings are 100% confident
                         local_mapping=mapping
                     ))
+        
+        # Log token comparison for developer comprehension
+        # Common stop words to exclude from "dropped" list
+        stop_words = {
+            'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'by', 'with', 'from',
+            'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
+            'can', 'could', 'may', 'might', 'must', 'shall',
+            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+            'my', 'your', 'his', 'her', 'its', 'our', 'their',
+            'list', 'show', 'get', 'find', 'give', 'tell', 'me', 'what', 'who', 'where',
+            'when', 'why', 'how', 'which', 'all', 'each', 'every', 'some', 'any'
+        }
+        
+        dropped_tokens = query_tokens - matched_tokens - stop_words
+        
+        if matched_tokens or dropped_tokens:
+            logger.info(
+                f"[local-mapping] Query tokens analysis:"
+            )
+            logger.info(
+                f"[local-mapping]   Matched tokens: {sorted(matched_tokens) if matched_tokens else '(none)'}"
+            )
+            logger.info(
+                f"[local-mapping]   Dropped tokens (non-stopwords): {sorted(dropped_tokens) if dropped_tokens else '(none)'}"
+            )
+            logger.debug(
+                f"[local-mapping]   Stop words filtered: {sorted(query_tokens & stop_words)}"
+            )
         
         return entities
     
@@ -467,16 +507,22 @@ class HybridIntentAnalyzer:
         # Add all local entities first (highest priority)
         merged.extend(local_entities)
         
+        # Track LLM entities for logging
+        llm_kept = []
+        llm_dropped = []
+        
         # Process LLM entities that aren't already covered by local
         for llm_entity in llm_entities:
             llm_lower = llm_entity.lower()
             
             # Check if this entity (or close variant) is already covered
             is_covered = False
+            covered_by = None
             for covered in local_covered_terms:
                 # Exact match or substring match
                 if llm_lower == covered or llm_lower in covered or covered in llm_lower:
                     is_covered = True
+                    covered_by = covered
                     break
             
             if not is_covered:
@@ -484,6 +530,26 @@ class HybridIntentAnalyzer:
                 enriched = self._enrich_with_semantic_search(llm_entity, query)
                 enriched.source = "llm"
                 merged.append(enriched)
+                llm_kept.append(llm_entity)
+            else:
+                llm_dropped.append((llm_entity, covered_by))
+        
+        # Log merge results for developer comprehension
+        if llm_entities:
+            logger.info(
+                f"[local-mapping] LLM entity merge analysis:"
+            )
+            logger.info(
+                f"[local-mapping]   LLM entities kept (not in local): {llm_kept if llm_kept else '(none)'}"
+            )
+            if llm_dropped:
+                logger.info(
+                    f"[local-mapping]   LLM entities dropped (covered by local):"
+                )
+                for llm_ent, local_term in llm_dropped:
+                    logger.info(
+                        f"[local-mapping]     '{llm_ent}' → already covered by local term '{local_term}'"
+                    )
         
         # Sort by confidence (local=1.0 always first)
         merged.sort(key=lambda x: x.confidence, reverse=True)
