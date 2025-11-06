@@ -853,34 +853,67 @@ class SQLGenerator:
         # Build conditions from grouped dimensions
         for key, values in dim_groups.items():
             is_negation = dim_negations.get(key, False)
+            
+            # Detect if this is a name/text column that should use partial matching
+            column_name = key.split(".")[-1] if "." in key else key
+            use_partial_match = any(keyword in column_name.lower() for keyword in 
+                                   ['name', 'title', 'description', 'code', 'company'])
 
             if len(values) == 1:
                 # Single value - simple equality or inequality
                 if is_negation:
-                    condition = f"{key} != '{values[0]}'"
-                    logger.debug(
-                        f"[sql-gen][where] added dimension filter (negation): {condition}"
-                    )
+                    if use_partial_match:
+                        condition = f"{key} NOT ILIKE '%{values[0]}%'"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter (negation, partial): {condition}"
+                        )
+                    else:
+                        condition = f"{key} != '{values[0]}'"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter (negation): {condition}"
+                        )
                 else:
-                    condition = f"{key} = '{values[0]}'"
-                    logger.debug(
-                        f"[sql-gen][where] added dimension filter: {condition}"
-                    )
+                    if use_partial_match:
+                        condition = f"{key} ILIKE '%{values[0]}%'"
+                        logger.info(
+                            f"[sql-gen][where] ✓ Using partial match for name column: {condition}"
+                        )
+                    else:
+                        condition = f"{key} = '{values[0]}'"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter: {condition}"
+                        )
                 conditions.append(condition)
             else:
-                # Multiple values - use IN/NOT IN clause
-                values_str = ", ".join(f"'{v}'" for v in values)
-                if is_negation:
-                    condition = f"{key} NOT IN ({values_str})"
-                    logger.debug(
-                        f"[sql-gen][where] added dimension filter (multi-value negation): {condition}"
-                    )
+                # Multiple values - use IN/NOT IN clause (or multiple ILIKE for partial matches)
+                if use_partial_match:
+                    # For partial matches with multiple values, use OR conditions with ILIKE
+                    ilike_conditions = [f"{key} ILIKE '%{v}%'" for v in values]
+                    if is_negation:
+                        condition = "(" + " AND ".join(f"{key} NOT ILIKE '%{v}%'" for v in values) + ")"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter (multi-value negation, partial): {condition}"
+                        )
+                    else:
+                        condition = "(" + " OR ".join(ilike_conditions) + ")"
+                        logger.info(
+                            f"[sql-gen][where] ✓ Using partial match for name column (multi): {condition}"
+                        )
+                    conditions.append(condition)
                 else:
-                    condition = f"{key} IN ({values_str})"
-                    logger.debug(
-                        f"[sql-gen][where] added dimension filter (multi-value): {condition}"
-                    )
-                conditions.append(condition)
+                    # Exact match with IN clause
+                    values_str = ", ".join(f"'{v}'" for v in values)
+                    if is_negation:
+                        condition = f"{key} NOT IN ({values_str})"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter (multi-value negation): {condition}"
+                        )
+                    else:
+                        condition = f"{key} IN ({values_str})"
+                        logger.debug(
+                            f"[sql-gen][where] added dimension filter (multi-value): {condition}"
+                        )
+                    conditions.append(condition)
 
         # Add any remaining explicit filters not covered by dimension entities
         processed_columns = {key.split(".")[-1] for key in dim_groups.keys()}
