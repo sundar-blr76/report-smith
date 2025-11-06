@@ -668,24 +668,35 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
                         
                         if missing_columns:
                             warnings.append(f"Missing expected columns: {missing_columns}")
+                            logger.info(f"[sql-validator] warning: {warnings[-1]}")
+            
+            # Log current validation status
+            if issues:
+                logger.warning(f"[sql-validator] Found {len(issues)} issue(s): {issues}")
+            if warnings:
+                logger.info(f"[sql-validator] Found {len(warnings)} warning(s): {warnings}")
             
             # If no issues, we're done
-            if not issues and not warnings:
-                logger.info("[sql-validator] validation successful")
+            # Warnings are acceptable - they're just suggestions for improvement
+            if not issues:
+                if warnings:
+                    logger.info("[sql-validator] validation successful (with warnings - acceptable)")
+                else:
+                    logger.info("[sql-validator] validation successful")
                 validation_history.append(
                     ValidationResult(
                         iteration=iteration + 1,
                         valid=True,
                         issues=[],
-                        warnings=[],
-                        reasoning="SQL validated successfully",
+                        warnings=warnings,  # Keep warnings for reference
+                        reasoning="SQL validated successfully" + (f" with {len(warnings)} warning(s)" if warnings else ""),
                     )
                 )
                 break
             
-            # Step 3: Ask LLM to refine SQL
-            if issues or (warnings and iteration < self.max_iterations - 1):
-                logger.info("[sql-validator] requesting LLM refinement")
+            # Step 3: Ask LLM to refine SQL ONLY if there are issues (not warnings)
+            if issues:
+                logger.info(f"[sql-validator] requesting LLM refinement for {len(issues)} issue(s)")
                 
                 refined_sql, refinement_metrics = self._refine_sql_with_llm(
                     question=question,
