@@ -693,7 +693,7 @@ class SQLGenerator:
                 
                 # Log each filter being processed
                 is_temporal = any(keyword in filter_str.upper() for keyword in 
-                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'CAST', 'DATE_TRUNC'])
+                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'CAST', 'DATE_TRUNC', 'BETWEEN'])
                 filter_type = "TEMPORAL" if is_temporal else "STANDARD"
                 logger.debug(f"[sql-gen][where] Processing [{filter_type}] filter: {filter_str}")
 
@@ -837,10 +837,10 @@ class SQLGenerator:
                     # Parse and normalize the filter
                     import re
                     
-                    # Check if this is a complex SQL expression (like EXTRACT, CAST, etc.)
+                    # Check if this is a complex SQL expression (like EXTRACT, CAST, BETWEEN, etc.)
                     # that should be passed through as-is
-                    if any(keyword in filter_str.upper() for keyword in ['EXTRACT(', 'CAST(', 'DATE_TRUNC(', 'TO_DATE(', 'TO_CHAR(']):
-                        # This is a SQL function expression - pass through as-is
+                    if any(keyword in filter_str.upper() for keyword in ['EXTRACT(', 'CAST(', 'DATE_TRUNC(', 'TO_DATE(', 'TO_CHAR(', 'BETWEEN']):
+                        # This is a SQL function/expression - pass through as-is
                         logger.info(
                             f"[predicate-resolution][sql-gen][where] ✓ Detected SQL expression filter - "
                             f"passing through as-is: {filter_str}"
@@ -1014,12 +1014,12 @@ class SQLGenerator:
         
         # Log final WHERE conditions summary
         logger.info(f"[sql-gen][where] Built {len(conditions)} WHERE condition(s)")
-        temporal_count = sum(1 for c in conditions if any(kw in c.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR']))
+        temporal_count = sum(1 for c in conditions if any(kw in c.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'BETWEEN']))
         if temporal_count > 0:
             logger.info(f"[predicate-resolution][sql-gen][where] ✓ {temporal_count} temporal condition(s) included")
         
         for i, cond in enumerate(conditions, 1):
-            is_temporal = any(kw in cond.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR'])
+            is_temporal = any(kw in cond.upper() for kw in ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'BETWEEN'])
             cond_type = "[TEMPORAL]" if is_temporal else "[STANDARD]"
             logger.debug(f"[sql-gen][where] {cond_type} Condition {i}: {cond}")
 

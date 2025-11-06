@@ -149,11 +149,20 @@ Be precise and extract only what's explicitly mentioned or clearly implied.
 For entities, use the exact terms from the query when possible.
 
 IMPORTANT: For temporal filters (quarters, months, years, dates):
-- Identify which table's temporal column should be used (fee_period_start, payment_date, created_at, etc.)
+- Identify which table's temporal column should be used based on the query intent:
+  * "fees PAID in Q1" → use payment_date (when payment occurred)
+  * "fees FOR Q1" or "fee period Q1" → use fee_period_start/fee_period_end (the period being charged for)
+  * "transactions in Q1" → use transaction_date (when transaction occurred)
+- For PAID/RECEIVED/COLLECTED use payment/transaction dates
+- For period-based queries use period_start/period_end dates
 - Format filters as: "EXTRACT(QUARTER FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For months: "EXTRACT(MONTH FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
-- For date ranges: "table.column >= 'YYYY-MM-DD' AND table.column <= 'YYYY-MM-DD'"
-- Choose the most relevant temporal column based on query context (e.g., fee_period_start for fee queries)"""
+- For date ranges (quarters/months), use BETWEEN for accuracy:
+  * Q1 2025: "table.column BETWEEN '2025-01-01' AND '2025-03-31'"
+  * Q2 2025: "table.column BETWEEN '2025-04-01' AND '2025-06-30'"
+  * Q3 2025: "table.column BETWEEN '2025-07-01' AND '2025-09-30'"
+  * Q4 2025: "table.column BETWEEN '2025-10-01' AND '2025-12-31'"
+- BETWEEN ensures all dates within the period are included, not just those where the quarter starts"""
 
     def __init__(
         self, 
@@ -329,7 +338,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             )
             for i, filter_str in enumerate(llm_intent.filters, 1):
                 is_temporal = any(keyword in filter_str.upper() for keyword in 
-                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'DATE'])
+                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'DATE', 'BETWEEN'])
                 filter_type = "TEMPORAL" if is_temporal else "STANDARD"
                 logger.info(f"[predicate-resolution]   [{filter_type}] Filter {i}: {filter_str}")
         else:
