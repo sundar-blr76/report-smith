@@ -436,18 +436,18 @@ class SQLGenerator:
                                 break
         
         # Add essential context columns for financial queries
-        # If aggregating monetary amounts, include currency
+        # If selecting monetary amounts, include currency (whether aggregated or not)
         monetary_columns = {'fee_amount', 'amount', 'fees', 'charges', 'price', 'cost', 'value', 'balance'}
-        has_monetary_aggregation = any(
-            col.aggregation and col.column in monetary_columns
+        has_monetary_column = any(
+            col.column in monetary_columns  # Check ANY monetary column (aggregated or not)
             for col in columns
         )
         
-        if has_monetary_aggregation:
+        if has_monetary_column:
             # Find the table with currency column
             currency_added = False
             for col in columns:
-                if col.aggregation and col.column in monetary_columns:
+                if col.column in monetary_columns:
                     # Check if this table has a currency column
                     currency_node = self.kg.nodes.get(f"{col.table}.currency")
                     if currency_node and not any(c.column == 'currency' and c.table == col.table for c in columns):
@@ -459,14 +459,14 @@ class SQLGenerator:
                             )
                         )
                         logger.info(
-                            f"[sql-gen][select] ✓ Auto-added currency column for monetary aggregation: {col.table}.currency"
+                            f"[sql-gen][select] ✓ Auto-added currency column for monetary column: {col.table}.currency"
                         )
                         currency_added = True
                         break
             
             if not currency_added:
                 logger.warning(
-                    "[sql-gen][select] ⚠️  Monetary aggregation detected but no currency column found in schema"
+                    "[sql-gen][select] ⚠️  Monetary column detected but no currency column found in schema"
                 )
 
         return columns
