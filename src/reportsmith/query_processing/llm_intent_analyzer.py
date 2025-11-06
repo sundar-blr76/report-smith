@@ -395,6 +395,15 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
                 "temperature": 0
             }
             prompt_chars = sum(len(m["content"]) for m in request_payload["messages"]) if request_payload.get("messages") else 0
+            
+            # Always log prompt for OpenAI Intent Extraction Request
+            logger.info(f"OpenAI Intent Extraction Request - Prompt ({prompt_chars} chars):")
+            logger.info(f"--- SYSTEM PROMPT ---")
+            logger.info(system_prompt)
+            logger.info(f"--- USER PROMPT ---")
+            logger.info(f"Analyze this query: {query}")
+            logger.info(f"--- PROMPT END ---")
+            
             if self.debug_prompts:
                 logger.debug(f"OpenAI Prompt (trunc): {_trunc(json.dumps(request_payload, indent=2))}")
             
@@ -448,10 +457,19 @@ Return only valid JSON, no other text."""
                     "content": user_content
                 }]
             }
+            prompt_chars = len(user_content) + len(system_prompt)
+            
+            # Always log prompt for Anthropic Intent Extraction Request
+            logger.info(f"Anthropic Intent Extraction Request - Prompt ({prompt_chars} chars):")
+            logger.info(f"--- SYSTEM PROMPT ---")
+            logger.info(system_prompt)
+            logger.info(f"--- USER PROMPT ---")
+            logger.info(user_content)
+            logger.info(f"--- PROMPT END ---")
+            
             logger.debug(f"Anthropic Intent Extraction Request Payload: {json.dumps({k: v if k != 'messages' else '[see user_content]' for k, v in request_payload.items()}, indent=2)}")
             if self.debug_prompts:
                 logger.debug(f"Anthropic Prompt (trunc): {_trunc(user_content)}")
-            prompt_chars = len(user_content) + len(system_prompt)
             
             response = self.client.messages.create(**request_payload)
             
@@ -499,7 +517,12 @@ Return only valid JSON, no other text."""
                 "response_mime_type": "application/json",
             }
             prompt_chars = len(prompt)
-            logger.debug(f"Gemini Intent Extraction Request - Prompt length: {len(prompt)} chars")
+            
+            # Always log prompt for Gemini Intent Extraction Request
+            logger.info(f"Gemini Intent Extraction Request - Prompt ({len(prompt)} chars):")
+            logger.info(f"--- PROMPT START ---")
+            logger.info(prompt)
+            logger.info(f"--- PROMPT END ---")
             logger.debug(f"Gemini Intent Extraction Request - Generation config: {json.dumps(generation_config, indent=2)}")
             
             def _trunc(s: str) -> str:
