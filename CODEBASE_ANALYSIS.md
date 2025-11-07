@@ -472,8 +472,8 @@ ReportSmith is an **intelligent Natural Language to SQL (NL2SQL) system** specif
 - **Approach**: Proprietary NL search engine
 - **Strengths**: Mature, scalable, enterprise features
 - **Weaknesses**: Very expensive, vendor lock-in
-- **Cost**: $95/user/month (Professional) to $2,500/user/month (Enterprise)
-- **Verdict**: Enterprise-grade but 100x more expensive
+- **Cost**: ~$950/user/month average (ranges from $95/month Essentials to $2,500+ Enterprise)
+- **Verdict**: Enterprise-grade but 85-90x more expensive
 
 #### **2. Tableau Ask Data**
 - **Type**: Natural language interface for Tableau
@@ -617,11 +617,13 @@ Low Feature ←──────┼────────┼─────�
 | Solution | Setup Cost | Annual Cost (20 users) | Per User/Year |
 |----------|------------|------------------------|---------------|
 | **ReportSmith** | $16,000 | $26,688 | $1,334 |
-| **ThoughtSpot** | $50,000+ | $228,000 | $11,400 |
+| **ThoughtSpot** | $50,000+ | $228,000* | $11,400 |
 | **Tableau Ask Data** | $10,000 | $16,800 | $840 |
 | **Power BI Q&A** | $5,000 | $4,800 | $240 |
 | **QuickSight Q** | $20,000 | $60,000 | $3,000 |
 | **Seek.ai** | $30,000+ | $120,000+ | $6,000+ |
+
+*ThoughtSpot pricing based on mid-tier estimate (~$950/user/month). Actual pricing varies widely from $95/month (Essentials) to $2,500+/month (Enterprise) based on features and contract terms.
 
 **Cost Advantage**:
 - **85-90% cheaper** than ThoughtSpot/Seek.ai
