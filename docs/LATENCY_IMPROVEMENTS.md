@@ -200,14 +200,14 @@ class QueryCache:
         self.ttl = ttl
     
     def get(self, query: str, app_id: str) -> Optional[Dict]:
-        key = f"query:{app_id}:{hashlib.md5(query.encode()).hexdigest()}"
+        key = f"query:{app_id}:{hashlib.sha256(query.encode()).hexdigest()}"
         cached = self.redis.get(key)
         if cached:
             return json.loads(cached)
         return None
     
     def set(self, query: str, app_id: str, result: Dict):
-        key = f"query:{app_id}:{hashlib.md5(query.encode()).hexdigest()}"
+        key = f"query:{app_id}:{hashlib.sha256(query.encode()).hexdigest()}"
         self.redis.setex(key, self.ttl, json.dumps(result))
 ```
 
@@ -575,10 +575,10 @@ def precompute_common_queries():
 ### Phase 1: Quick Wins (Week 1-2)
 **Target**: Reduce latency to 2.5s (30% improvement)
 
-1. ✅ Implement query result caching (Redis)
-2. ✅ Add adaptive LLM model selection
-3. ✅ Reduce semantic search top-k values
-4. ✅ Fast-path detection for simple queries
+1. [ ] Implement query result caching (Redis)
+2. [ ] Add adaptive LLM model selection
+3. [ ] Reduce semantic search top-k values
+4. [ ] Fast-path detection for simple queries
 
 **Expected Outcome**: 2.0-2.5s average latency
 
@@ -587,10 +587,10 @@ def precompute_common_queries():
 ### Phase 2: Streaming & UX (Week 3-4)
 **Target**: Improve perceived latency by 50%
 
-1. ✅ Implement streaming response API
-2. ✅ Update Streamlit UI for progressive display
-3. ✅ Add progress indicators at each stage
-4. ✅ Better error handling with context
+1. [ ] Implement streaming response API
+2. [ ] Update Streamlit UI for progressive display
+3. [ ] Add progress indicators at each stage
+4. [ ] Better error handling with context
 
 **Expected Outcome**: Users see feedback within 0.5s
 
@@ -599,10 +599,10 @@ def precompute_common_queries():
 ### Phase 3: Advanced Optimizations (Month 2)
 **Target**: Reduce latency to 1.5s (60% improvement)
 
-1. ✅ Hybrid query processing (rules + LLM)
-2. ✅ Pre-computation for common queries
-3. ✅ Parallel LLM calls where possible
-4. ✅ Query result invalidation strategy
+1. [ ] Hybrid query processing (rules + LLM)
+2. [ ] Pre-computation for common queries
+3. [ ] Parallel LLM calls where possible
+4. [ ] Query result invalidation strategy
 
 **Expected Outcome**: 1.0-1.5s for 80% of queries
 

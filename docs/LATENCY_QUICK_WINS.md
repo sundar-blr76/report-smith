@@ -26,6 +26,9 @@ import hashlib
 import json
 from typing import Optional, Dict, Any
 import redis
+from reportsmith.logger import get_logger
+
+logger = get_logger(__name__)
 
 class QueryResultCache:
     """Cache complete query results to avoid reprocessing."""
