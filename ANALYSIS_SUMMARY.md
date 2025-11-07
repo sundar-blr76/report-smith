@@ -75,7 +75,7 @@ Pre-configured for **fund accounting**
 - Users don't need to know relationships
 
 ### 5. 💰 Cost Advantage
-**85-90% cheaper** than enterprise solutions
+**88% cheaper** than enterprise solutions
 - $1,334/user/year vs $11,400 (ThoughtSpot)
 - Self-hosted for compliance
 - Open source
@@ -149,7 +149,11 @@ Pre-configured for **fund accounting**
 - 📚 **Excellent Documentation**: 20+ markdown files
 - 🔬 **Innovative Approach**: Multi-agent hybrid system
 - 💡 **Domain Expertise**: Financial data built-in
-- 💵 **Cost Effective**: 85-90% cheaper than competitors
+- 💰 **Cost Advantage**
+**88% cheaper** than enterprise solutions
+- $1,334/user/year vs $11,400 (ThoughtSpot)
+- Self-hosted for compliance
+- Open source
 - 🔓 **Open Source**: Self-hosted, no vendor lock-in
 - 🎯 **High Accuracy**: 95% intent recognition
 
