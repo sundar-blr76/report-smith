@@ -472,7 +472,7 @@ ReportSmith is an **intelligent Natural Language to SQL (NL2SQL) system** specif
 - **Approach**: Proprietary NL search engine
 - **Strengths**: Mature, scalable, enterprise features
 - **Weaknesses**: Very expensive, vendor lock-in
-- **Cost**: ~$950/user/month average (ranges from $95/month Essentials to $2,500+ Enterprise)
+- **Cost**: $950/user/month average (ranges from $95/month Essentials to $2,500+ Enterprise)
 - **Verdict**: Enterprise-grade but 85-90x more expensive
 
 #### **2. Tableau Ask Data**
