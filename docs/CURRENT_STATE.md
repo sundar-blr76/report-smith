@@ -202,20 +202,16 @@ Query: "show aum of all aggressive funds"
 
 ## 🔧 Known Limitations
 
-### 1. Execution Not Implemented
-- Planning complete, but no SQL generation yet
-- Result shows: "Planning complete (execution not implemented)"
-
-### 2. Semantic Search Threshold Tuning
+### 1. Semantic Search Threshold Tuning
 - Current: Fixed thresholds (0.5 for all)
 - Opportunity: Dynamic thresholds based on entity type
 
-### 3. Relationship Context Usage
+### 2. Relationship Context Usage
 - Relationships stored in metadata
 - LLM filter uses them, but not exploited fully
 - Opportunity: Use for join path discovery
 
-### 4. Embedding Cost Optimization
+### 3. Embedding Cost Optimization
 - Using OpenAI for all searches
 - Opportunity: Cache embeddings for common queries
 
@@ -225,20 +221,7 @@ Query: "show aum of all aggressive funds"
 
 ### High Priority
 
-#### 1. SQL Generation & Execution
-**Goal**: Convert plan → SQL → execute → format results
-
-**Tasks**:
-- [ ] SQL generator module
-- [ ] Query executor with parameterization
-- [ ] Result formatter (JSON, table, chart)
-- [ ] Error handling & validation
-
-**Files to create/modify**:
-- `src/reportsmith/sql_generation/`
-- `src/reportsmith/agents/nodes.py` (add execute node)
-
-#### 2. Streaming Response (UI Enhancement)
+#### 1. Streaming Response (UI Enhancement)
 **Goal**: Show chain-of-thought in real-time
 
 **Current issue**: 30s timeout, no progress feedback
@@ -252,7 +235,7 @@ Query: "show aum of all aggressive funds"
 - `src/reportsmith/api/server.py`
 - `src/reportsmith/ui/app.py`
 
-#### 3. Advanced Synonym Handling
+#### 2. Advanced Synonym Handling
 **Goal**: Auto-generate synonyms using LLM
 
 **Current**: Manual synonyms in YAML
@@ -264,7 +247,7 @@ Query: "show aum of all aggressive funds"
 
 ### Medium Priority
 
-#### 4. Dimension Value Expansion
+#### 3. Dimension Value Expansion
 **Goal**: Handle partial matches better
 
 **Example**: "equity" should match "Equity Growth" + "Equity Value"
@@ -274,7 +257,7 @@ Query: "show aum of all aggressive funds"
 - Fuzzy matching with edit distance
 - LLM-based value interpretation
 
-#### 5. Hierarchical Embeddings
+#### 4. Hierarchical Embeddings
 **Goal**: Separate collections for better precision
 
 **Current**: Mixed schema/dimension/context
@@ -284,7 +267,7 @@ Query: "show aum of all aggressive funds"
 - Type-specific thresholds
 - Type-specific scoring
 
-#### 6. Cost Tracking & Budgeting
+#### 5. Cost Tracking & Budgeting
 **Goal**: Monitor LLM/embedding costs
 
 **Metrics to track**:
@@ -294,7 +277,7 @@ Query: "show aum of all aggressive funds"
 
 ### Low Priority
 
-#### 7. Query Result Caching
+#### 6. Query Result Caching
 **Goal**: Cache frequent queries
 
 **Implementation**:
@@ -302,7 +285,7 @@ Query: "show aum of all aggressive funds"
 - Invalidation on schema changes
 - TTL-based expiration
 
-#### 8. A/B Testing Framework
+#### 7. A/B Testing Framework
 **Goal**: Compare embedding strategies
 
 **Tests**:
@@ -310,7 +293,7 @@ Query: "show aum of all aggressive funds"
 - Different threshold values
 - LLM filtering on/off
 
-#### 9. Multi-Application Support
+#### 8. Multi-Application Support
 **Goal**: Support multiple apps in one instance
 
 **Enhancement**:
@@ -462,9 +445,9 @@ EMBEDDING_MODEL="text-embedding-3-small"  # or local model
 ## 📈 Future Vision
 
 ### Short-term (1-2 months)
-- ✅ SQL execution + results
-- ✅ Streaming UI with progress
-- ✅ Advanced synonym handling
+- ✅ SQL execution + results (Complete)
+- Streaming UI with progress
+- Advanced synonym handling
 
 ### Medium-term (3-6 months)
 - Multi-database support (Snowflake, BigQuery)
@@ -501,7 +484,7 @@ EMBEDDING_MODEL="text-embedding-3-small"  # or local model
 
 ## ✨ Summary
 
-ReportSmith is in a **strong, production-ready state** for the semantic search and intent analysis portions of the pipeline. The minimal embedding strategy with OpenAI provider is delivering excellent results.
+ReportSmith is in a **strong, production-ready state** with a complete end-to-end pipeline from natural language query to SQL execution and results. The minimal embedding strategy with OpenAI provider is delivering excellent results.
 
 **Key achievements**:
 1. ✅ Multi-agent architecture with LangGraph
@@ -509,12 +492,11 @@ ReportSmith is in a **strong, production-ready state** for the semantic search a
 3. ✅ Minimal embedding strategy (high precision)
 4. ✅ Comprehensive logging and observability
 5. ✅ UI + API infrastructure
-
-**Critical next step**: **SQL generation and execution** to complete the end-to-end flow.
+6. ✅ SQL generation and execution
 
 **Recommended focus**:
-- Implement SQL generator
 - Add streaming UI feedback
+- Enhance query optimization
 - Deploy to production environment
 
 ---
