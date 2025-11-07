@@ -26,7 +26,7 @@ import hashlib
 import json
 from typing import Optional, Dict, Any
 import redis
-from reportsmith.logger import get_logger
+from reportsmith.logger import get_logger  # Note: Uses ReportSmith's logger module
 
 logger = get_logger(__name__)
 
@@ -146,6 +146,7 @@ class MultiAgentOrchestrator:
 
 ```python
 # src/reportsmith/query_processing/llm_selector.py
+from typing import Tuple
 
 class AdaptiveLLMSelector:
     """Select optimal LLM model based on query complexity."""
@@ -160,7 +161,7 @@ class AdaptiveLLMSelector:
     def __init__(self, default_tier: str = "balanced"):
         self.default_tier = default_tier
     
-    def select_model(self, query: str) -> tuple[str, str]:
+    def select_model(self, query: str) -> Tuple[str, str]:
         """
         Select model based on query complexity.
         
