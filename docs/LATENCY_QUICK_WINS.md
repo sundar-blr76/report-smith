@@ -42,9 +42,9 @@ class QueryResultCache:
         self.miss_count = 0
     
     def _make_key(self, question: str, app_id: Optional[str]) -> str:
-        """Generate cache key from question and app_id."""
+        """Generate cache key from question and app_id using SHA-256."""
         content = f"{app_id or 'default'}:{question.lower().strip()}"
-        hash_val = hashlib.md5(content.encode()).hexdigest()
+        hash_val = hashlib.sha256(content.encode()).hexdigest()
         return f"qcache:{hash_val}"
     
     def get(self, question: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -57,7 +57,7 @@ class QueryResultCache:
                 return json.loads(cached)
             self.miss_count += 1
             return None
-        except Exception as e:
+        except (redis.RedisError, json.JSONDecodeError) as e:
             logger.warning(f"Cache get failed: {e}")
             return None
     
@@ -66,7 +66,7 @@ class QueryResultCache:
         key = self._make_key(question, app_id)
         try:
             self.redis.setex(key, self.ttl, json.dumps(result, default=str))
-        except Exception as e:
+        except (redis.RedisError, TypeError) as e:
             logger.warning(f"Cache set failed: {e}")
     
     def invalidate(self, question: str, app_id: Optional[str] = None):
