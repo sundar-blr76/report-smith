@@ -9,8 +9,10 @@ from reportsmith.logger import get_logger
 from reportsmith.query_execution import SQLExecutor
 from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.query_processing.sql_generator import SQLGenerator
+from reportsmith.query_processing.domain_value_enricher import DomainValueEnricher
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
+from reportsmith.schema_intelligence.dimension_loader import DimensionLoader
 from reportsmith.utils.llm_tracker import LLMTracker
 
 logger = get_logger(__name__)
@@ -61,6 +63,14 @@ class AgentNodes:
         
         # LLM tracker for cost estimation (will be set per request)
         self._llm_tracker: Optional[LLMTracker] = None
+        
+        # Domain value enricher for matching user values to database values
+        try:
+            self.domain_value_enricher = DomainValueEnricher(llm_provider="gemini")
+            logger.info("[nodes] Initialized domain value enricher")
+        except Exception as e:
+            logger.warning(f"[nodes] Could not initialize domain value enricher: {e}")
+            self.domain_value_enricher = None
 
     def _write_debug(self, filename: str, data: Any) -> None:
         """Write debug data to file"""
@@ -717,6 +727,171 @@ class AgentNodes:
             logger.warning(f"[semantic-filter] failed: {e}")
             return state
 
+    def _try_enrich_domain_value(
+        self, 
+        entity: Dict[str, Any], 
+        query: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Try to enrich a domain value using LLM when semantic search fails.
+        
+        Args:
+            entity: Entity dict with text, entity_type, etc.
+            query: Original user query for context
+            
+        Returns:
+            Updated entity dict if enrichment successful, None otherwise
+        """
+        if not self.domain_value_enricher:
+            logger.debug("[domain-enricher] Enricher not available")
+            return None
+            
+        entity_text = entity.get("text", "").strip()
+        if not entity_text:
+            return None
+            
+        # Check if semantic search already found a decent match
+        semantic_matches = entity.get("semantic_matches", [])
+        if semantic_matches:
+            best_score = max(m.get("score", 0.0) for m in semantic_matches)
+            if best_score >= 0.7:  # Good semantic match, no need for enrichment
+                logger.debug(
+                    f"[domain-enricher] Skipping enrichment for '{entity_text}' - "
+                    f"good semantic match exists (score={best_score:.3f})"
+                )
+                return None
+        
+        logger.info(
+            f"[domain-enricher] Attempting LLM enrichment for domain value '{entity_text}'"
+        )
+        
+        # Try to determine table/column from semantic matches or entity hints
+        table_hint = entity.get("table")
+        column_hint = entity.get("column")
+        
+        # Extract from semantic matches if available
+        if semantic_matches and not (table_hint and column_hint):
+            best_match = semantic_matches[0]
+            md = best_match.get("metadata", {})
+            if not table_hint:
+                table_hint = md.get("table")
+            if not column_hint:
+                column_hint = md.get("column")
+        
+        if not (table_hint and column_hint):
+            logger.warning(
+                f"[domain-enricher] Cannot enrich '{entity_text}' - "
+                f"no table/column hint available"
+            )
+            return None
+        
+        logger.info(
+            f"[domain-enricher] Enriching '{entity_text}' for {table_hint}.{column_hint}"
+        )
+        
+        # Load available domain values for this column
+        try:
+            from reportsmith.schema_intelligence.dimension_loader import DimensionConfig
+            import sqlalchemy as sa
+            import os
+            
+            # Build connection URL for fund_accounting database
+            # Use environment variables for database connection
+            db_host = os.getenv('FINANCIAL_TESTDB_HOST', 'localhost')
+            db_port = os.getenv('FINANCIAL_TESTDB_PORT', '5432')
+            db_name = os.getenv('FINANCIAL_TESTDB_NAME', 'fund_accounting')
+            db_user = os.getenv('FINANCIAL_TESTDB_USER', 'postgres')
+            db_pass = os.getenv('FINANCIAL_TESTDB_PASSWORD', '')
+            
+            connection_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            engine = sa.create_engine(connection_url, poolclass=sa.pool.NullPool)
+            
+            loader = DimensionLoader()
+            dim_config = DimensionConfig(table=table_hint, column=column_hint)
+            
+            available_values = loader.load_domain_values(engine, dim_config)
+            
+            if not available_values:
+                logger.warning(
+                    f"[domain-enricher] No domain values found for {table_hint}.{column_hint}"
+                )
+                return None
+            
+            logger.info(
+                f"[domain-enricher] Loaded {len(available_values)} possible values from database"
+            )
+            
+            # Get table/column metadata for context
+            kg_node_key = f"column_{table_hint}_{column_hint}"
+            kg_node = self.knowledge_graph.nodes.get(kg_node_key)
+            
+            table_desc = None
+            column_desc = None
+            business_context = None
+            
+            if kg_node:
+                column_desc = kg_node.metadata.get("description")
+                # Get table description
+                table_node_key = f"table_{table_hint}"
+                table_node = self.knowledge_graph.nodes.get(table_node_key)
+                if table_node:
+                    table_desc = table_node.metadata.get("description")
+            
+            # Call LLM enricher
+            match_result = self.domain_value_enricher.enrich_domain_value(
+                user_value=entity_text,
+                table=table_hint,
+                column=column_hint,
+                available_values=available_values,
+                query_context=query,
+                table_description=table_desc,
+                column_description=column_desc,
+                business_context=business_context
+            )
+            
+            logger.info(
+                f"[domain-enricher] LLM result: matched='{match_result.matched_value}' "
+                f"confidence={match_result.confidence:.2f}"
+            )
+            logger.info(
+                f"[domain-enricher] LLM reasoning: {match_result.reasoning}"
+            )
+            
+            # Only use enrichment if confidence is high enough
+            if match_result.matched_value and match_result.confidence >= 0.6:
+                logger.info(
+                    f"[domain-enricher] ✓ Successfully enriched '{entity_text}' → "
+                    f"'{match_result.matched_value}' (confidence={match_result.confidence:.2f})"
+                )
+                
+                # Update entity with enriched information
+                enriched_entity = entity.copy()
+                enriched_entity["value"] = match_result.matched_value
+                enriched_entity["canonical_name"] = match_result.matched_value
+                enriched_entity["table"] = table_hint
+                enriched_entity["column"] = column_hint
+                enriched_entity["confidence"] = match_result.confidence
+                enriched_entity["source"] = "llm_enriched"
+                enriched_entity["enrichment_reasoning"] = match_result.reasoning
+                
+                return enriched_entity
+            else:
+                logger.warning(
+                    f"[domain-enricher] ✗ LLM enrichment failed for '{entity_text}' - "
+                    f"confidence={match_result.confidence:.2f} below threshold (0.6)"
+                )
+                logger.warning(
+                    f"[domain-enricher] LLM reasoning: {match_result.reasoning}"
+                )
+                return None
+                
+        except Exception as e:
+            logger.error(
+                f"[domain-enricher] Error during enrichment: {e}", 
+                exc_info=True
+            )
+            return None
+
     # Node: map to schema tables
     def map_schema(self, state: QueryState) -> QueryState:
         logger.info("\x1b[1;32m=== NODE START: SCHEMA MAP ===\x1b[0m")
@@ -899,10 +1074,60 @@ class AgentNodes:
                         f"[schema][map] entity='{ent_text}' type={ent_type} -> table='{mapped_table}' via {reason}"
                     )
                 else:
-                    unmapped.append(ent)
-                    logger.debug(
-                        f"[schema][map] entity='{ent_text}' type={ent_type} -> unmapped"
-                    )
+                    # Before marking as unmapped, try LLM enrichment for domain values
+                    if ent_type == "domain_value" and self.domain_value_enricher:
+                        logger.info(
+                            f"[schema][map] Domain value '{ent_text}' not mapped via semantic search. "
+                            f"Attempting LLM enrichment..."
+                        )
+                        enriched_ent = self._try_enrich_domain_value(ent, state.question)
+                        
+                        if enriched_ent:
+                            # Enrichment successful - update entity and try to map table
+                            logger.info(
+                                f"[schema][map] ✓ Domain value '{ent_text}' enriched to "
+                                f"'{enriched_ent.get('value')}'"
+                            )
+                            
+                            # Get table from enriched entity
+                            enriched_table = enriched_ent.get("table")
+                            if enriched_table:
+                                if enriched_table not in tables:
+                                    tables.append(enriched_table)
+                                mapped_table = enriched_table
+                                reason = "llm_enrichment"
+                                
+                                logger.info(
+                                    f"[schema][map] entity='{ent_text}' type={ent_type} -> "
+                                    f"table='{mapped_table}' via {reason}"
+                                )
+                                
+                                # Update the entity in state for downstream usage
+                                # Find and update the entity in state.entities
+                                for i, state_ent in enumerate(state.entities):
+                                    if (state_ent.get("text") == ent_text and 
+                                        state_ent.get("entity_type") == ent_type):
+                                        state.entities[i] = enriched_ent
+                                        break
+                            else:
+                                # Enrichment succeeded but no table - still unmapped
+                                logger.warning(
+                                    f"[schema][map] Domain value '{ent_text}' enriched but "
+                                    f"no table mapping available"
+                                )
+                                unmapped.append(ent)
+                        else:
+                            # Enrichment failed or low confidence
+                            logger.warning(
+                                f"[schema][map] ✗ LLM enrichment failed for domain value '{ent_text}'"
+                            )
+                            unmapped.append(ent)
+                    else:
+                        # Not a domain value or enricher not available
+                        unmapped.append(ent)
+                        logger.debug(
+                            f"[schema][map] entity='{ent_text}' type={ent_type} -> unmapped"
+                        )
             state.tables = tables
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["schema_ms"] = round(dt_ms, 2)
@@ -973,7 +1198,7 @@ class AgentNodes:
                         
                 logger.warning(
                     f"[predicate-resolution][UNMAPPED] Summary: {len(unmapped)} unmapped - "
-                    f"{[e.get('text') + f\"({e.get('entity_type')})\" for e in unmapped]}"
+                    f"{[(e.get('text') + '(' + e.get('entity_type') + ')') for e in unmapped]}"
                 )
             logger.info(
                 f"[schema] mapped entities to {len(tables)} table(s): {tables} in {dt_ms:.1f}ms"
