@@ -277,7 +277,8 @@ class HybridIntentAnalyzer:
                 logger.info(f"LLM intent: {llm_intent.intent_type}, entities={len(llm_intent.entities)}")
             except Exception as e:
                 self.last_metrics = {"error": str(e)}
-                logger.warning(f"LLM analysis failed, using local only: {e}")
+                logger.error(f"LLM analysis failed: {e}")
+                logger.warning(f"Using pattern-based fallback for intent detection")
         
         # Step 3: Merge and enrich entities
         merged_entities = self._merge_entities(
@@ -286,24 +287,134 @@ class HybridIntentAnalyzer:
             query=query
         )
         
-        # Step 4: Build final intent
-        intent = HybridQueryIntent(
-            original_query=query,
-            intent_type=llm_intent.intent_type if llm_intent else IntentType.RETRIEVAL,
-            entities=merged_entities,
-            time_scope=llm_intent.time_scope if llm_intent else TimeScope.NONE,
-            aggregations=llm_intent.aggregations if llm_intent else [],
-            filters=llm_intent.filters if llm_intent else [],
-            limit=llm_intent.limit if llm_intent else None,
-            order_by=llm_intent.order_by if llm_intent else None,
-            order_direction=llm_intent.order_direction if llm_intent else "ASC",
-            llm_reasoning=llm_intent.reasoning if llm_intent else None,
-            local_mappings_used=len(local_entities),
-            llm_entities_found=len(llm_intent.entities) if llm_intent else 0
-        )
+        # Step 4: Build final intent (with fallback parsing if LLM failed)
+        if llm_intent:
+            # Use LLM results
+            intent = HybridQueryIntent(
+                original_query=query,
+                intent_type=llm_intent.intent_type,
+                entities=merged_entities,
+                time_scope=llm_intent.time_scope,
+                aggregations=llm_intent.aggregations,
+                filters=llm_intent.filters,
+                limit=llm_intent.limit,
+                order_by=llm_intent.order_by,
+                order_direction=llm_intent.order_direction,
+                llm_reasoning=llm_intent.reasoning,
+                local_mappings_used=len(local_entities),
+                llm_entities_found=len(llm_intent.entities)
+            )
+        else:
+            # LLM failed - use pattern-based fallback
+            fallback_intent = self._fallback_intent_detection(query, merged_entities)
+            intent = HybridQueryIntent(
+                original_query=query,
+                intent_type=fallback_intent["intent_type"],
+                entities=merged_entities,
+                time_scope=fallback_intent["time_scope"],
+                aggregations=fallback_intent["aggregations"],
+                filters=fallback_intent["filters"],
+                limit=fallback_intent["limit"],
+                order_by=fallback_intent["order_by"],
+                order_direction=fallback_intent["order_direction"],
+                llm_reasoning="LLM unavailable - used pattern-based detection",
+                local_mappings_used=len(local_entities),
+                llm_entities_found=0
+            )
         
         logger.info(f"Hybrid analysis complete: {len(merged_entities)} total entities")
         return intent
+
+    def _fallback_intent_detection(self, query: str, entities: List) -> Dict:
+        """Pattern-based intent detection when LLM is unavailable."""
+        import re
+        
+        query_lower = query.lower()
+        
+        # Detect intent type
+        intent_type = IntentType.RETRIEVAL
+        if any(word in query_lower for word in ["top", "best", "highest", "lowest", "rank", "most", "least"]):
+            intent_type = IntentType.RANKING
+        elif any(word in query_lower for word in ["total", "sum", "average", "avg", "count", "max", "min"]):
+            intent_type = IntentType.AGGREGATION
+        elif any(word in query_lower for word in ["trend", "over time", "by month", "by quarter", "by year", "time series"]):
+            intent_type = IntentType.TREND
+        elif any(word in query_lower for word in ["compare", "comparison", "vs", "versus", "difference between"]):
+            intent_type = IntentType.COMPARISON
+        
+        logger.info(f"[fallback] Detected intent type: {intent_type}")
+        
+        # Detect aggregations
+        aggregations = []
+        agg_patterns = {
+            AggregationType.SUM: ["total", "sum"],
+            AggregationType.AVERAGE: ["average", "avg", "mean"],
+            AggregationType.COUNT: ["count", "number of", "how many"],
+            AggregationType.MAX: ["maximum", "max", "highest", "largest"],
+            AggregationType.MIN: ["minimum", "min", "lowest", "smallest"]
+        }
+        for agg_type, keywords in agg_patterns.items():
+            if any(kw in query_lower for kw in keywords):
+                aggregations.append(agg_type)
+                logger.info(f"[fallback] Detected aggregation: {agg_type}")
+        
+        # Detect temporal scope and filters
+        time_scope = TimeScope.NONE
+        filters = []
+        
+        # Quarter patterns (Q1 2025, Q2 2024, etc.)
+        quarter_match = re.search(r'q([1-4])\s+(\d{4})', query_lower)
+        if quarter_match:
+            quarter_num = int(quarter_match.group(1))
+            year = quarter_match.group(2)
+            time_scope = TimeScope.CUSTOM
+            # Add filter for Q1 2025
+            filter_str = f"EXTRACT(QUARTER FROM fee_period_start) = {quarter_num} AND EXTRACT(YEAR FROM fee_period_start) = {year}"
+            filters.append(filter_str)
+            logger.info(f"[fallback] Detected quarter filter: Q{quarter_num} {year}")
+        
+        # Year patterns
+        year_match = re.search(r'\b(20\d{2})\b', query_lower)
+        if year_match and not quarter_match:
+            year = year_match.group(1)
+            time_scope = TimeScope.CUSTOM
+            filter_str = f"EXTRACT(YEAR FROM fee_period_start) = {year}"
+            filters.append(filter_str)
+            logger.info(f"[fallback] Detected year filter: {year}")
+        
+        # Recent time periods
+        if "last" in query_lower or "past" in query_lower:
+            if "month" in query_lower:
+                time_scope = TimeScope.LAST_MONTH
+                logger.info(f"[fallback] Detected time scope: LAST_MONTH")
+            elif "quarter" in query_lower:
+                time_scope = TimeScope.LAST_QUARTER
+                logger.info(f"[fallback] Detected time scope: LAST_QUARTER")
+            elif "year" in query_lower:
+                time_scope = TimeScope.LAST_YEAR
+                logger.info(f"[fallback] Detected time scope: LAST_YEAR")
+        
+        # Detect limit
+        limit = None
+        limit_match = re.search(r'top\s+(\d+)|first\s+(\d+)|limit\s+(\d+)', query_lower)
+        if limit_match:
+            limit = int(limit_match.group(1) or limit_match.group(2) or limit_match.group(3))
+            logger.info(f"[fallback] Detected limit: {limit}")
+        
+        # Detect order direction
+        order_direction = "DESC" if intent_type == IntentType.RANKING else "ASC"
+        if any(word in query_lower for word in ["lowest", "smallest", "least", "bottom"]):
+            order_direction = "ASC"
+        
+        return {
+            "intent_type": intent_type,
+            "time_scope": time_scope,
+            "aggregations": aggregations,
+            "filters": filters,
+            "limit": limit,
+            "order_by": None,  # Will be determined by SQL generator
+            "order_direction": order_direction
+        }
 
     def refine_entities_with_llm(self, query: str, entities: List[Dict[str, Any]]) -> tuple[List[int], str]:
         """Use LLM to decide which identified entities to keep or drop.

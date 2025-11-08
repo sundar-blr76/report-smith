@@ -136,6 +136,9 @@ class LLMIntentAnalyzer:
     Uses OpenAI or Anthropic with JSON schema for reliable extraction.
     """
     
+    # Cache version - increment when prompt logic changes to invalidate old results
+    CACHE_VERSION = "v2"
+    
     SYSTEM_PROMPT_BASE = """You are a SQL query intent analyzer for a financial data system.
 
 Your task is to analyze natural language queries and extract structured information:
@@ -381,7 +384,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         
         # Check cache first
         if self.enable_cache and self.cache:
-            cached = self.cache.get("llm_intent", query.lower())
+            cached = self.cache.get("llm_intent", query.lower(), version=self.CACHE_VERSION)
             if cached:
                 logger.info(f"[cache] Using cached intent result for query: '{query}'")
                 return cached
@@ -448,7 +451,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             
             # Cache result
             if self.enable_cache and self.cache:
-                self.cache.set("llm_intent", parsed_result, query.lower())
+                self.cache.set("llm_intent", parsed_result, query.lower(), version=self.CACHE_VERSION)
             
             return parsed_result
         
@@ -517,7 +520,7 @@ Return only valid JSON, no other text."""
             
             # Cache result
             if self.enable_cache and self.cache:
-                self.cache.set("llm_intent", result, query.lower())
+                self.cache.set("llm_intent", result, query.lower(), version=self.CACHE_VERSION)
             
             return result
         
@@ -593,7 +596,7 @@ Return only valid JSON, no other text."""
             
             # Cache result
             if self.enable_cache and self.cache:
-                self.cache.set("llm_intent", result, query.lower())
+                self.cache.set("llm_intent", result, query.lower(), version=self.CACHE_VERSION)
             
             return result
     
