@@ -1485,6 +1485,11 @@ Consider adding:
 - Descriptive columns that provide context
 - Columns that help interpret the results
 
+**CRITICAL FOR RANKING/TOP_N QUERIES**: When showing "top N" entities (e.g., "top 5 clients"), ALWAYS include:
+  1. The entity's name column (e.g., client_name, fund_name, company_name)
+  2. The entity's ID if helpful for uniqueness
+  Otherwise the result will just show aggregated numbers without identifying WHICH entities they belong to.
+
 Return a JSON object with:
 {{
   "add_columns": [

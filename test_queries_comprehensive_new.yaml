@@ -1,0 +1,324 @@
+# Comprehensive Test Queries for ReportSmith
+# Created: 2025-11-08
+# Purpose: Extensive test coverage for all query types and features
+#
+# Query Complexity Levels:
+# - BASIC: Single table, simple filters
+# - INTERMEDIATE: Multiple tables, joins, aggregations
+# - ADVANCED: Complex filters, multiple aggregations, temporal predicates
+# - EXPERT: Multi-table joins, nested logic, domain value matching
+
+test_queries:
+  # ========================================
+  # BASIC QUERIES (Single Table, Simple)
+  # ========================================
+  
+  - id: basic_001
+    complexity: BASIC
+    query: "List all active funds"
+    expected_tables: ["funds"]
+    expected_filters: ["is_active = true"]
+    description: "Simple list query with boolean filter"
+    
+  - id: basic_002
+    complexity: BASIC
+    query: "Show all clients"
+    expected_tables: ["clients"]
+    description: "Simplest possible query"
+    
+  - id: basic_003
+    complexity: BASIC
+    query: "List bond funds"
+    expected_tables: ["funds"]
+    expected_domain_values: ["Bond"]
+    expected_filters: ["fund_type = 'Bond'"]
+    description: "Domain value filtering"
+    
+  - id: basic_004
+    complexity: BASIC
+    query: "Show equity products"
+    expected_tables: ["funds"]
+    expected_domain_values: ["Equity Growth", "Equity Value"]
+    description: "Partial domain value matching - should match ALL equity types"
+    notes: "Tests plural matching and semantic expansion"
+    
+  - id: basic_005
+    complexity: BASIC
+    query: "List institutional clients"
+    expected_tables: ["clients"]
+    expected_domain_values: ["Institutional"]
+    expected_filters: ["client_type = 'Institutional'"]
+    description: "Client type filtering"
+  
+  # ========================================
+  # INTERMEDIATE QUERIES (Joins, Aggregations)
+  # ========================================
+  
+  - id: intermediate_001
+    complexity: INTERMEDIATE
+    query: "Show total fees by fund type"
+    expected_tables: ["funds", "fee_transactions"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["fund_type", "fee_amount", "currency"]
+    expected_joins: ["funds -> fee_transactions"]
+    description: "Aggregation with grouping"
+    notes: "Currency should be auto-included"
+    
+  - id: intermediate_002
+    complexity: INTERMEDIATE
+    query: "List the top 5 clients by total fees paid"
+    expected_tables: ["clients", "fee_transactions", "accounts"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["client_name", "client_id", "fee_amount", "currency"]
+    expected_limit: 5
+    description: "Ranking query"
+    notes: "Must include client identifying columns (name, ID) plus currency"
+    
+  - id: intermediate_003
+    complexity: INTERMEDIATE
+    query: "What are the average fees by fund type for retail investors?"
+    expected_tables: ["funds", "fee_transactions", "clients", "accounts", "holdings"]
+    expected_aggregations: ["AVG"]
+    expected_domain_values: ["Retail"]
+    expected_columns: ["fund_type", "fee_amount", "currency", "client_type"]
+    description: "Average aggregation with domain value filter"
+    notes: "Domain value enricher should match 'retail' -> 'Retail'"
+    
+  - id: intermediate_004
+    complexity: INTERMEDIATE
+    query: "Show fees for TruePotential clients"
+    expected_tables: ["management_companies", "funds", "fee_transactions", "accounts", "clients"]
+    expected_domain_values: ["TruePotential Asset Management"]
+    description: "Partial company name matching"
+    notes: "Should match 'TruePotential' to 'TruePotential Asset Management'"
+    
+  - id: intermediate_005
+    complexity: INTERMEDIATE
+    query: "List funds managed by John Smith"
+    expected_tables: ["funds", "fund_manager_assignments", "fund_managers"]
+    expected_filters: ["first_name = 'John'", "last_name = 'Smith'"]
+    description: "Manager name filtering"
+  
+  # ========================================
+  # ADVANCED QUERIES (Temporal, Complex Filters)
+  # ========================================
+  
+  - id: advanced_001
+    complexity: ADVANCED
+    query: "List the top 5 clients by total fees paid on bond funds in Q1 2025"
+    expected_tables: ["clients", "fee_transactions", "funds", "accounts"]
+    expected_temporal_column: "payment_date"
+    expected_filters: ["fund_type = 'Bond'", "payment_date BETWEEN '2025-01-01' AND '2025-03-31'"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["client_name", "client_id", "fund_type", "fee_amount", "currency"]
+    expected_limit: 5
+    description: "Ranking with temporal and domain value filters"
+    notes: "Critical test - should use payment_date not fee_period_start, include client columns and currency"
+    
+  - id: advanced_002
+    complexity: ADVANCED
+    query: "Show total fees by month for the last 12 months"
+    expected_tables: ["fee_transactions"]
+    expected_aggregations: ["SUM"]
+    expected_temporal_column: "payment_date"
+    expected_transformation: "MONTH(payment_date)"
+    expected_columns: ["fee_amount", "currency", "payment_date"]
+    description: "Temporal grouping"
+    
+  - id: advanced_003
+    complexity: ADVANCED
+    query: "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)"
+    expected_tables: ["funds", "fee_transactions", "fund_manager_assignments", "fund_managers"]
+    expected_domain_values: ["Equity Growth", "Equity Value"]
+    expected_filters: ["performance_rating >= 4", "fund_type IN ('Equity Growth', 'Equity Value')"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["fund_type", "fee_amount", "currency", "payment_date"]
+    description: "Complex temporal with multiple conditions"
+    notes: "Should match multiple equity types"
+    
+  - id: advanced_004
+    complexity: ADVANCED
+    query: "Show clients who paid over $10,000 in fees last quarter"
+    expected_tables: ["clients", "fee_transactions", "accounts"]
+    expected_temporal_column: "payment_date"
+    expected_filters: ["SUM(fee_amount) > 10000"]
+    expected_aggregations: ["SUM"]
+    description: "HAVING clause with temporal filter"
+    
+  - id: advanced_005
+    complexity: ADVANCED
+    query: "List fees paid in December 2024 by currency"
+    expected_tables: ["fee_transactions"]
+    expected_temporal_column: "payment_date"
+    expected_filters: ["EXTRACT(MONTH FROM payment_date) = 12", "EXTRACT(YEAR FROM payment_date) = 2024"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["currency", "fee_amount"]
+    description: "Month-specific temporal filtering"
+  
+  # ========================================
+  # EXPERT QUERIES (Complex Joins, Multiple Conditions)
+  # ========================================
+  
+  - id: expert_001
+    complexity: EXPERT
+    query: "Show the top 10 most profitable funds by total fees collected, including fund manager names"
+    expected_tables: ["funds", "fee_transactions", "fund_manager_assignments", "fund_managers"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["fund_name", "fund_id", "fee_amount", "currency", "first_name", "last_name"]
+    expected_limit: 10
+    description: "Multi-table ranking with manager information"
+    
+  - id: expert_002
+    complexity: EXPERT
+    query: "Compare average fees between institutional and retail clients for each fund type"
+    expected_tables: ["clients", "accounts", "holdings", "funds", "fee_transactions"]
+    expected_aggregations: ["AVG"]
+    expected_domain_values: ["Institutional", "Retail"]
+    expected_columns: ["client_type", "fund_type", "fee_amount", "currency"]
+    description: "Comparison query with grouping by multiple dimensions"
+    
+  - id: expert_003
+    complexity: EXPERT
+    query: "List all transactions for conservative funds in Q4 2024 where the transaction amount exceeded $50,000"
+    expected_tables: ["funds", "transactions"]
+    expected_domain_values: ["Conservative"]
+    expected_temporal_column: "transaction_date"
+    expected_filters: ["fund_type = 'Conservative'", "amount > 50000", "transaction_date BETWEEN '2024-10-01' AND '2024-12-31'"]
+    description: "Complex filtering with temporal and value conditions"
+    
+  - id: expert_004
+    complexity: EXPERT
+    query: "Show quarterly fee trends for bond and equity funds over the past year"
+    expected_tables: ["funds", "fee_transactions"]
+    expected_domain_values: ["Bond", "Equity Growth", "Equity Value"]
+    expected_aggregations: ["SUM"]
+    expected_temporal_column: "payment_date"
+    expected_transformation: "QUARTER(payment_date)"
+    expected_columns: ["fund_type", "fee_amount", "currency", "payment_date"]
+    description: "Trend analysis with multiple fund types"
+    
+  - id: expert_005
+    complexity: EXPERT
+    query: "Find active funds with AUM over $100M that have generated more than $500K in fees this year"
+    expected_tables: ["funds", "fee_transactions"]
+    expected_filters: ["is_active = true", "aum > 100000000", "SUM(fee_amount) > 500000"]
+    expected_aggregations: ["SUM"]
+    expected_temporal_column: "payment_date"
+    description: "Complex filtering with aggregated conditions"
+  
+  # ========================================
+  # EDGE CASES & SPECIAL SCENARIOS
+  # ========================================
+  
+  - id: edge_001
+    complexity: INTERMEDIATE
+    query: "Show all funds with zero fees collected"
+    expected_tables: ["funds", "fee_transactions"]
+    expected_aggregations: ["SUM"]
+    expected_filters: ["SUM(fee_amount) = 0 OR fee_amount IS NULL"]
+    description: "NULL handling and zero-sum detection"
+    
+  - id: edge_002
+    complexity: ADVANCED
+    query: "List clients who have invested in both equity and bond funds"
+    expected_tables: ["clients", "accounts", "holdings", "funds"]
+    expected_domain_values: ["Equity Growth", "Equity Value", "Bond"]
+    description: "Complex set logic - requires multiple fund type matches"
+    
+  - id: edge_003
+    complexity: INTERMEDIATE
+    query: "Show fees in USD only"
+    expected_tables: ["fee_transactions"]
+    expected_filters: ["currency = 'USD'"]
+    expected_columns: ["fee_amount", "currency"]
+    description: "Currency-specific filtering"
+    
+  - id: edge_004
+    complexity: ADVANCED
+    query: "List managers who manage more than 5 active funds"
+    expected_tables: ["fund_managers", "fund_manager_assignments", "funds"]
+    expected_aggregations: ["COUNT"]
+    expected_filters: ["is_active = true", "COUNT(DISTINCT fund_id) > 5"]
+    description: "DISTINCT count with HAVING"
+    
+  - id: edge_005
+    complexity: BASIC
+    query: "Show all management companies"
+    expected_tables: ["management_companies"]
+    description: "Simple table query"
+  
+  # ========================================
+  # CURRENCY & FINANCIAL SPECIFICS
+  # ========================================
+  
+  - id: currency_001
+    complexity: INTERMEDIATE
+    query: "Show total fees by currency"
+    expected_tables: ["fee_transactions"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["currency", "fee_amount"]
+    description: "Currency-based aggregation"
+    notes: "Currency must appear in GROUP BY"
+    
+  - id: currency_002
+    complexity: ADVANCED
+    query: "Compare management fees vs advisory fees for each fund"
+    expected_tables: ["funds", "fee_transactions"]
+    expected_domain_values: ["Management Fee", "Advisory Fee"]
+    expected_aggregations: ["SUM"]
+    expected_columns: ["fund_name", "fee_type", "fee_amount", "currency"]
+    description: "Fee type comparison"
+    
+  - id: currency_003
+    complexity: ADVANCED
+    query: "List clients paying fees in multiple currencies"
+    expected_tables: ["clients", "accounts", "fee_transactions"]
+    expected_aggregations: ["COUNT DISTINCT"]
+    expected_filters: ["COUNT(DISTINCT currency) > 1"]
+    description: "Multi-currency client detection"
+
+# ========================================
+# VALIDATION RULES
+# ========================================
+validation_rules:
+  currency_inclusion:
+    description: "When fee_amount is selected, currency must be included"
+    applies_to: ["*fee*", "*amount*", "*charges*"]
+    
+  entity_identification:
+    description: "For ranking/top-N queries, entity name/ID must be included"
+    applies_to: ["top*", "rank*", "highest*", "lowest*"]
+    
+  temporal_column_selection:
+    description: "Use appropriate temporal column based on query semantics"
+    rules:
+      - pattern: "*paid*|*collected*|*received*"
+        prefer: "payment_date"
+      - pattern: "*period*|*for Q*|*for quarter*"
+        prefer: "fee_period_start"
+        
+  domain_value_matching:
+    description: "Domain values should match semantically and handle plurals"
+    rules:
+      - pattern: "equity"
+        should_match: ["Equity Growth", "Equity Value"]
+      - pattern: "bond"
+        should_match: ["Bond"]
+      - pattern: "truepotential"
+        should_match: ["TruePotential Asset Management"]
+        
+  group_by_completeness:
+    description: "GROUP BY must include all non-aggregated SELECT columns"
+    validation: "All columns in SELECT without aggregation must appear in GROUP BY"
+
+# ========================================
+# EXPECTED OUTCOMES
+# ========================================
+success_criteria:
+  - "All queries execute without errors"
+  - "Currency always included when fee_amount is selected"
+  - "Entity identifiers (names/IDs) included in ranking queries"
+  - "Temporal predicates use correct columns"
+  - "Domain values match semantically (including plurals and partials)"
+  - "GROUP BY includes all non-aggregated columns"
+  - "No unnecessary SQL refinement iterations"
