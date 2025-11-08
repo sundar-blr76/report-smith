@@ -28,6 +28,7 @@ from chromadb.config import Settings as ChromaSettings
 from chromadb.utils import embedding_functions
 
 from ..logger import get_logger
+from ..utils.cache_manager import get_cache_manager
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,7 @@ class EmbeddingManager:
         openai_api_key: Optional[str] = None,
         redis_url: Optional[str] = None,
         enable_redis_cache: bool = True,
+        enable_semantic_cache: bool = True,
     ):
         """
         Initialize embedding manager.
@@ -83,9 +85,14 @@ class EmbeddingManager:
             openai_api_key: API key for OpenAI when provider='openai'
             redis_url: Redis connection URL (e.g., 'redis://localhost:6379/0')
             enable_redis_cache: Whether to use Redis for persistent caching
+            enable_semantic_cache: Whether to cache semantic search results
         """
         self.embedding_model = embedding_model
         self.provider = provider
+        self.enable_semantic_cache = enable_semantic_cache
+        
+        # Initialize cache manager
+        self.cache = get_cache_manager() if enable_semantic_cache else None
 
         # Initialize ChromaDB in-memory client
         self.client = chromadb.Client(
@@ -991,13 +998,27 @@ class EmbeddingManager:
         Returns:
             List of SearchResult objects
         """
+        # Check cache first
+        if self.enable_semantic_cache and self.cache:
+            cache_key_parts = [query.lower(), str(app_id), str(top_k)]
+            cached = self.cache.get("semantic", "schema", *cache_key_parts)
+            if cached:
+                logger.debug(f"[cache] semantic search hit for schema: {query[:50]}...")
+                return cached
+        
         collection = self.collections["schema_metadata"]
 
         where = {"application": app_id} if app_id else None
 
         results = collection.query(query_texts=[query], n_results=top_k, where=where)
 
-        return self._format_results(results)
+        formatted = self._format_results(results)
+        
+        # Cache results
+        if self.enable_semantic_cache and self.cache:
+            self.cache.set("semantic", formatted, "schema", *cache_key_parts)
+        
+        return formatted
 
     def search_domains(
         self,
@@ -1018,6 +1039,14 @@ class EmbeddingManager:
         Returns:
             List of SearchResult objects
         """
+        # Check cache first
+        if self.enable_semantic_cache and self.cache:
+            cache_key_parts = [query.lower(), str(app_id), str(column_hint), str(top_k)]
+            cached = self.cache.get("semantic", "domain", *cache_key_parts)
+            if cached:
+                logger.debug(f"[cache] semantic search hit for domain: {query[:50]}...")
+                return cached
+        
         collection = self.collections["domain_values"]
 
         # ChromaDB requires where clause with single level dict
@@ -1032,7 +1061,13 @@ class EmbeddingManager:
 
         results = collection.query(query_texts=[query], n_results=top_k, where=where)
 
-        return self._format_results(results)
+        formatted = self._format_results(results)
+        
+        # Cache results
+        if self.enable_semantic_cache and self.cache:
+            self.cache.set("semantic", formatted, "domain", *cache_key_parts)
+        
+        return formatted
 
     def search_business_context(
         self, query: str, app_id: Optional[str] = None, top_k: int = 3

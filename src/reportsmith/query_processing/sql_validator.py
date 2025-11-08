@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from reportsmith.logger import get_logger
 from reportsmith.utils.llm_tracker import LLMTracker
+from reportsmith.utils.cache_manager import get_cache_manager
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,7 @@ class SQLValidator:
         rate_limit_rpm: int = 60,  # Requests per minute
         cost_cap_tokens: int = 100000,  # Max tokens per request
         llm_tracker: Optional[LLMTracker] = None,  # For cost tracking
+        enable_cache: bool = True,  # Enable caching
     ):
         """
         Initialize SQL validator.
@@ -103,6 +105,7 @@ class SQLValidator:
             rate_limit_rpm: Rate limit in requests per minute (default: 60)
             cost_cap_tokens: Cost cap in total tokens per request (default: 100k)
             llm_tracker: Optional LLM tracker for cost estimation
+            enable_cache: Enable caching of LLM responses (default: True)
         """
         self.llm_client = llm_client
         self.max_iterations = max_iterations
@@ -114,6 +117,8 @@ class SQLValidator:
         self.rate_limit_rpm = rate_limit_rpm
         self.cost_cap_tokens = cost_cap_tokens
         self.llm_tracker = llm_tracker
+        self.enable_cache = enable_cache
+        self.cache = get_cache_manager() if enable_cache else None
         
         # Rate limiting state
         self._request_timestamps = []

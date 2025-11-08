@@ -10,9 +10,11 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 import json
 import time
+import hashlib
 
 from ..logger import get_logger
 from ..schema_intelligence.embedding_manager import EmbeddingManager
+from ..utils.cache_manager import get_cache_manager
 
 logger = get_logger(__name__)
 
@@ -55,15 +57,18 @@ class DomainValueEnricher:
     the LLM to perform intelligent matching based on context.
     """
     
-    def __init__(self, llm_provider: str = "gemini", model: Optional[str] = None):
+    def __init__(self, llm_provider: str = "gemini", model: Optional[str] = None, enable_cache: bool = True):
         """
         Initialize domain value enricher.
         
         Args:
             llm_provider: LLM provider ("gemini", "openai", "anthropic")
             model: Model name (uses default if not specified)
+            enable_cache: Enable caching of LLM responses
         """
         self.llm_provider = llm_provider
+        self.enable_cache = enable_cache
+        self.cache = get_cache_manager() if enable_cache else None
         
         if llm_provider == "gemini":
             import google.generativeai as genai
@@ -111,6 +116,25 @@ class DomainValueEnricher:
             f"[domain-enricher] Enriching user value '{user_value}' for {table}.{column} "
             f"with {len(available_values)} possible database values"
         )
+        
+        # Check cache first
+        if self.enable_cache and self.cache:
+            # Create cache key from user value, table, column, and available values
+            # Use hash of available values to keep key manageable
+            values_hash = hashlib.md5(
+                json.dumps([v.get("value") for v in available_values], sort_keys=True).encode()
+            ).hexdigest()[:16]
+            
+            cached = self.cache.get(
+                "llm_domain",
+                user_value.lower(),
+                table,
+                column,
+                values_hash
+            )
+            if cached:
+                logger.info(f"[domain-enricher] Using cached result for '{user_value}' -> {table}.{column}")
+                return cached
         
         # Build context for LLM
         context_parts = []
@@ -224,12 +248,28 @@ Example response format:
                 else:
                     logger.info(f"[domain-enricher] LLM response ({dt_ms:.1f}ms): No confident matches found")
                 
-                return DomainValueEnrichmentResult(
+                result = DomainValueEnrichmentResult(
                     user_value=user_value,
                     table=table,
                     column=column,
                     matches=matches
                 )
+                
+                # Cache result
+                if self.enable_cache and self.cache:
+                    values_hash = hashlib.md5(
+                        json.dumps([v.get("value") for v in available_values], sort_keys=True).encode()
+                    ).hexdigest()[:16]
+                    self.cache.set(
+                        "llm_domain",
+                        result,
+                        user_value.lower(),
+                        table,
+                        column,
+                        values_hash
+                    )
+                
+                return result
             
         except Exception as e:
             logger.error(f"[domain-enricher] LLM enrichment failed: {e}", exc_info=True)

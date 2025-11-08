@@ -14,6 +14,7 @@ import os
 
 from ..logger import get_logger
 from ..schema_intelligence.embedding_manager import EmbeddingManager
+from ..utils.cache_manager import get_cache_manager
 
 logger = get_logger(__name__)
 
@@ -174,7 +175,8 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         schema_score_threshold: float = 0.3,
         dimension_score_threshold: float = 0.3,
         context_score_threshold: float = 0.4,
-        max_matches_warning: int = 20
+        max_matches_warning: int = 20,
+        enable_cache: bool = True
     ):
         """
         Initialize LLM-based intent analyzer.
@@ -189,9 +191,12 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             dimension_score_threshold: Minimum score for dimension matches (default: 0.3)
             context_score_threshold: Minimum score for business context matches (default: 0.4)
             max_matches_warning: Warn user if matches exceed this count (default: 20)
+            enable_cache: Enable caching of LLM responses (default: True)
         """
         self.embedding_manager = embedding_manager
         self.llm_provider = llm_provider
+        self.enable_cache = enable_cache
+        self.cache = get_cache_manager() if enable_cache else None
         
         # Search configuration
         self.max_search_results = max_search_results
@@ -374,6 +379,13 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         logger.info(f"LLM Intent Extraction Request for query: '{query}'")
         logger.debug(f"Request - Provider: {self.llm_provider}, Model: {self.model}")
         
+        # Check cache first
+        if self.enable_cache and self.cache:
+            cached = self.cache.get("llm_intent", query.lower())
+            if cached:
+                logger.info(f"[cache] Using cached intent result for query: '{query}'")
+                return cached
+        
         # Build schema context with temporal columns
         schema_context = self._build_temporal_schema_context(query)
         system_prompt = self.SYSTEM_PROMPT_BASE + schema_context
@@ -433,6 +445,10 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             logger.info(f"LLM summary: provider=openai model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             if self.debug_prompts:
                 logger.debug(f"OpenAI Parsed (trunc): {_trunc(parsed_result.model_dump_json(indent=2))}")
+            
+            # Cache result
+            if self.enable_cache and self.cache:
+                self.cache.set("llm_intent", parsed_result, query.lower())
             
             return parsed_result
         
@@ -497,7 +513,13 @@ Return only valid JSON, no other text."""
             self.metrics_events.append(metrics)
             logger.info(f"LLM summary: provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
-            return LLMQueryIntent(**intent_data)
+            result = LLMQueryIntent(**intent_data)
+            
+            # Cache result
+            if self.enable_cache and self.cache:
+                self.cache.set("llm_intent", result, query.lower())
+            
+            return result
         
         elif self.llm_provider == "gemini":
             # Gemini uses JSON schema for structured output
@@ -567,7 +589,13 @@ Return only valid JSON, no other text."""
             if self.debug_prompts:
                 logger.debug(f"Gemini Parsed (trunc): {_trunc(json.dumps(intent_data, indent=2))}")
             
-            return LLMQueryIntent(**intent_data)
+            result = LLMQueryIntent(**intent_data)
+            
+            # Cache result
+            if self.enable_cache and self.cache:
+                self.cache.set("llm_intent", result, query.lower())
+            
+            return result
     
     def _enrich_entities(self, entity_texts: List[str], query: str) -> List[EnrichedEntity]:
         """
