@@ -98,7 +98,7 @@ result = analyzer.analyze("Show AUM for equity funds")
 #   intent_type="aggregate",
 #   entities=[
 #       Entity(text="aum", type="metric", table="funds", column="total_aum"),
-#       Entity(text="equity", type="dimension_value", value="Equity Growth")
+#       Entity(text="equity", type="domain_value", value="Equity Growth")
 #   ],
 #   aggregations=["sum"]
 # )

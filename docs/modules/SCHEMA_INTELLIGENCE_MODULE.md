@@ -295,9 +295,9 @@ Loads dimension values from databases for semantic search and filtering.
 
 #### Key Methods
 
-##### load_dimension_values()
+##### load_domain_values()
 ```python
-def load_dimension_values(
+def load_domain_values(
     self,
     table: str,
     column: str,
@@ -315,7 +315,7 @@ def load_dimension_values(
 **Example:**
 ```python
 loader = DimensionLoader(connection_manager)
-fund_types = loader.load_dimension_values(
+fund_types = loader.load_domain_values(
     table="funds",
     column="fund_type",
     database="financial_db"

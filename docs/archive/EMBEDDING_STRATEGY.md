@@ -30,7 +30,7 @@ Each embedding contains ONLY:
 All context is stored in metadata fields:
 ```python
 {
-    "entity_type": "column",           # table, column, dimension_value, metric
+    "entity_type": "column",           # table, column, domain_value, metric
     "entity_name": "total_aum",        # canonical name
     "application": "fund_accounting",
     "table": "funds",
@@ -99,7 +99,7 @@ metadatas.append({
 for value in ["Low", "Medium", "High"]:
     documents.append(value)  # Just the value
     metadatas.append({
-        "entity_type": "dimension_value",
+        "entity_type": "domain_value",
         "entity_name": value,
         "table": "funds",
         "column": "risk_rating",
@@ -230,7 +230,7 @@ Returns:
 {
   "embeddings": {
     "schema_metadata": 174,      // Tables + columns + synonyms
-    "dimension_values": 62,      // Actual values from DB
+    "domain_values": 62,      // Actual values from DB
     "business_context": 10,      // Metrics + sample queries
     "model": "text-embedding-3-small"
   }

@@ -19,13 +19,31 @@ logger = get_logger(__name__)
 
 @dataclass
 class DomainValueMatch:
-    """Result of domain value matching."""
-    user_value: str
+    """Result of domain value matching (single match)."""
     matched_value: Optional[str]
     confidence: float
     reasoning: str
+
+
+@dataclass
+class DomainValueEnrichmentResult:
+    """Result of domain value enrichment - can contain multiple matches."""
+    user_value: str
     table: str
     column: str
+    matches: List[DomainValueMatch]
+    
+    @property
+    def best_match(self) -> Optional[DomainValueMatch]:
+        """Get the best (highest confidence) match."""
+        if not self.matches:
+            return None
+        return max(self.matches, key=lambda m: m.confidence)
+    
+    @property
+    def has_confident_match(self) -> bool:
+        """Check if at least one match has confidence >= 0.6."""
+        return any(m.confidence >= 0.6 for m in self.matches)
 
 
 class DomainValueEnricher:
@@ -71,7 +89,7 @@ class DomainValueEnricher:
         table_description: Optional[str] = None,
         column_description: Optional[str] = None,
         business_context: Optional[str] = None
-    ) -> DomainValueMatch:
+    ) -> DomainValueEnrichmentResult:
         """
         Use LLM to match user-provided value to actual database values.
         
@@ -87,11 +105,11 @@ class DomainValueEnricher:
             business_context: Additional business context (optional)
             
         Returns:
-            DomainValueMatch with matched value and confidence
+            DomainValueEnrichmentResult with matched values (can be multiple) and confidences
         """
         logger.info(
             f"[domain-enricher] Enriching user value '{user_value}' for {table}.{column} "
-            f"with {len(available_values)} possible values"
+            f"with {len(available_values)} possible database values"
         )
         
         # Build context for LLM
@@ -120,27 +138,35 @@ Database Column: {table}.{column}
 Available Values in Database:
 {values_str}
 
-Task: Determine which database value (if any) the user is referring to when they said "{user_value}".
+Task: Determine which database value(s) the user is referring to when they said "{user_value}".
 
 Consider:
 1. Exact matches (case-insensitive)
-2. Partial matches (user might use abbreviation or subset of full name)
+2. Partial matches (user might use abbreviation or subset of full name)  
 3. Semantic similarity (user might use different phrasing)
 4. Business context (what makes sense given the query)
 5. Value frequency/importance (more common values might be more likely)
+6. The user value might match MULTIPLE database values (e.g., "equity" could match both "Equity Growth" and "Equity Value")
 
-Return a JSON object with:
+Return a JSON array of matches. Each match should be an object with:
 {{
-  "matched_value": "exact database value or null if no confident match",
+  "matched_value": "exact database value",
   "confidence": 0.0-1.0 score,
-  "reasoning": "brief explanation of match or why no match"
+  "reasoning": "brief explanation of match"
 }}
 
 Important:
-- Only return a match if you have reasonable confidence (>0.6)
-- If multiple values could match, choose the most likely one based on context
-- If no good match exists, return null for matched_value and explain why
-- Return ONLY the JSON, no other text"""
+- Only include matches with reasonable confidence (>= 0.6)
+- If multiple values could match, include ALL of them (don't just pick one)
+- Order matches by confidence (highest first)
+- If no good match exists, return an empty array
+- Return ONLY a valid JSON array, no other text
+
+Example response format:
+[
+  {{"matched_value": "Equity Growth", "confidence": 0.95, "reasoning": "Exact partial match for equity funds"}},
+  {{"matched_value": "Equity Value", "confidence": 0.90, "reasoning": "Also an equity fund type"}}
+]"""
 
         logger.debug(f"[domain-enricher] LLM prompt ({len(prompt)} chars):")
         logger.debug(f"--- DOMAIN ENRICHER PROMPT START ---")
@@ -162,33 +188,56 @@ Important:
                 )
                 
                 json_text = response.text
+                logger.info(f"[domain-enricher] LLM raw response: {json_text}")
+                
                 result = json.loads(json_text)
                 
-                dt_ms = (time.perf_counter() - t0) * 1000.0
-                logger.info(
-                    f"[domain-enricher] LLM response ({dt_ms:.1f}ms): "
-                    f"matched='{result.get('matched_value')}' confidence={result.get('confidence'):.2f}"
-                )
-                logger.debug(f"[domain-enricher] LLM reasoning: {result.get('reasoning')}")
+                # Parse array of matches
+                matches = []
+                if isinstance(result, list):
+                    for match_data in result:
+                        if isinstance(match_data, dict):
+                            matched_val = match_data.get("matched_value")
+                            conf = match_data.get("confidence", 0.0)
+                            reason = match_data.get("reasoning", "")
+                            
+                            if matched_val and conf >= 0.6:
+                                matches.append(DomainValueMatch(
+                                    matched_value=matched_val,
+                                    confidence=conf,
+                                    reasoning=reason
+                                ))
+                else:
+                    logger.warning(f"[domain-enricher] Expected array response, got: {type(result)}")
                 
-                return DomainValueMatch(
+                dt_ms = (time.perf_counter() - t0) * 1000.0
+                
+                if matches:
+                    matches.sort(key=lambda m: m.confidence, reverse=True)
+                    match_summary = ", ".join([f"'{m.matched_value}' ({m.confidence:.2f})" for m in matches])
+                    logger.info(
+                        f"[domain-enricher] LLM response ({dt_ms:.1f}ms): "
+                        f"Found {len(matches)} match(es): {match_summary}"
+                    )
+                    for m in matches:
+                        logger.info(f"[domain-enricher]   - '{m.matched_value}' (conf={m.confidence:.2f}): {m.reasoning}")
+                else:
+                    logger.info(f"[domain-enricher] LLM response ({dt_ms:.1f}ms): No confident matches found")
+                
+                return DomainValueEnrichmentResult(
                     user_value=user_value,
-                    matched_value=result.get("matched_value"),
-                    confidence=result.get("confidence", 0.0),
-                    reasoning=result.get("reasoning", ""),
                     table=table,
-                    column=column
+                    column=column,
+                    matches=matches
                 )
             
         except Exception as e:
             logger.error(f"[domain-enricher] LLM enrichment failed: {e}", exc_info=True)
-            return DomainValueMatch(
+            return DomainValueEnrichmentResult(
                 user_value=user_value,
-                matched_value=None,
-                confidence=0.0,
-                reasoning=f"LLM enrichment error: {str(e)}",
                 table=table,
-                column=column
+                column=column,
+                matches=[]
             )
     
     def _format_values_for_llm(self, values: List[Dict[str, Any]], max_values: int = 50) -> str:

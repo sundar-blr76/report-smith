@@ -643,7 +643,7 @@ tables:
         "canonical_name": "Equity Funds",
         "table": "funds",
         "column": "fund_type",
-        "entity_type": "dimension_value",
+        "entity_type": "domain_value",
         "value": "Equity Growth",
         "synonyms": ["equity", "stock funds"]
     }

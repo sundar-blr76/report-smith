@@ -853,7 +853,7 @@ class AgentNodes:
                     table_desc = table_node.metadata.get("description")
             
             # Call LLM enricher
-            match_result = self.domain_value_enricher.enrich_domain_value(
+            enrich_result = self.domain_value_enricher.enrich_domain_value(
                 user_value=entity_text,
                 table=table_hint,
                 column=column_hint,
@@ -864,41 +864,49 @@ class AgentNodes:
                 business_context=business_context
             )
             
-            logger.info(
-                f"[domain-enricher] LLM result: matched='{match_result.matched_value}' "
-                f"confidence={match_result.confidence:.2f}"
-            )
-            logger.info(
-                f"[domain-enricher] LLM reasoning: {match_result.reasoning}"
-            )
-            
-            # Only use enrichment if confidence is high enough
-            if match_result.matched_value and match_result.confidence >= 0.6:
-                logger.info(
-                    f"[domain-enricher] ✓ Successfully enriched '{entity_text}' → "
-                    f"'{match_result.matched_value}' (confidence={match_result.confidence:.2f})"
-                )
-                
-                # Update entity with enriched information
-                enriched_entity = entity.copy()
-                enriched_entity["value"] = match_result.matched_value
-                enriched_entity["canonical_name"] = match_result.matched_value
-                enriched_entity["table"] = table_hint
-                enriched_entity["column"] = column_hint
-                enriched_entity["confidence"] = match_result.confidence
-                enriched_entity["source"] = "llm_enriched"
-                enriched_entity["enrichment_reasoning"] = match_result.reasoning
-                
-                return enriched_entity
-            else:
+            # Check if we got any confident matches
+            if not enrich_result.has_confident_match:
                 logger.warning(
-                    f"[domain-enricher] ✗ LLM enrichment failed for '{entity_text}' - "
-                    f"confidence={match_result.confidence:.2f} below threshold (0.6)"
+                    f"[domain-enricher] ✗ LLM enrichment found no confident matches for '{entity_text}'"
                 )
-                logger.warning(
-                    f"[domain-enricher] LLM reasoning: {match_result.reasoning}"
-                )
+                if enrich_result.matches:
+                    for m in enrich_result.matches:
+                        logger.info(f"[domain-enricher]   Low confidence: '{m.matched_value}' ({m.confidence:.2f}) - {m.reasoning}")
                 return None
+            
+            # Use the best match (highest confidence)
+            best_match = enrich_result.best_match
+            logger.info(
+                f"[domain-enricher] ✓ Successfully enriched '{entity_text}' → "
+                f"'{best_match.matched_value}' (confidence={best_match.confidence:.2f})"
+            )
+            logger.info(f"[domain-enricher] Reasoning: {best_match.reasoning}")
+            
+            # Log if there were other possible matches
+            if len(enrich_result.matches) > 1:
+                other_matches = [m for m in enrich_result.matches if m != best_match]
+                logger.info(
+                    f"[domain-enricher] Note: {len(other_matches)} additional match(es) found but using highest confidence"
+                )
+                for m in other_matches:
+                    logger.debug(f"[domain-enricher]   Alternative: '{m.matched_value}' ({m.confidence:.2f})")
+            
+            # Update entity with enriched information
+            enriched_entity = entity.copy()
+            enriched_entity["value"] = best_match.matched_value
+            enriched_entity["canonical_name"] = best_match.matched_value
+            enriched_entity["table"] = table_hint
+            enriched_entity["column"] = column_hint
+            enriched_entity["confidence"] = best_match.confidence
+            enriched_entity["source"] = "llm_enriched"
+            enriched_entity["enrichment_reasoning"] = best_match.reasoning
+            # Store all matches for potential later use
+            enriched_entity["all_llm_matches"] = [
+                {"value": m.matched_value, "confidence": m.confidence, "reasoning": m.reasoning}
+                for m in enrich_result.matches
+            ]
+            
+            return enriched_entity
                 
         except Exception as e:
             logger.error(

@@ -230,7 +230,7 @@ class QueryState:
      aggregations: ["sum"],
      entities: [
        {text: "aum", type: "metric"},
-       {text: "equity", type: "dimension_value"}
+       {text: "equity", type: "domain_value"}
      ]
    }
 
