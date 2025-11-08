@@ -91,38 +91,80 @@ Result: 0 rows ❌
 - ✅ Reasoning makes results explainable
 - ✅ One call handles all cases
 
-**LLM Prompt Template:**
+**LLM Prompt Template (Enhanced with Rich Context):**
 ```python
 DOMAIN_VALUE_SELECTION_PROMPT = """
 Task: Select ALL applicable domain values that match the user's intent.
 
-User Query: "{full_query}"
-User mentioned: "{user_term}"
-Column: {table}.{column}
-Column description: {column_description}
+=== USER QUERY CONTEXT ===
+Full Query: "{full_query}"
+User mentioned term: "{user_term}"
+Query Intent: {query_intent}  # e.g., "aggregation", "ranking", "filtering"
 
-ALL Available Values:
+=== TABLE & COLUMN METADATA ===
+Table: {table_name}
+Table Description: {table_description}
+Table Business Context: {table_context}
+Estimated Row Count: {table_row_count}
+
+Column: {column_name}
+Column Data Type: {column_data_type}
+Column Description: {column_description}
+Column Business Context: {column_context}
+Is Dimension Column: {is_dimension}
+Related Tables: {related_tables}
+
+=== DOMAIN VALUE STATISTICS ===
+Total Available Values: {value_count}
+Value Distribution:
+{value_distribution}
+
+ALL Available Values (sorted by frequency):
 {available_values_json}
 
-Instructions:
-1. Analyze the user's intent from the full query context
-2. Select ALL values that match the user's intent
-3. Consider:
-   - Exact matches
-   - Partial matches (e.g., "equity" matches "Equity Growth" AND "Equity Value")
-   - Abbreviations (e.g., "tech" → "Technology")
-   - Synonyms (e.g., "stocks" → "Equity Growth", "Equity Value")
-   - Context clues from the full query
-4. If uncertain, prefer being INCLUSIVE (select more rather than less)
-5. If NO values match, return empty array
+=== BUSINESS RULES & CONTEXT ===
+{business_rules}
 
-Return JSON only:
+=== RELATED DOMAIN KNOWLEDGE ===
+Common Abbreviations: {abbreviations}
+Known Synonyms: {synonyms}
+Category Hierarchies: {hierarchies}
+
+=== EXAMPLE USAGE PATTERNS ===
+{usage_examples}
+
+=== INSTRUCTIONS ===
+1. Analyze the user's intent from the FULL QUERY CONTEXT (not just the isolated term)
+2. Consider the business context and how this column is typically used
+3. Select ALL values from the available list that match the user's intent
+4. Use these matching strategies:
+   - Exact matches: "Bond" → ["Bond"]
+   - Partial matches: "equity" → ["Equity Growth", "Equity Value"]
+   - Abbreviations: "tech" → ["Technology"]
+   - Synonyms: "stocks" → ["Equity Growth", "Equity Value"]
+   - Category matching: "growth funds" → ["Equity Growth", "Technology Growth"]
+   - Case-insensitive: "BOND" → ["Bond"]
+5. Guidelines:
+   - If the term is a CATEGORY (e.g., "equity"), include ALL subtypes
+   - If the term is SPECIFIC (e.g., "Equity Growth"), match only that value
+   - If uncertain, prefer being INCLUSIVE (select more rather than less)
+   - Consider the query intent (aggregation may want broader selection)
+   - If NO values match at all, return empty array
+6. Do NOT:
+   - Invent values not in the available list
+   - Return values that don't clearly match the intent
+   - Ignore the full query context
+
+=== OUTPUT FORMAT ===
+Return JSON only (no markdown, no explanations outside JSON):
 {{
   "selected_values": ["Equity Growth", "Equity Value"],
   "confidence": 0.95,
-  "reasoning": "'equity' is a partial match for both Equity Growth and Equity Value fund types",
-  "excluded_count": 5,
-  "excluded_examples": ["Bond", "Technology", "REIT"]
+  "reasoning": "Detailed explanation referencing business context and query intent",
+  "match_type": "partial_category",  # exact | partial_category | abbreviation | synonym | context_based
+  "excluded_count": 3,
+  "excluded_examples": ["Bond", "Technology"],
+  "business_rationale": "Additional business context for the selection"
 }}
 """
 ```
