@@ -661,7 +661,7 @@ class SQLGenerator:
                     ratio = difflib.SequenceMatcher(
                         None, col_lower, node.name.lower()
                     ).ratio()
-                    if ratio > 0.5:  # 50% similarity threshold (relaxed from 70%)
+                    if ratio > 0.7:  # Increased threshold from 0.5 to 0.7 to avoid bad matches
                         candidates.append((node, ratio))
 
             # Sort by similarity and take best matches
@@ -682,22 +682,23 @@ class SQLGenerator:
                 if table:
                     entity_tables.add(table)
 
-            # Prefer columns from tables in our query
+            # ONLY use columns from tables in our query - don't use fuzzy match from unrelated tables
             for node in matching_nodes:
                 if node.table in entity_tables:
                     logger.info(
                         f"[sql-gen][normalize] mapped column '{col_ref}' → "
-                        f"'{node.table}.{node.name}' (from KG, fuzzy match)"
+                        f"'{node.table}.{node.name}' (from KG, fuzzy match, confidence={difflib.SequenceMatcher(None, col_lower, node.name.lower()).ratio():.2f})"
                     )
                     return f"{node.table}.{node.name}"
 
-            # No match in our tables - use first match as fallback
-            node = matching_nodes[0]
+            # No match in our tables - DON'T use fuzzy match from unrelated tables
+            # This prevents bad mappings like portfolio_type → period_type
             logger.warning(
-                f"[sql-gen][normalize] mapped column '{col_ref}' → "
-                f"'{node.table}.{node.name}' (from KG, fuzzy match, table not in query)"
+                f"[sql-gen][normalize] Fuzzy match found for '{col_ref}' but not in active query tables. "
+                f"Best candidate: {matching_nodes[0].table}.{matching_nodes[0].name} (not used). "
+                f"Returning as-is."
             )
-            return f"{node.table}.{node.name}"
+            return col_ref
 
         # No mapping found - return as-is
         logger.warning(

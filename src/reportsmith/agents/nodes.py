@@ -1114,10 +1114,23 @@ class AgentNodes:
                             if not ent_value:
                                 should_enrich = True
                                 enrich_reason = "has table/column but missing value"
-                            elif ent.get("source") == "local" and ent.get("semantic_match_count", 0) == 0:
-                                # Local mapping provided value but no semantic verification
-                                should_enrich = True
-                                enrich_reason = "verify local mapping against database"
+                            elif ent.get("source") == "local":
+                                # Check if semantic verification is weak or absent
+                                semantic_matches = ent.get("semantic_matches", [])
+                                if not semantic_matches:
+                                    should_enrich = True
+                                    enrich_reason = "verify local mapping against database (no semantic matches)"
+                                else:
+                                    # Check best semantic match score
+                                    best_score = max(m.get("score", 0.0) for m in semantic_matches)
+                                    if best_score < 0.85:
+                                        should_enrich = True
+                                        enrich_reason = f"verify local mapping (low semantic score={best_score:.2f})"
+                                    logger.debug(
+                                        f"[schema][map] Domain value '{ent_text}' from local mapping "
+                                        f"has semantic score {best_score:.2f} - "
+                                        f"{'will enrich' if should_enrich else 'skip enrichment'}"
+                                    )
                         
                         if should_enrich:
                             logger.info(
