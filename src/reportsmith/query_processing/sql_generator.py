@@ -12,6 +12,7 @@ import re
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
 from reportsmith.query_processing.sql_validator import SQLValidator
+from reportsmith.utils.cache_manager import get_cache_manager
 
 logger = get_logger(__name__)
 
@@ -159,9 +160,12 @@ class SQLGenerator:
         knowledge_graph: SchemaKnowledgeGraph,
         llm_client=None,
         enable_extraction_enhancement: bool = True,
+        enable_cache: bool = True,
     ):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
+        self.enable_cache = enable_cache
+        self.cache = get_cache_manager() if enable_cache else None
 
         # Initialize SQL validator if LLM client available
         self.validator = None
@@ -170,6 +174,7 @@ class SQLGenerator:
                 llm_client=llm_client,
                 max_iterations=10,
                 sample_size=10,
+                enable_cache=enable_cache,
             )
             logger.info("[sql-gen] SQL validator initialized")
 
@@ -1387,6 +1392,7 @@ class SQLGenerator:
         """
         import json
         import time
+        import hashlib
 
         logger.info(
             "[sql-gen][llm-enrich] analyzing query for implicit context columns"
@@ -1396,6 +1402,37 @@ class SQLGenerator:
         if not self.llm_client or intent_type == "list":
             logger.debug("[sql-gen][llm-enrich] skipping (no LLM client or list query)")
             return select_columns
+
+        # Generate cache key from question, intent_type, and current columns
+        if self.enable_cache and self.cache:
+            cols_key = json.dumps([{
+                "table": col.table,
+                "column": col.column,
+                "aggregation": col.aggregation,
+            } for col in select_columns], sort_keys=True)
+            tables_key = json.dumps(sorted(plan.get("tables", [])))
+            
+            cached = self.cache.get(
+                "llm_sql",
+                "enrich_context",
+                question.lower(),
+                intent_type,
+                cols_key,
+                tables_key,
+            )
+            if cached:
+                logger.info(f"[sql-gen][llm-enrich] Using cached enrichment result")
+                # Reconstruct SQLColumn objects from cached data
+                enriched_columns = []
+                for col_data in cached:
+                    enriched_columns.append(SQLColumn(
+                        table=col_data["table"],
+                        column=col_data["column"],
+                        alias=col_data.get("alias"),
+                        aggregation=col_data.get("aggregation"),
+                        transformation=col_data.get("transformation"),
+                    ))
+                return enriched_columns
 
         try:
             # Build context about current columns and available schema
@@ -1584,6 +1621,30 @@ Guidelines:
                 f"[sql-gen][llm-enrich] enrichment complete: added {added_count} column(s)"
             )
 
+            # Cache the enriched columns
+            if self.enable_cache and self.cache:
+                tables_key = json.dumps(sorted(plan.get("tables", [])))
+                
+                # Serialize enriched columns for caching
+                cached_data = [{
+                    "table": col.table,
+                    "column": col.column,
+                    "alias": col.alias,
+                    "aggregation": col.aggregation,
+                    "transformation": col.transformation,
+                } for col in select_columns]
+                
+                self.cache.set(
+                    "llm_sql",
+                    cached_data,
+                    "enrich_context",
+                    question.lower(),
+                    intent_type,
+                    cols_key,  # Use the cache key we created at the start
+                    tables_key,
+                )
+                logger.debug(f"[sql-gen][llm-enrich] Cached enrichment result")
+
             return select_columns
 
         except Exception as e:
@@ -1625,6 +1686,36 @@ Guidelines:
         if not self.llm_client:
             logger.debug("[sql-gen][llm-refine] skipping (no LLM client)")
             return select_columns
+
+        # Generate cache key from question, intent_type, and current columns
+        if self.enable_cache and self.cache:
+            cols_key = json.dumps([{
+                "table": col.table,
+                "column": col.column,
+                "aggregation": col.aggregation,
+                "data_type": self._get_column_data_type(col.table, col.column),
+            } for col in select_columns], sort_keys=True)
+            
+            cached = self.cache.get(
+                "llm_sql",
+                "refine_transforms",
+                question.lower(),
+                intent_type,
+                cols_key,
+            )
+            if cached:
+                logger.info(f"[sql-gen][llm-refine] Using cached transformation result")
+                # Reconstruct SQLColumn objects from cached data
+                refined_columns = []
+                for col_data in cached:
+                    refined_columns.append(SQLColumn(
+                        table=col_data["table"],
+                        column=col_data["column"],
+                        alias=col_data.get("alias"),
+                        aggregation=col_data.get("aggregation"),
+                        transformation=col_data.get("transformation"),
+                    ))
+                return refined_columns
 
         try:
             # Build context about current columns
@@ -1744,6 +1835,27 @@ Guidelines:
 
             if not transform_columns:
                 logger.info("[sql-gen][llm-refine] no column transformations suggested")
+                
+                # Cache the result even if no transformations
+                if self.enable_cache and self.cache:
+                    cached_data = [{
+                        "table": col.table,
+                        "column": col.column,
+                        "alias": col.alias,
+                        "aggregation": col.aggregation,
+                        "transformation": col.transformation,
+                    } for col in select_columns]
+                    
+                    self.cache.set(
+                        "llm_sql",
+                        cached_data,
+                        "refine_transforms",
+                        question.lower(),
+                        intent_type,
+                        cols_key,
+                    )
+                    logger.debug(f"[sql-gen][llm-refine] Cached no-transformation result")
+                
                 return select_columns
 
             logger.info(
@@ -1789,6 +1901,26 @@ Guidelines:
             logger.info(
                 f"[sql-gen][llm-refine] refinement complete: transformed {transformed_count} column(s)"
             )
+
+            # Cache the refined columns
+            if self.enable_cache and self.cache:
+                cached_data = [{
+                    "table": col.table,
+                    "column": col.column,
+                    "alias": col.alias,
+                    "aggregation": col.aggregation,
+                    "transformation": col.transformation,
+                } for col in new_columns]
+                
+                self.cache.set(
+                    "llm_sql",
+                    cached_data,
+                    "refine_transforms",
+                    question.lower(),
+                    intent_type,
+                    cols_key,
+                )
+                logger.debug(f"[sql-gen][llm-refine] Cached transformation result")
 
             return new_columns
 
