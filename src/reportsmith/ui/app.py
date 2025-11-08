@@ -91,10 +91,16 @@ samples = [
 ]
 
 with st.expander("Sample queries (graph + LLM refinement)", expanded=True):
-    for i, q in enumerate(samples, start=1):
-        if st.button(f"Use sample {i}", key=f"sample_{i}"):
-            st.session_state["rs_sample_query"] = q
-    st.code("\n".join(f"- {q}" for q in samples))
+    # Add a "Select a sample query" option at the beginning
+    query_options = ["Select a sample query..."] + samples
+    selected = st.selectbox(
+        "Choose a sample query:",
+        options=query_options,
+        index=0,
+        key="sample_query_selector"
+    )
+    if selected != "Select a sample query...":
+        st.session_state["rs_sample_query"] = selected
 
 with st.form("query_form"):
     default_q = st.session_state.get("rs_sample_query") or ""
