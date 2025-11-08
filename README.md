@@ -138,16 +138,16 @@ SELECT SUM(funds.total_aum) AS aum,
 - Hybrid intent analysis (95% accuracy)
 - Semantic search with OpenAI embeddings
 - SQL generation with auto-filtering
+- SQL execution engine
 - FastAPI server + Streamlit UI
 - Comprehensive logging and debugging
 
 🚧 **In Progress**:
-- SQL execution engine enhancements
+- Streaming UI with real-time progress
 - Advanced query optimization
 - Multi-database federation
 
 📋 **Planned**:
-- Streaming UI with real-time progress
 - Query result caching
 - Natural language result explanations
 - Multi-turn conversations
