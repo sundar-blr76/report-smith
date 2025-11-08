@@ -907,7 +907,7 @@ class AgentNodes:
             dt_ms = (time.perf_counter() - t0) * 1000.0
             state.timings["schema_ms"] = round(dt_ms, 2)
             if unmapped:
-                # Log unmapped entities with more context
+                # Log unmapped entities with more context for developer comprehension
                 logger.warning(
                     f"[predicate-resolution][schema][UNMAPPED] Found {len(unmapped)} unmapped entity(ies)"
                 )
@@ -915,37 +915,65 @@ class AgentNodes:
                     entity_text = e.get('text', '')
                     entity_type = e.get('entity_type', 'unknown')
                     confidence = e.get('confidence', 0.0)
+                    source = e.get('source', 'unknown')
                     
                     # Check if this looks like a temporal predicate
                     is_temporal = any(term in entity_text.upper() for term in 
                                      ['Q1', 'Q2', 'Q3', 'Q4', 'QUARTER', 'MONTH', 'YEAR', '2025', '2024', '2023'])
                     
+                    logger.warning(
+                        f"[predicate-resolution][UNMAPPED] >>> '{entity_text}' "
+                        f"(type={entity_type}, source={source}, conf={confidence:.2f})"
+                    )
+                    
                     if is_temporal:
                         logger.warning(
-                            f"[predicate-resolution][schema][UNMAPPED] >>> TEMPORAL entity '{entity_text}' "
-                            f"(type={entity_type}, conf={confidence:.2f}) - "
-                            f"This should have been resolved by LLM intent analyzer"
+                            f"[predicate-resolution][UNMAPPED] ⚠️  TEMPORAL entity - "
+                            f"Should have been resolved by LLM intent analyzer into filter predicate"
                         )
                         # Check if it's in the filters
                         filters = state.intent.get('filters', []) if state.intent else []
-                        filter_match = any(entity_text in f for f in filters)
+                        filter_match = any(entity_text.lower() in f.lower() for f in filters)
                         if filter_match:
                             logger.info(
-                                f"[predicate-resolution][schema] ✓ Entity '{entity_text}' appears to be "
-                                f"resolved in filters: {[f for f in filters if entity_text.lower() in f.lower()]}"
+                                f"[predicate-resolution] ✓ Temporal predicate resolved in filters: "
+                                f"{[f for f in filters if entity_text.lower() in f.lower()]}"
+                            )
+                            logger.info(
+                                f"[predicate-resolution] Entity '{entity_text}' can be safely ignored - "
+                                f"it's a temporal reference, not a database entity"
                             )
                         else:
-                            logger.warning(
-                                f"[predicate-resolution][schema] ✗ Entity '{entity_text}' NOT found in "
-                                f"filters - may cause SQL generation issues"
+                            logger.error(
+                                f"[predicate-resolution] ✗ PROBLEM: Temporal entity '{entity_text}' NOT in filters! "
+                                f"LLM may have failed to convert it to a date predicate. "
+                                f"This will likely cause SQL generation failure."
+                            )
+                            logger.error(
+                                f"[predicate-resolution] Intent filters: {filters}"
+                            )
+                    elif entity_type == 'domain_value':
+                        logger.warning(
+                            f"[predicate-resolution][UNMAPPED] Domain value '{entity_text}' not mapped to table. "
+                            f"Semantic search may have failed. Consider LLM enrichment."
+                        )
+                        # Log if semantic matches exist but were below threshold
+                        semantic_matches = e.get('semantic_matches', [])
+                        if semantic_matches:
+                            best_match = semantic_matches[0]
+                            logger.info(
+                                f"[predicate-resolution] Best semantic match: '{best_match.get('content')}' "
+                                f"(score={best_match.get('score', 0):.3f}) - below threshold?"
                             )
                     else:
                         logger.warning(
-                            f"[schema][UNMAPPED] >>> {entity_text} (type={entity_type}, conf={confidence:.2f})"
+                            f"[predicate-resolution][UNMAPPED] Entity '{entity_text}' (type={entity_type}) "
+                            f"could not be mapped to schema"
                         )
                         
                 logger.warning(
-                    f"[schema][UNMAPPED] Summary: {[e.get('text') for e in unmapped]}"
+                    f"[predicate-resolution][UNMAPPED] Summary: {len(unmapped)} unmapped - "
+                    f"{[e.get('text') + f\"({e.get('entity_type')})\" for e in unmapped]}"
                 )
             logger.info(
                 f"[schema] mapped entities to {len(tables)} table(s): {tables} in {dt_ms:.1f}ms"
