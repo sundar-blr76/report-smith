@@ -16,23 +16,45 @@ Result: 0 rows ❌
 
 ## Proposed Multi-Tier Fallback Strategy
 
+**Key Insight:** For domain values, use LLM with full context and complete value list as the PRIMARY strategy, not fallback.
+
 ```
 ┌─────────────────────────────────────────┐
-│  User Input: "equity growth"            │
+│  User Input: "equity"                    │
+│  Query Context: "List equity funds"      │
 └──────────────┬──────────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 1: Semantic Search (Current)            │
+│ Tier 1: Semantic Search (Quick Filter)       │
 │ - Embedding similarity                        │
 │ - Score threshold: 0.3                        │
 │ Result: "Equity Growth" (score: 0.28)        │
-│ Status: ❌ Below threshold                    │
+│ Status: ⚠️  Below threshold → Need LLM       │
 └──────────────┬───────────────────────────────┘
-               │ score < 0.3
+               │ score < 0.5 (needs verification)
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 2: Fuzzy String Matching                │
+│ Tier 2: LLM-Based Multi-Selection (PRIMARY)  │
+│ Input:                                        │
+│   - User query: "List equity funds"          │
+│   - User term: "equity"                      │
+│   - Column: funds.fund_type                  │
+│   - ALL available values:                    │
+│     ["Equity Growth", "Equity Value",        │
+│      "Bond", "Technology", "REIT", ...]      │
+│                                              │
+│ LLM returns:                                 │
+│   - ["Equity Growth", "Equity Value"]        │
+│   - Confidence: 0.95                         │
+│   - Reasoning: "'equity' matches both types" │
+│                                              │
+│ Result: Multiple values selected ✓           │
+└──────────────┬───────────────────────────────┘
+               │ LLM unavailable or low confidence
+               ▼
+┌──────────────────────────────────────────────┐
+│ Tier 3: Fuzzy String Matching (Fallback)     │
 │ - Levenshtein distance (typos)               │
 │ - Token matching (word order)                │
 │ Examples:                                     │
@@ -42,31 +64,310 @@ Result: 0 rows ❌
                │ fuzzy_score < 0.6
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 3: LLM-Based Mapping                    │
-│ - Handles abbreviations ("tech"→"Technology")│
-│ - Context-aware reasoning                     │
-│ Example: "tech" → "Technology" (conf: 0.85)  │
-└──────────────┬───────────────────────────────┘
-               │ confidence < 0.5
-               ▼
-┌──────────────────────────────────────────────┐
-│ Tier 4: Approximate Matching                 │
-│ - ILIKE: WHERE col ILIKE '%equity%growth%'   │
+│ Tier 4: Approximate Matching (Last Resort)   │
+│ - ILIKE: WHERE col ILIKE '%equity%'          │
 │ - Trigram similarity (PostgreSQL pg_trgm)    │
 └──────────────┬───────────────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 5: User Feedback                        │
-│ - Show confidence & alternatives in response │
+│ Tier 5: User Feedback (Always)               │
+│ - Show confidence & method used              │
+│ - Show which values were selected            │
+│ - Suggest alternatives if uncertain          │
 └───────────────────────────────────────────────┘
 ```
 
 ## Implementation Phases
 
-### Phase 1: Quick Wins (1-2 days)
+### Phase 1: LLM-Based Multi-Selection (PRIMARY - 2-3 days)
 
-**Goal:** Detect and warn about poor matches
+**Goal:** Use LLM to select ALL applicable domain values from complete list
+
+**Why LLM First:**
+- ✅ Understands context better than any algorithm
+- ✅ Can select MULTIPLE applicable values (not just one)
+- ✅ Handles synonyms, abbreviations, partial matches
+- ✅ Reasoning makes results explainable
+- ✅ One call handles all cases
+
+**LLM Prompt Template:**
+```python
+DOMAIN_VALUE_SELECTION_PROMPT = """
+Task: Select ALL applicable domain values that match the user's intent.
+
+User Query: "{full_query}"
+User mentioned: "{user_term}"
+Column: {table}.{column}
+Column description: {column_description}
+
+ALL Available Values:
+{available_values_json}
+
+Instructions:
+1. Analyze the user's intent from the full query context
+2. Select ALL values that match the user's intent
+3. Consider:
+   - Exact matches
+   - Partial matches (e.g., "equity" matches "Equity Growth" AND "Equity Value")
+   - Abbreviations (e.g., "tech" → "Technology")
+   - Synonyms (e.g., "stocks" → "Equity Growth", "Equity Value")
+   - Context clues from the full query
+4. If uncertain, prefer being INCLUSIVE (select more rather than less)
+5. If NO values match, return empty array
+
+Return JSON only:
+{{
+  "selected_values": ["Equity Growth", "Equity Value"],
+  "confidence": 0.95,
+  "reasoning": "'equity' is a partial match for both Equity Growth and Equity Value fund types",
+  "excluded_count": 5,
+  "excluded_examples": ["Bond", "Technology", "REIT"]
+}}
+"""
+```
+
+**Example Scenarios:**
+
+**Scenario 1: Partial Match (Multiple Results)**
+```
+Query: "List equity funds"
+User term: "equity"
+Available: ["Equity Growth", "Equity Value", "Bond", "Technology", "REIT", "Money Market"]
+
+LLM Response:
+{
+  "selected_values": ["Equity Growth", "Equity Value"],
+  "confidence": 0.95,
+  "reasoning": "'equity' is a category that includes both Equity Growth and Equity Value types"
+}
+
+Generated SQL:
+WHERE fund_type IN ('Equity Growth', 'Equity Value')
+```
+
+**Scenario 2: Abbreviation**
+```
+Query: "Show tech funds"
+User term: "tech"
+Available: ["Equity Growth", "Bond", "Technology", "REIT"]
+
+LLM Response:
+{
+  "selected_values": ["Technology"],
+  "confidence": 0.90,
+  "reasoning": "'tech' is a common abbreviation for Technology"
+}
+
+Generated SQL:
+WHERE fund_type = 'Technology'
+```
+
+**Scenario 3: Synonym with Multiple Matches**
+```
+Query: "List stock funds"
+User term: "stock"
+Available: ["Equity Growth", "Equity Value", "Bond", "Technology"]
+
+LLM Response:
+{
+  "selected_values": ["Equity Growth", "Equity Value"],
+  "confidence": 0.85,
+  "reasoning": "'stock' is a synonym for equity investments, matching both Equity Growth and Equity Value"
+}
+
+Generated SQL:
+WHERE fund_type IN ('Equity Growth', 'Equity Value')
+```
+
+**Scenario 4: Context-Aware Selection**
+```
+Query: "Show growth-oriented funds"
+User term: "growth"
+Available: ["Equity Growth", "Equity Value", "Bond", "Technology Growth"]
+
+LLM Response:
+{
+  "selected_values": ["Equity Growth", "Technology Growth"],
+  "confidence": 0.88,
+  "reasoning": "'growth-oriented' suggests growth strategies, matching Equity Growth and Technology Growth"
+}
+
+Generated SQL:
+WHERE fund_type IN ('Equity Growth', 'Technology Growth')
+```
+
+**Scenario 5: No Match**
+```
+Query: "List cryptocurrency funds"
+User term: "cryptocurrency"
+Available: ["Equity Growth", "Bond", "Technology", "REIT"]
+
+LLM Response:
+{
+  "selected_values": [],
+  "confidence": 0.95,
+  "reasoning": "No fund types match cryptocurrency. Available types are equity, bond, technology, and REIT based."
+}
+
+Fallback: Use ILIKE or inform user
+```
+
+**Implementation:**
+```python
+async def _llm_select_domain_values(
+    user_query: str,
+    user_term: str,
+    column: str,
+    available_values: List[str],
+    column_metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Use LLM to select ALL applicable domain values
+    
+    Args:
+        user_query: Full user question for context
+        user_term: Specific term user mentioned (e.g., "equity")
+        column: Table.column (e.g., "funds.fund_type")
+        available_values: Complete list of possible values
+        column_metadata: Column description, context, etc.
+    
+    Returns:
+        {
+            "selected_values": ["Value1", "Value2"],
+            "confidence": 0.95,
+            "reasoning": "explanation",
+            "method": "llm_multi_select"
+        }
+    """
+    # Build prompt
+    table, col = column.split('.')
+    prompt = DOMAIN_VALUE_SELECTION_PROMPT.format(
+        full_query=user_query,
+        user_term=user_term,
+        table=table,
+        column=col,
+        column_description=column_metadata.get('description', ''),
+        available_values_json=json.dumps(available_values, indent=2)
+    )
+    
+    # Call LLM with caching
+    cache_key = f"domain_select:{column}:{user_term}:{hash(tuple(available_values))}"
+    
+    try:
+        response = await self.llm_client.generate(
+            prompt,
+            response_format="json",
+            cache_key=cache_key,
+            cache_ttl=3600,  # Cache for 1 hour
+            timeout_ms=3000   # Fail fast if slow
+        )
+        
+        result = json.loads(response)
+        
+        # Validate all selected values exist in available_values
+        valid_values = [
+            v for v in result.get("selected_values", [])
+            if v in available_values
+        ]
+        
+        if not valid_values:
+            logger.warning(
+                f"[llm-select] LLM returned no valid values for '{user_term}' "
+                f"in {column}"
+            )
+            return None
+        
+        # Log the selection
+        logger.info(
+            f"[llm-select] '{user_term}' → {valid_values} "
+            f"(confidence={result.get('confidence', 0):.2f}) "
+            f"Reasoning: {result.get('reasoning', '')[:100]}"
+        )
+        
+        return {
+            "selected_values": valid_values,
+            "confidence": result.get("confidence", 0.5),
+            "reasoning": result.get("reasoning", ""),
+            "method": "llm_multi_select"
+        }
+        
+    except Exception as e:
+        logger.error(f"[llm-select] Failed to call LLM: {e}")
+        return None
+```
+
+**Integration with SQL Generator:**
+```python
+# In sql_generator.py - domain value processing
+
+for ent in dimension_entities:
+    table = ent.get("table")
+    column = ent.get("column")
+    user_term = ent.get("text")
+    
+    # Get semantic match score
+    top_match = ent.get("top_match", {})
+    semantic_score = top_match.get("score", 0.0)
+    
+    # If semantic score is low or ambiguous, use LLM multi-select
+    if semantic_score < 0.5:
+        # Fetch all available values for this column
+        available_values = self._get_domain_values(table, column)
+        
+        # Call LLM to select applicable values
+        llm_result = await self._llm_select_domain_values(
+            user_query=self.state.question,
+            user_term=user_term,
+            column=f"{table}.{column}",
+            available_values=available_values,
+            column_metadata=self.kg.get_column_metadata(table, column)
+        )
+        
+        if llm_result and llm_result["selected_values"]:
+            # Use LLM-selected values
+            selected_values = llm_result["selected_values"]
+            
+            # Add to dimension groups (will create IN clause if multiple)
+            for val in selected_values:
+                safe_value = val.replace("'", "''")
+                dim_groups[key].append(safe_value)
+            
+            logger.info(
+                f"[sql-gen][where] LLM selected {len(selected_values)} value(s) "
+                f"for '{user_term}': {selected_values}"
+            )
+            
+            # Add to warnings for transparency
+            if llm_result["confidence"] < 0.8:
+                warnings.append({
+                    "type": "llm_selection",
+                    "user_term": user_term,
+                    "selected_values": selected_values,
+                    "confidence": llm_result["confidence"],
+                    "reasoning": llm_result["reasoning"]
+                })
+            
+            continue  # Skip other matching strategies
+    
+    # Fallback to existing logic (semantic matches, fuzzy, etc.)
+    ...
+```
+
+**Caching Strategy:**
+- Cache LLM results by (column, user_term, available_values_hash)
+- TTL: 1 hour (values don't change frequently)
+- Invalidate cache when domain values are updated
+
+**Performance Considerations:**
+- First call: ~1-2 seconds (LLM latency)
+- Cached calls: <10ms
+- Parallel processing: Can call LLM for multiple columns simultaneously
+- Timeout: 3 seconds max (fallback to fuzzy match)
+
+### Phase 2: Score Detection & Warnings (1 day)
+
+**Goal:** Detect and warn about LLM selections for transparency
 
 **Tasks:**
 1. Add score threshold check (< 0.3) in SQL generator
@@ -115,19 +416,14 @@ def _build_where_conditions(...):
     return conditions, warnings
 ```
 
-### Phase 2: Fuzzy Matching (3-5 days)
+### Phase 3: Fuzzy Matching (Fallback - 2-3 days)
 
-**Goal:** Handle typos and word order variations
-
-**Dependencies:**
-```bash
-pip install rapidfuzz  # Faster than fuzzywuzzy
-```
+**Goal:** Fallback when LLM unavailable or fails
 
 **Use Cases:**
-- Typos: "equty" → "Equity"
-- Word order: "growth equity" → "Equity Growth"
-- Case sensitivity: "equity" → "Equity"
+- LLM timeout or unavailable
+- LLM returns low confidence (< 0.3)
+- Simple typos that don't need LLM
 
 **Implementation:**
 ```python
@@ -168,86 +464,39 @@ def _fuzzy_match_domain_value(
 
 **Integration Point:** Call after semantic search fails (score < 0.3)
 
-### Phase 3: LLM-Based Mapping (5-7 days)
+### Phase 4: Database Optimization (2-3 days)
 
-**Goal:** Handle abbreviations and synonyms contextually
+**Goal:** Efficient domain value storage and retrieval
 
-**Use Cases:**
-- Abbreviations: "tech" → "Technology"
-- Synonyms: "stocks" → "Equity"
-- Domain knowledge: "crypto" → suggest alternatives or fail gracefully
-
-**LLM Prompt Template:**
+**Tasks:**
+1. **Cache Domain Values:**
 ```python
-DOMAIN_VALUE_MAPPING_PROMPT = """
-Task: Map user input to the best matching database value.
-
-Column: {table}.{column}
-Available values: {available_values}
-User input: "{user_input}"
-Query context: "{query}"
-
-Instructions:
-1. Map the user input to the BEST matching value from the available list
-2. Consider abbreviations, synonyms, and common terms
-3. If no good match exists, return null for best_match
-4. Provide reasoning for your choice
-
-Return JSON only:
-{{
-  "best_match": "Technology" or null,
-  "confidence": 0.85,
-  "alternatives": ["Alternative1", "Alternative2"],
-  "reasoning": "Brief explanation"
-}}
-"""
+class DomainValueCache:
+    """Cache all available values per column for fast LLM access"""
+    
+    def __init__(self, kg):
+        self.kg = kg
+        self.cache = {}
+        self.cache_ttl = 3600  # 1 hour
+    
+    async def get_values(self, table: str, column: str) -> List[str]:
+        """Get all available values for a column"""
+        key = f"{table}.{column}"
+        
+        if key in self.cache:
+            cached_at, values = self.cache[key]
+            if time.time() - cached_at < self.cache_ttl:
+                return values
+        
+        # Query database for distinct values
+        query = f"SELECT DISTINCT {column} FROM {table} WHERE {column} IS NOT NULL ORDER BY {column}"
+        values = await self.kg.execute_query(query)
+        
+        self.cache[key] = (time.time(), values)
+        return values
 ```
 
-**Implementation:**
-```python
-async def _llm_map_domain_value(
-    user_input: str,
-    column: str,
-    available_values: List[str],
-    query_context: str
-) -> Dict[str, Any]:
-    """Use LLM to map user input to domain value"""
-    
-    # Build prompt
-    prompt = DOMAIN_VALUE_MAPPING_PROMPT.format(
-        table=column.split('.')[0],
-        column=column.split('.')[1],
-        available_values=json.dumps(available_values[:20]),  # Limit for token efficiency
-        user_input=user_input,
-        query=query_context
-    )
-    
-    # Call LLM (with caching)
-    response = await self.llm_client.generate(
-        prompt,
-        response_format="json",
-        cache_key=f"domain_map:{column}:{user_input}"
-    )
-    
-    result = json.loads(response)
-    
-    # Validate best_match exists in available_values
-    if result.get("best_match") and result["best_match"] not in available_values:
-        logger.warning(
-            f"[llm-map] LLM suggested invalid value: {result['best_match']}"
-        )
-        result["best_match"] = None
-    
-    return result
-```
-
-**Caching:** Cache LLM results for 1 hour to avoid repeated calls
-
-### Phase 4: Database Optimization (3-5 days)
-
-**Goal:** Use PostgreSQL trigram similarity for better partial matching
-
-**Setup:**
+2. **Add Trigram Indexes (for fuzzy fallback):**
 ```sql
 -- Enable trigram extension
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
