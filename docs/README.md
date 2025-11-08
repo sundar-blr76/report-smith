@@ -7,96 +7,76 @@ This directory contains all technical documentation for ReportSmith.
 ### Getting Started
 - **[../README.md](../README.md)** - Project overview and quick start
 - **[../SETUP.md](../SETUP.md)** - Detailed setup instructions
+- **[../CONTRIBUTING.md](../CONTRIBUTING.md)** - Contribution guidelines
 
 ### Architecture & Design
-- **[CURRENT_STATE.md](CURRENT_STATE.md)** - Current system status, features, and roadmap
-- **[../REFACTORING_PROPOSAL.md](../REFACTORING_PROPOSAL.md)** - Modular refactoring plan
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
+- **[HLD.md](HLD.md)** - High-level design
+- **[LLD.md](LLD.md)** - Low-level design
 
-### Technical Documentation
+### Implementation & Best Practices
+- **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - Implementation strategies, performance optimization
+- **[DOMAIN_VALUES.md](DOMAIN_VALUES.md)** - Domain value handling and resolution
 - **[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)** - Database schema and tables
-- **[EMBEDDING_STRATEGY.md](EMBEDDING_STRATEGY.md)** - Minimal embedding approach
-- **[SEMANTIC_SEARCH_REFACTORING.md](SEMANTIC_SEARCH_REFACTORING.md)** - Semantic search design
-- **[ENTITY_REFINEMENT.md](ENTITY_REFINEMENT.md)** - Entity extraction process
-- **[SQL_COLUMN_ENRICHMENT.md](SQL_COLUMN_ENRICHMENT.md)** - SQL column enrichment
 
-### Diagrams & Flows
-- **[QUERY_FLOW_DIAGRAM.txt](QUERY_FLOW_DIAGRAM.txt)** - Query processing workflow
+### Module Documentation
+- **[modules/](modules/)** - Detailed module documentation
+  - [AGENTS_MODULE.md](modules/AGENTS_MODULE.md) - Query orchestration
+  - [QUERY_PROCESSING_MODULE.md](modules/QUERY_PROCESSING_MODULE.md) - Intent analysis, SQL generation
+  - [SCHEMA_INTELLIGENCE_MODULE.md](modules/SCHEMA_INTELLIGENCE_MODULE.md) - Knowledge graph, embeddings
+  - [QUERY_EXECUTION_MODULE.md](modules/QUERY_EXECUTION_MODULE.md) - SQL execution
+  - [API_MODULE.md](modules/API_MODULE.md) - REST API
+  - [UI_MODULE.md](modules/UI_MODULE.md) - Streamlit UI
 
 ### Historical Documentation
-- **[archive/IMPLEMENTATION_HISTORY.md](archive/IMPLEMENTATION_HISTORY.md)** - Historical implementation notes
+- **[archive/](archive/)** - Archived analysis and historical docs
 
 ## Documentation Structure
 
 ```
 docs/
-├── README.md                          # This file - documentation index
-├── CURRENT_STATE.md                   # ⭐ Start here for current status
-├── DATABASE_SCHEMA.md                 # Database design
-├── EMBEDDING_STRATEGY.md              # Embeddings approach
-├── SEMANTIC_SEARCH_REFACTORING.md     # Semantic search design
-├── ENTITY_REFINEMENT.md               # Entity extraction
-├── SQL_COLUMN_ENRICHMENT.md           # SQL enrichment
-├── QUERY_FLOW_DIAGRAM.txt             # Query flow visualization
-└── archive/                           # Historical documentation
-    └── IMPLEMENTATION_HISTORY.md      # Implementation evolution
+├── README.md                     # This file - documentation index
+├── ARCHITECTURE.md               # System architecture
+├── HLD.md                        # High-level design
+├── LLD.md                        # Low-level design  
+├── IMPLEMENTATION_GUIDE.md       # Implementation & performance
+├── DOMAIN_VALUES.md              # Domain value handling
+├── DATABASE_SCHEMA.md            # Database design
+├── modules/                      # Module-specific docs
+│   ├── AGENTS_MODULE.md
+│   ├── QUERY_PROCESSING_MODULE.md
+│   ├── SCHEMA_INTELLIGENCE_MODULE.md
+│   ├── QUERY_EXECUTION_MODULE.md
+│   ├── API_MODULE.md
+│   └── UI_MODULE.md
+└── archive/                      # Historical documentation
+    ├── IMPLEMENTATION_HISTORY.md
+    ├── SQL_VALIDATION_FAILURE_ANALYSIS.md
+    ├── EMBEDDING_STRATEGY.md (merged into IMPLEMENTATION_GUIDE)
+    └── PERFORMANCE.md (merged into IMPLEMENTATION_GUIDE)
 ```
-
-## Database
-
-ReportSmith uses PostgreSQL with 5 tables:
-
-1. **Execution Tracking (3 tables)**
-   - `execution_sessions` - Overall query execution
-   - `execution_steps` - Multi-step breakdown
-   - `query_executions` - SQL query metrics
-
-2. **Saved Queries (1 table)**
-   - `saved_queries` - User-saved queries
-
-3. **Vector Store (1 table)**
-   - `schema_embeddings` - Semantic search embeddings
-
-## Application Configurations
-
-Application schemas stored in YAML files:
-
-```
-config/applications/
-├── fund_accounting/
-│   ├── app.yaml             # Application metadata
-│   ├── schema.yaml          # Schema definition
-│   └── instances/           # Database instances
-```
-
-Each configuration contains:
-- Database connections
-- Table schemas
-- Business context
-- Relationships
-
-**See:** [../config/applications/README.md](../config/applications/README.md)
 
 ## For Different Audiences
 
 ### 👨‍💻 Developers
 Start with:
-1. [CURRENT_STATE.md](CURRENT_STATE.md) - Current architecture
-2. [../REFACTORING_PROPOSAL.md](../REFACTORING_PROPOSAL.md) - Refactoring plans
-3. [EMBEDDING_STRATEGY.md](EMBEDDING_STRATEGY.md) - Semantic search
+1. [ARCHITECTURE.md](ARCHITECTURE.md) - System overview
+2. [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) - Best practices
+3. [modules/](modules/) - Module details
 
 ### 🚀 DevOps
 Start with:
 1. [../SETUP.md](../SETUP.md) - Setup and deployment
 2. [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) - Database requirements
-3. [CURRENT_STATE.md](CURRENT_STATE.md) - System status
+3. [ARCHITECTURE.md](ARCHITECTURE.md) - System components
 
 ### 🏗️ Architects
 Start with:
-1. [CURRENT_STATE.md](CURRENT_STATE.md) - Architecture overview
-2. [QUERY_FLOW_DIAGRAM.txt](QUERY_FLOW_DIAGRAM.txt) - System flow
-3. [../REFACTORING_PROPOSAL.md](../REFACTORING_PROPOSAL.md) - Future plans
+1. [HLD.md](HLD.md) - High-level design
+2. [LLD.md](LLD.md) - Low-level design
+3. [ARCHITECTURE.md](ARCHITECTURE.md) - Architecture details
 
 ---
 
-**Last Updated**: November 4, 2025  
-**Version**: Current as of refactoring proposal implementation
+**Last Updated**: November 8, 2025  
+**Version**: Post domain-value resolution fixes

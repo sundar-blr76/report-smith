@@ -131,6 +131,8 @@ class AgentNodes:
                     "text": e.text,
                     "entity_type": e.entity_type,
                     "confidence": e.confidence,
+                    "canonical_name": getattr(e, "canonical_name", None),
+                    "value": getattr(e, "value", None),
                     "top_match": (
                         e.semantic_matches[0] if e.semantic_matches else None
                     ),
@@ -750,20 +752,33 @@ class AgentNodes:
         if not entity_text:
             return None
             
-        # Check if semantic search already found a decent match
+        # Check if semantic search already found a very good match
         semantic_matches = entity.get("semantic_matches", [])
         if semantic_matches:
             best_score = max(m.get("score", 0.0) for m in semantic_matches)
-            if best_score >= 0.7:  # Good semantic match, no need for enrichment
+            # Only skip enrichment if we have a very high confidence semantic match (>= 0.85)
+            # AND the value is already set in the entity
+            if best_score >= 0.85 and entity.get("value"):
                 logger.debug(
                     f"[domain-enricher] Skipping enrichment for '{entity_text}' - "
-                    f"good semantic match exists (score={best_score:.3f})"
+                    f"high confidence semantic match exists (score={best_score:.3f}) with value='{entity.get('value')}'"
                 )
                 return None
         
-        logger.info(
-            f"[domain-enricher] Attempting LLM enrichment for domain value '{entity_text}'"
-        )
+        # Get source for logging
+        source = entity.get("source", "unknown")
+        existing_value = entity.get("value") or entity.get("canonical_name")
+        
+        if existing_value:
+            logger.info(
+                f"[domain-enricher] Attempting LLM enrichment for domain value '{entity_text}' "
+                f"(current_value='{existing_value}', source={source}) to verify against database"
+            )
+        else:
+            logger.info(
+                f"[domain-enricher] Attempting LLM enrichment for domain value '{entity_text}' (no value yet)"
+            )
+
         
         # Try to determine table/column from semantic matches or entity hints
         table_hint = entity.get("table")
@@ -1073,6 +1088,63 @@ class AgentNodes:
                     logger.debug(
                         f"[schema][map] entity='{ent_text}' type={ent_type} -> table='{mapped_table}' via {reason}"
                     )
+                    
+                    # For domain values with table/column mapping, try LLM enrichment to verify/enhance the value
+                    # This helps when local mapping or semantic search provided the table/column but value needs verification
+                    if ent_type == "domain_value" and self.domain_value_enricher:
+                        ent_table = ent.get("table")
+                        ent_column = ent.get("column")
+                        ent_value = ent.get("value") or ent.get("canonical_name")
+                        
+                        # Try enrichment if:
+                        # 1. We have table/column but no verified value, OR
+                        # 2. We have a value from local mapping but want to verify it against database
+                        should_enrich = False
+                        enrich_reason = ""
+                        
+                        if ent_table and ent_column:
+                            if not ent_value:
+                                should_enrich = True
+                                enrich_reason = "has table/column but missing value"
+                            elif ent.get("source") == "local" and ent.get("semantic_match_count", 0) == 0:
+                                # Local mapping provided value but no semantic verification
+                                should_enrich = True
+                                enrich_reason = "verify local mapping against database"
+                        
+                        if should_enrich:
+                            logger.info(
+                                f"[schema][map][domain-enrichment] Domain value '{ent_text}' ({enrich_reason}). "
+                                f"Attempting LLM enrichment for {ent_table}.{ent_column}..."
+                            )
+                            enriched_ent = self._try_enrich_domain_value(ent, state.question)
+                            
+                            if enriched_ent and enriched_ent.get("value"):
+                                logger.info(
+                                    f"[schema][map][domain-enrichment] ✓ Domain value '{ent_text}' enriched: "
+                                    f"'{ent_value or ent_text}' → '{enriched_ent.get('value')}' "
+                                    f"(confidence={enriched_ent.get('confidence', 0):.2f})"
+                                )
+                                
+                                # Update the entity in state with enriched value
+                                for i, state_ent in enumerate(state.entities):
+                                    if (state_ent.get("text") == ent_text and 
+                                        state_ent.get("entity_type") == ent_type):
+                                        # Merge enriched data into existing entity
+                                        state.entities[i]["value"] = enriched_ent.get("value")
+                                        state.entities[i]["canonical_name"] = enriched_ent.get("canonical_name")
+                                        state.entities[i]["confidence"] = enriched_ent.get("confidence")
+                                        if enriched_ent.get("source"):
+                                            state.entities[i]["source"] = enriched_ent.get("source")
+                                        logger.info(
+                                            f"[schema][map][domain-enrichment] Updated entity in state with enriched value"
+                                        )
+                                        break
+                            else:
+                                logger.warning(
+                                    f"[schema][map][domain-enrichment] LLM enrichment returned low confidence "
+                                    f"for '{ent_text}'. Using original mapping."
+                                )
+                    
                 else:
                     # Before marking as unmapped, try LLM enrichment for domain values
                     if ent_type == "domain_value" and self.domain_value_enricher:

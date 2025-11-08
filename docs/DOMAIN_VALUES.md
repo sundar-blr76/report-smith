@@ -128,3 +128,89 @@ Domain values are loaded lazily:
 ---
 
 *Consolidated from: DOMAIN_VALUE_MATCHING_STRATEGY.md, DOMAIN_VALUE_LLM_IMPLEMENTATION.md*
+# Domain Value Resolution Fixes - Summary
+
+## Date: 2025-11-08
+
+## Issues Fixed
+
+### 1. Domain Value Canonical Name Not Used in SQL Generation
+**Problem**: When local mapping mapped "retail" to "Individual", the SQL generator used the user's text ("retail") instead of the canonical value ("Individual"), causing query failures.
+
+**Solution**: 
+- Updated entity dict conversion in `nodes.py` to include `canonical_name` and `value` fields
+- Modified SQL generator to use value priority: `entity.value` → `entity.canonical_name` → `semantic_match.value` → `entity.text`
+- Added logging to show which source is being used for domain values
+
+**Files Changed**:
+- `src/reportsmith/agents/nodes.py` (lines 129-148)
+- `src/reportsmith/query_processing/sql_generator.py` (lines 840-877)
+
+### 2. Domain Value Enrichment Not Called for Local Mappings  
+**Problem**: LLM enrichment was only called when semantic search failed completely, missing cases where local mapping succeeded but the value needed verification against actual database values.
+
+**Solution**:
+- Added enrichment logic for domain values that have table/column mapping
+- Enrichment now attempts to verify local mapping values against actual database values
+- Added condition to enrich when source is "local" with no semantic verification
+
+**Files Changed**:
+- `src/reportsmith/agents/nodes.py` (lines 1078-1138)
+
+### 3. Enhanced Logging for Domain Value Resolution
+**Problem**: Insufficient visibility into how domain values are resolved, making debugging difficult.
+
+**Solution**:
+- Added comprehensive logging at each stage of domain value resolution
+- Logs show: value source, confidence, enrichment attempts, database verification
+- Added warnings when user's input text is used directly without verification
+
+**Files Changed**:
+- `src/reportsmith/agents/nodes.py` (enrichment logging)
+- `src/reportsmith/query_processing/sql_generator.py` (value resolution logging)
+
+### 4. Semantic Match Threshold Too Aggressive
+**Problem**: Enrichment skipped when semantic match score >= 0.7, even if value wasn't set.
+
+**Solution**:
+- Raised threshold to 0.85 for skipping enrichment
+- Only skip if both high confidence match AND value is already set
+- Added logging to show when enrichment is skipped and why
+
+**Files Changed**:
+- `src/reportsmith/agents/nodes.py` (lines 756-782)
+
+## Testing Recommendations
+
+1. **Test Query**: "What are the average fees by fund type for all our retail investors?"
+   - Should now use `clients.client_type = 'Individual'` instead of `'retail'`
+   - Check logs for domain value enrichment attempts
+   - Verify SQL uses canonical value from local mapping or LLM enrichment
+
+2. **Test Query**: "List fees for TruePotential clients"
+   - Should trigger LLM enrichment to match "TruePotential" to "TruePotential Asset Management"
+   - Check enrichment logs for fuzzy matching logic
+
+3. **Test Query**: "Show equity products"
+   - Should match multiple values: "Equity Growth", "Equity Value", etc.
+   - Verify all matching domain values are included in SQL
+
+## Logging Keywords to Monitor
+
+- `[domain-enricher]` - LLM enrichment attempts and results
+- `[schema][map][domain-enrichment]` - Schema mapping enrichment flow
+- `[sql-gen][where] ✓ Using domain value from` - Shows which value source was used
+- `⚠️  Using user's input text as domain value` - Warning when unverified value is used
+
+## Known Limitations
+
+1. Enrichment requires table/column hints to be present
+2. LLM enrichment may incur API costs for each domain value verification
+3. Enrichment currently only works for single domain values, not complex expressions
+
+## Future Enhancements
+
+1. Cache enrichment results to avoid repeated LLM calls for same values
+2. Add support for compound domain values (e.g., "equity or bond")
+3. Implement confidence-based fallback when enrichment fails
+4. Add user feedback mechanism to improve matching over time

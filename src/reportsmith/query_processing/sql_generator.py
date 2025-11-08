@@ -837,13 +837,46 @@ class SQLGenerator:
                         f"{key} = '{match_value}' (score={match_score:.3f})"
                     )
             
-            # If no values were added from semantic matches, use top_match
+            # If no values were added from semantic matches, use mapped value
             if not values_added:
-                value = md.get("value") or ent.get("text")
+                # Priority order for value resolution:
+                # 1. Entity value field (from local mapping or LLM enrichment)
+                # 2. Entity canonical_name (from local mapping)
+                # 3. Top match value from semantic search
+                # 4. User's input text (last resort - may not match database)
+                value = (
+                    ent.get("value") or 
+                    ent.get("canonical_name") or
+                    md.get("value") or 
+                    ent.get("text")
+                )
                 if value:
                     safe_value = value.replace("'", "''")
                     dim_groups[key].append(safe_value)
                     values_added.add(value)
+                    
+                    # Log which source was used
+                    if ent.get("value"):
+                        logger.info(
+                            f"[sql-gen][where] ✓ Using domain value from entity.value: "
+                            f"{key} = '{value}' (source: {ent.get('source', 'unknown')})"
+                        )
+                    elif ent.get("canonical_name"):
+                        logger.info(
+                            f"[sql-gen][where] ✓ Using domain value from entity.canonical_name: "
+                            f"{key} = '{value}' (source: local_mapping)"
+                        )
+                    elif md.get("value"):
+                        logger.debug(
+                            f"[sql-gen][where] using domain value from semantic match: "
+                            f"{key} = '{value}'"
+                        )
+                    else:
+                        logger.warning(
+                            f"[sql-gen][where] ⚠️  Using user's input text as domain value: "
+                            f"{key} = '{value}' - may not match database values!"
+                        )
+
             
             # Track this as explicitly filtered
             if values_added:
