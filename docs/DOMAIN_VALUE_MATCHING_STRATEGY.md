@@ -16,7 +16,7 @@ Result: 0 rows ❌
 
 ## Proposed Multi-Tier Fallback Strategy
 
-**Key Insight:** For domain values, use LLM with full context and complete value list as the PRIMARY strategy, not fallback.
+**Key Insight:** Don't blindly use user-provided domain values. Use semantic search + optional LLM enrichment when needed.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -26,35 +26,51 @@ Result: 0 rows ❌
                │
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 1: Semantic Search (Quick Filter)       │
-│ - Embedding similarity                        │
-│ - Score threshold: 0.3                        │
-│ Result: "Equity Growth" (score: 0.28)        │
-│ Status: ⚠️  Below threshold → Need LLM       │
+│ Tier 1: Direct Match                         │
+│ - Exact case-insensitive match               │
+│ Result: Match "Equity" → ["Equity"]          │
+│ Status: ✅ Use directly                      │
 └──────────────┬───────────────────────────────┘
-               │ score < 0.5 (needs verification)
+               │ No direct match
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 2: LLM-Based Multi-Selection (PRIMARY)  │
-│ Input:                                        │
+│ Tier 2: Semantic Search                      │
+│ - Embedding similarity search                │
+│ - Score threshold: 0.7 (high confidence)     │
+│ Result: "Equity Growth" (score: 0.75)       │
+│ Status: ✅ High confidence → Use it          │
+└──────────────┬───────────────────────────────┘
+               │ score < 0.7 (low confidence)
+               ▼
+┌──────────────────────────────────────────────┐
+│ Tier 3: LLM Domain Enricher (OPTIONAL)       │
+│ ⚙️ Config: enable_llm_domain_enrichment      │
+│                                              │
+│ When enabled:                                │
+│ Input:                                       │
 │   - User query: "List equity funds"          │
 │   - User term: "equity"                      │
 │   - Column: funds.fund_type                  │
 │   - ALL available values:                    │
 │     ["Equity Growth", "Equity Value",        │
 │      "Bond", "Technology", "REIT", ...]      │
+│   - Table/Column metadata                    │
+│   - Business context                         │
 │                                              │
 │ LLM returns:                                 │
 │   - ["Equity Growth", "Equity Value"]        │
 │   - Confidence: 0.95                         │
-│   - Reasoning: "'equity' matches both types" │
+│   - Reasoning: "'equity' category match"     │
 │                                              │
-│ Result: Multiple values selected ✓           │
+│ When disabled:                               │
+│   - Skip to Tier 4                           │
+│                                              │
+│ Result: Multiple values selected (if enabled)│
 └──────────────┬───────────────────────────────┘
-               │ LLM unavailable or low confidence
+               │ LLM disabled/unavailable/low confidence
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 3: Fuzzy String Matching (Fallback)     │
+│ Tier 4: Fuzzy String Matching                │
 │ - Levenshtein distance (typos)               │
 │ - Token matching (word order)                │
 │ Examples:                                     │
@@ -64,34 +80,116 @@ Result: 0 rows ❌
                │ fuzzy_score < 0.6
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 4: Approximate Matching (Last Resort)   │
-│ - ILIKE: WHERE col ILIKE '%equity%'          │
-│ - Trigram similarity (PostgreSQL pg_trgm)    │
+│ Tier 5: REJECT - Don't Use User Value ❌     │
+│                                              │
+│ ❌ OLD BEHAVIOR (WRONG):                     │
+│    Use user value as-is:                     │
+│    WHERE fund_type = 'equity'                │
+│    Result: 0 rows!                           │
+│                                              │
+│ ✅ NEW BEHAVIOR (CORRECT):                   │
+│    Mark as UNRESOLVED                        │
+│    Return to user with suggestions:          │
+│    "Could not match 'equity' to fund types.  │
+│     Did you mean: Equity Growth, Equity Value?" │
+│                                              │
+│    OR use approximate query (if configured): │
+│    WHERE fund_type ILIKE '%equity%'          │
+│    (Show warning in results)                 │
 └──────────────┬───────────────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────────────┐
-│ Tier 5: User Feedback (Always)               │
-│ - Show confidence & method used              │
+│ User Feedback (Always)                       │
+│ - Show resolution method used                │
 │ - Show which values were selected            │
+│ - Show confidence score                      │
 │ - Suggest alternatives if uncertain          │
+│ - Warn if approximate matching used          │
 └───────────────────────────────────────────────┘
 ```
 
 ## Implementation Phases
 
-### Phase 1: LLM-Based Multi-Selection (PRIMARY - 2-3 days)
+### Phase 1: Stop Using Raw User Values (CRITICAL - 1 day)
 
-**Goal:** Use LLM to select ALL applicable domain values from complete list
+**Goal:** NEVER use user-provided domain values as-is when semantic search fails
 
-**Why LLM First:**
-- ✅ Understands context better than any algorithm
-- ✅ Can select MULTIPLE applicable values (not just one)
-- ✅ Handles synonyms, abbreviations, partial matches
-- ✅ Reasoning makes results explainable
-- ✅ One call handles all cases
+**Current Problem:**
+```python
+# ❌ WRONG - Current behavior
+if not semantic_match or semantic_match.score < threshold:
+    # Use user value as-is → Often 0 rows!
+    return user_value  
+```
 
-**LLM Prompt Template (Enhanced with Rich Context):**
+**Fixed Behavior:**
+```python
+# ✅ CORRECT - New behavior
+if not semantic_match or semantic_match.score < threshold:
+    # Mark as unresolved
+    return UnresolvedDomainValue(
+        user_term=user_value,
+        column=column_name,
+        suggestions=get_closest_values(user_value, available_values, top_n=5),
+        resolution_strategy="user_clarification_needed"
+    )
+```
+
+**Changes Required:**
+1. In `schema_mapper.py` or domain value resolution code:
+   - Remove fallback to raw user value
+   - Return unresolved marker instead
+   - Collect suggestions from available values
+
+2. In query planner:
+   - Detect unresolved domain values
+   - Return to user with suggestions
+   - Don't generate SQL with unresolved values
+
+3. Add configuration:
+   ```yaml
+   domain_value_matching:
+     use_raw_user_value_fallback: false  # ❌ Disable dangerous fallback
+     show_suggestions_on_failure: true
+     max_suggestions: 5
+   ```
+
+### Phase 2: Optional LLM Domain Enricher (2-3 days)
+
+**Goal:** Make LLM-based domain value selection OPTIONAL, not mandatory
+
+**Why Optional:**
+- Some deployments may not have LLM access
+- Cost considerations for high-volume usage
+- Semantic search alone works well for exact/close matches
+- LLM adds value for ambiguous/category terms only
+
+**Configuration:**
+```yaml
+domain_value_matching:
+  llm_enrichment:
+    enabled: false  # Optional - disabled by default
+    provider: "gemini"
+    model: "gemini-2.5-flash"
+    timeout_ms: 3000
+    fallback_on_error: true  # Continue without LLM if it fails
+    use_for_categories: true  # Enable for category-like terms
+```
+
+**When to Use LLM (if enabled):**
+- ✅ Semantic score < 0.7 (uncertain)
+- ✅ User term is broad/category ("equity", "tech")  
+- ✅ Multiple potential matches exist
+- ✅ Abbreviation/synonym suspected
+
+**When to Skip LLM:**
+- ❌ Exact match found
+- ❌ Semantic score > 0.7 (high confidence)
+- ❌ LLM disabled in config
+- ❌ Single unambiguous match
+
+**LLM Prompt Template (Streamlined - No Stats/Patterns):**
 ```python
 DOMAIN_VALUE_SELECTION_PROMPT = """
 Task: Select ALL applicable domain values that match the user's intent.
@@ -105,33 +203,27 @@ Query Intent: {query_intent}  # e.g., "aggregation", "ranking", "filtering"
 Table: {table_name}
 Table Description: {table_description}
 Table Business Context: {table_context}
-Estimated Row Count: {table_row_count}
+Application Domain: {application_domain}
 
 Column: {column_name}
 Column Data Type: {column_data_type}
 Column Description: {column_description}
 Column Business Context: {column_context}
 Is Dimension Column: {is_dimension}
-Related Tables: {related_tables}
+Cardinality: {cardinality} unique values
 
-=== DOMAIN VALUE STATISTICS ===
-Total Available Values: {value_count}
-Value Distribution:
-{value_distribution}
-
-ALL Available Values (sorted by frequency):
+=== AVAILABLE VALUES ===
+Total Count: {value_count}
+ALL Values:
 {available_values_json}
 
 === BUSINESS RULES & CONTEXT ===
 {business_rules}
 
-=== RELATED DOMAIN KNOWLEDGE ===
-Common Abbreviations: {abbreviations}
+=== DOMAIN KNOWLEDGE ===
+Known Abbreviations: {abbreviations}
 Known Synonyms: {synonyms}
 Category Hierarchies: {hierarchies}
-
-=== EXAMPLE USAGE PATTERNS ===
-{usage_examples}
 
 === INSTRUCTIONS ===
 1. Analyze the user's intent from the FULL QUERY CONTEXT (not just the isolated term)
@@ -239,7 +331,7 @@ Generated SQL:
 WHERE fund_type IN ('Equity Growth', 'Technology Growth')
 ```
 
-**Scenario 5: No Match**
+**Scenario 5: No Match - Don't Use Raw Value ❌**
 ```
 Query: "List cryptocurrency funds"
 User term: "cryptocurrency"
@@ -248,6 +340,23 @@ Available: ["Equity Growth", "Bond", "Technology", "REIT"]
 LLM Response:
 {
   "selected_values": [],
+  "confidence": 0.0,
+  "reasoning": "No available values match 'cryptocurrency'. Database contains equity, bond, technology, and REIT fund types only."
+}
+
+Result: Return UnresolvedDomainValue
+Suggestions shown to user:
+  "Could not match 'cryptocurrency' to fund_type.
+   Available types: Equity Growth, Bond, Technology, REIT
+   Did you mean 'Technology'?"
+
+❌ OLD BEHAVIOR (WRONG):
+Generated SQL: WHERE fund_type = 'cryptocurrency'
+Result: 0 rows
+
+✅ NEW BEHAVIOR (CORRECT):
+Don't generate SQL - ask user to clarify
+```
   "confidence": 0.95,
   "reasoning": "No fund types match cryptocurrency. Available types are equity, bond, technology, and REIT based."
 }
