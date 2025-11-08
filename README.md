@@ -107,6 +107,8 @@ curl -X POST http://127.0.0.1:8000/query \
 - **[SETUP.md](SETUP.md)** - Detailed setup guide
 - **[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)** - Current system status
 - **[docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema details
+- **[docs/LATENCY_IMPROVEMENTS.md](docs/LATENCY_IMPROVEMENTS.md)** - Performance optimization analysis
+- **[docs/LATENCY_QUICK_WINS.md](docs/LATENCY_QUICK_WINS.md)** - Quick implementation guide
 - **[REFACTORING_PROPOSAL.md](REFACTORING_PROPOSAL.md)** - Architecture refactoring plan
 
 ## Example Use Case
@@ -160,6 +162,18 @@ SELECT SUM(funds.total_aum) AS aum,
 | Intent Accuracy | ~95% | >95% |
 | Entity Precision | ~90% | >90% |
 | SQL Success Rate | 100% | 100% |
+
+### Performance Optimization
+
+See detailed latency improvement analysis and recommendations:
+- **[LATENCY_IMPROVEMENTS.md](docs/LATENCY_IMPROVEMENTS.md)** - Comprehensive analysis with strategic roadmap
+- **[LATENCY_QUICK_WINS.md](docs/LATENCY_QUICK_WINS.md)** - Actionable 1-2 week implementation guide
+
+**Quick wins identified**:
+- Query result caching: 100% improvement on cache hits
+- Adaptive LLM model selection: 30-40% average improvement
+- Fast path for simple queries: 80% improvement for 20-30% of queries
+- Combined estimated impact: **68% latency reduction** (3.6s → 1.15s)
 
 ## Contributing
 
