@@ -1,0 +1,363 @@
+# Comprehensive Test Queries for ReportSmith
+# Covering various complexity levels and edge cases
+
+test_queries:
+  
+  # ========================================
+  # BASIC QUERIES (Complexity: 1-2)
+  # ========================================
+  
+  - id: basic_001
+    description: "Simple list query - single table"
+    query: "List all clients"
+    expected_tables: ["clients"]
+    expected_intent: "list"
+    complexity: 1
+    
+  - id: basic_002
+    description: "Simple list with single filter"
+    query: "List all active funds"
+    expected_tables: ["funds"]
+    expected_filters: ["is_active = true"]
+    complexity: 1
+    
+  - id: basic_003
+    description: "List with specific column"
+    query: "Show client names and types"
+    expected_tables: ["clients"]
+    expected_columns: ["client_name", "client_type"]
+    complexity: 1
+
+  - id: basic_004
+    description: "Simple count aggregation"
+    query: "How many clients do we have?"
+    expected_tables: ["clients"]
+    expected_intent: "aggregate"
+    expected_aggregations: ["count"]
+    complexity: 1
+
+  # ========================================
+  # DOMAIN VALUE MATCHING (Complexity: 2-3)
+  # ========================================
+  
+  - id: domain_001
+    description: "Domain value - exact match"
+    query: "List all Bond funds"
+    expected_tables: ["funds"]
+    expected_filters: ["fund_type = 'Bond'"]
+    complexity: 2
+    
+  - id: domain_002
+    description: "Domain value - fuzzy match (plural)"
+    query: "Show bond funds"
+    expected_tables: ["funds"]
+    expected_filters: ["fund_type = 'Bond'"]
+    complexity: 2
+    
+  - id: domain_003
+    description: "Domain value - partial company name"
+    query: "List fees for TruePotential clients"
+    expected_tables: ["clients", "fee_transactions", "management_companies"]
+    expected_filters: ["management_companies.name LIKE '%TruePotential%'"]
+    notes: "Should match 'TruePotential Asset Management' via LLM enrichment"
+    complexity: 3
+    
+  - id: domain_004
+    description: "Domain value - client type"
+    query: "Show all retail investors"
+    expected_tables: ["clients"]
+    expected_filters: ["client_type = 'Retail'"]
+    notes: "Should trigger LLM enrichment for 'retail' -> 'Retail'"
+    complexity: 2
+    
+  - id: domain_005
+    description: "Domain value - multiple matches (equity)"
+    query: "List equity products"
+    expected_tables: ["funds"]
+    expected_filters: ["fund_type IN ('Equity Growth', 'Equity Value')"]
+    notes: "Should match multiple equity fund types"
+    complexity: 3
+
+  # ========================================
+  # TEMPORAL QUERIES (Complexity: 3-4)
+  # ========================================
+  
+  - id: temporal_001
+    description: "Quarter filter - paid in period"
+    query: "Show fees paid in Q1 2025"
+    expected_tables: ["fee_transactions"]
+    expected_filters: ["payment_date BETWEEN '2025-01-01' AND '2025-03-31'"]
+    notes: "Should use payment_date, not fee_period_start"
+    complexity: 3
+    
+  - id: temporal_002
+    description: "Quarter filter - for period"
+    query: "Show fees FOR Q1 2025"
+    expected_tables: ["fee_transactions"]
+    expected_filters: ["fee_period_start BETWEEN '2025-01-01' AND '2025-03-31'"]
+    notes: "Should use fee_period_start for 'FOR' queries"
+    complexity: 3
+    
+  - id: temporal_003
+    description: "Last N months"
+    query: "Show transactions from the last 12 months"
+    expected_tables: ["transactions"]
+    expected_filters: ["transaction_date >= DATE_SUB(CURRENT_DATE, INTERVAL 12 MONTH)"]
+    complexity: 3
+    
+  - id: temporal_004
+    description: "Specific month and year"
+    query: "List fees paid in January 2025"
+    expected_tables: ["fee_transactions"]
+    expected_filters: ["payment_date BETWEEN '2025-01-01' AND '2025-01-31'"]
+    complexity: 3
+    
+  - id: temporal_005
+    description: "Year-to-date"
+    query: "Show year-to-date performance"
+    expected_tables: ["performance_reports"]
+    expected_filters: ["report_date >= '2025-01-01'"]
+    complexity: 3
+
+  # ========================================
+  # AGGREGATION QUERIES (Complexity: 3-4)
+  # ========================================
+  
+  - id: agg_001
+    description: "Sum with grouping"
+    query: "Total fees by fund type"
+    expected_tables: ["fee_transactions", "funds"]
+    expected_intent: "aggregate"
+    expected_aggregations: ["sum"]
+    expected_group_by: ["fund_type"]
+    complexity: 3
+    
+  - id: agg_002
+    description: "Average with multiple dimensions"
+    query: "Average fees by fund type for retail investors"
+    expected_tables: ["fee_transactions", "funds", "clients"]
+    expected_aggregations: ["avg"]
+    expected_group_by: ["fund_type"]
+    expected_filters: ["client_type = 'Retail'"]
+    notes: "Should include currency column"
+    complexity: 4
+    
+  - id: agg_003
+    description: "Count distinct"
+    query: "How many unique clients have paid fees in 2025?"
+    expected_tables: ["fee_transactions", "clients"]
+    expected_aggregations: ["count_distinct"]
+    expected_filters: ["payment_date >= '2025-01-01'"]
+    complexity: 3
+    
+  - id: agg_004
+    description: "Multiple aggregations"
+    query: "Show total and average fees by month"
+    expected_tables: ["fee_transactions"]
+    expected_aggregations: ["sum", "avg"]
+    expected_group_by: ["month"]
+    complexity: 4
+
+  # ========================================
+  # RANKING/TOP-N QUERIES (Complexity: 3-4)
+  # ========================================
+  
+  - id: rank_001
+    description: "Top N simple"
+    query: "Top 5 clients by AUM"
+    expected_tables: ["clients"]
+    expected_intent: "top_n"
+    expected_order_by: ["aum DESC"]
+    expected_limit: 5
+    complexity: 3
+    
+  - id: rank_002
+    description: "Top N with filter and join"
+    query: "List the top 5 clients by total fees paid on bond funds in Q1 2025"
+    expected_tables: ["clients", "fee_transactions", "funds"]
+    expected_intent: "top_n"
+    expected_filters: ["fund_type = 'Bond'", "payment_date BETWEEN '2025-01-01' AND '2025-03-31'"]
+    expected_order_by: ["total_fees DESC"]
+    expected_limit: 5
+    notes: "Should include currency column"
+    complexity: 5
+    
+  - id: rank_003
+    description: "Bottom N performers"
+    query: "Show the 5 worst performing funds this year"
+    expected_tables: ["funds", "performance_reports"]
+    expected_intent: "top_n"
+    expected_filters: ["report_date >= '2025-01-01'"]
+    expected_order_by: ["return_pct ASC"]
+    expected_limit: 5
+    complexity: 4
+
+  # ========================================
+  # MULTI-TABLE JOINS (Complexity: 4-5)
+  # ========================================
+  
+  - id: join_001
+    description: "Two table join"
+    query: "List clients with their management companies"
+    expected_tables: ["clients", "management_companies"]
+    expected_joins: ["clients -> management_companies"]
+    complexity: 3
+    
+  - id: join_002
+    description: "Three table join"
+    query: "Show fund names with their manager names"
+    expected_tables: ["funds", "fund_manager_assignments", "fund_managers"]
+    expected_joins: ["funds -> fund_manager_assignments", "fund_manager_assignments -> fund_managers"]
+    complexity: 4
+    
+  - id: join_003
+    description: "Complex multi-table aggregation"
+    query: "Total fees by fund manager for equity products in the last quarter"
+    expected_tables: ["fee_transactions", "funds", "fund_manager_assignments", "fund_managers"]
+    expected_aggregations: ["sum"]
+    expected_filters: ["fund_type LIKE '%Equity%'", "payment_date >= DATE_SUB(CURRENT_DATE, INTERVAL 3 MONTH)"]
+    complexity: 5
+    
+  - id: join_004
+    description: "Account-level query"
+    query: "Show holdings value by client"
+    expected_tables: ["holdings", "accounts", "clients"]
+    expected_aggregations: ["sum"]
+    expected_group_by: ["client_name"]
+    complexity: 4
+
+  # ========================================
+  # FILTERED AGGREGATIONS (Complexity: 4-5)
+  # ========================================
+  
+  - id: filter_agg_001
+    description: "Aggregation with date and dimension filter"
+    query: "Total fees collected from institutional clients in 2024"
+    expected_tables: ["fee_transactions", "clients"]
+    expected_aggregations: ["sum"]
+    expected_filters: ["client_type = 'Institutional'", "payment_date BETWEEN '2024-01-01' AND '2024-12-31'"]
+    complexity: 4
+    
+  - id: filter_agg_002
+    description: "Complex filter with multiple conditions"
+    query: "Average performance for high-risk equity funds managed by top-rated managers"
+    expected_tables: ["funds", "performance_reports", "fund_manager_assignments", "fund_managers"]
+    expected_aggregations: ["avg"]
+    expected_filters: ["risk_rating = 'High'", "fund_type LIKE '%Equity%'", "performance_rating >= 4"]
+    complexity: 5
+    
+  - id: filter_agg_003
+    description: "Monthly aggregation with filters"
+    query: "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers"
+    expected_tables: ["fee_transactions", "funds", "fund_manager_assignments", "fund_managers"]
+    expected_aggregations: ["sum"]
+    expected_group_by: ["month"]
+    expected_filters: ["fund_type LIKE '%Equity%'", "performance_rating >= 4", "payment_date >= DATE_SUB(CURRENT_DATE, INTERVAL 12 MONTH)"]
+    notes: "Should include currency column"
+    complexity: 5
+
+  # ========================================
+  # COMPARISON QUERIES (Complexity: 4-5)
+  # ========================================
+  
+  - id: compare_001
+    description: "Compare two entities"
+    query: "Compare performance of Bond vs Equity funds"
+    expected_tables: ["funds", "performance_reports"]
+    expected_intent: "comparison"
+    expected_group_by: ["fund_type"]
+    complexity: 4
+    
+  - id: compare_002
+    description: "Period-over-period comparison"
+    query: "Compare Q1 2025 fees to Q1 2024 fees"
+    expected_tables: ["fee_transactions"]
+    expected_intent: "comparison"
+    expected_filters: ["payment_date BETWEEN '2024-01-01' AND '2024-03-31' OR payment_date BETWEEN '2025-01-01' AND '2025-03-31'"]
+    complexity: 5
+    
+  - id: compare_003
+    description: "Manager performance comparison"
+    query: "Compare average returns for each fund manager"
+    expected_tables: ["funds", "performance_reports", "fund_manager_assignments", "fund_managers"]
+    expected_aggregations: ["avg"]
+    expected_group_by: ["manager_name"]
+    complexity: 4
+
+  # ========================================
+  # EDGE CASES & CHALLENGES (Complexity: 5)
+  # ========================================
+  
+  - id: edge_001
+    description: "Negation filter"
+    query: "List all funds except Bond funds"
+    expected_tables: ["funds"]
+    expected_filters: ["fund_type != 'Bond'"]
+    complexity: 3
+    
+  - id: edge_002
+    description: "Multiple value filter"
+    query: "Show clients from New York, California, or Texas"
+    expected_tables: ["clients"]
+    expected_filters: ["state IN ('New York', 'California', 'Texas')"]
+    complexity: 3
+    
+  - id: edge_003
+    description: "Null check"
+    query: "List clients without an assigned manager"
+    expected_tables: ["clients"]
+    expected_filters: ["relationship_manager_id IS NULL"]
+    complexity: 3
+    
+  - id: edge_004
+    description: "Percentage calculation"
+    query: "What percentage of our AUM is in equity funds?"
+    expected_tables: ["funds"]
+    expected_aggregations: ["sum"]
+    notes: "Should calculate percentage"
+    complexity: 5
+    
+  - id: edge_005
+    description: "Ambiguous temporal reference"
+    query: "Show last quarter's performance"
+    expected_tables: ["performance_reports"]
+    expected_filters: ["report_date BETWEEN (last quarter start) AND (last quarter end)"]
+    notes: "Should resolve 'last quarter' to specific dates"
+    complexity: 4
+
+  # ========================================
+  # BUSINESS INTELLIGENCE (Complexity: 5)
+  # ========================================
+  
+  - id: bi_001
+    description: "Client segmentation"
+    query: "Break down total AUM by client type and risk profile"
+    expected_tables: ["clients", "accounts"]
+    expected_aggregations: ["sum"]
+    expected_group_by: ["client_type", "risk_profile"]
+    complexity: 5
+    
+  - id: bi_002
+    description: "Fee analysis by product and channel"
+    query: "Analyze fee revenue by fund type and client segment for YTD"
+    expected_tables: ["fee_transactions", "funds", "clients"]
+    expected_aggregations: ["sum"]
+    expected_group_by: ["fund_type", "client_type"]
+    expected_filters: ["payment_date >= '2025-01-01'"]
+    complexity: 5
+    
+  - id: bi_003
+    description: "Manager productivity"
+    query: "Which managers manage the most client assets?"
+    expected_tables: ["fund_managers", "fund_manager_assignments", "funds", "holdings"]
+    expected_aggregations: ["sum"]
+    expected_group_by: ["manager_name"]
+    complexity: 5
+
+# Complexity Scale:
+# 1 - Single table, no joins, simple filter
+# 2 - Single table, domain value matching
+# 3 - 2 tables, simple join, temporal filters
+# 4 - 3+ tables, aggregations, multiple filters
+# 5 - Complex joins, multiple aggregations, advanced filtering
+
