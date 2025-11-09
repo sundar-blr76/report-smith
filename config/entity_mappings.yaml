@@ -51,11 +51,11 @@ columns:
     source_notes: "Primary source for current NAV from funds table"
   
   balance:
-    canonical_name: current_balance
+    canonical_name: total_balance
     table: accounts
-    column: available_balance
+    column: total_balance
     aliases: [account balance, holdings, position]
-    description: "Current account balance"
+    description: "Total account balance"
   
   # Alternative AUM sources (lower priority - for demonstration)
   aum_from_holdings:

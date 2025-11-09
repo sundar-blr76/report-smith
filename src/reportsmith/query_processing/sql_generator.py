@@ -219,6 +219,7 @@ class SQLGenerator:
                     select_columns=select_columns,
                     entities=entities,
                     plan=plan,
+                    filters=filters,
                 )
 
                 # Refine existing columns based on user query (e.g., timestamp -> month)
@@ -390,27 +391,16 @@ class SQLGenerator:
                         + (f" (agg={agg})" if agg else "")
                     )
 
-        # Add dimension columns for grouping
-        dimension_tables = set()
-        for ent in dimension_entities:
-            table = ent.get("table")
-            column = ent.get("column")
-            if not table or not column:
-                md = (ent.get("top_match") or {}).get("metadata") or {}
-                table = table or md.get("table")
-                column = column or md.get("column")
-
-            if table and column and table not in dimension_tables:
-                # Add the dimension column for grouping/filtering
-                columns.append(
-                    SQLColumn(
-                        table=table,
-                        column=column,
-                        alias=column,
-                    )
-                )
-                dimension_tables.add(table)
-                logger.debug(f"[sql-gen][select] added dimension: {table}.{column}")
+        # NOTE: Domain value entities are used primarily for filtering (WHERE clause)
+        # They should NOT be automatically added to SELECT unless explicitly needed
+        # for grouping based on the query intent. The LLM enrichment step will add
+        # them if they're truly needed for output context.
+        # 
+        # For example: "average fees for retail investors" should filter by
+        # client_type='Individual' but NOT include client_type in SELECT/GROUP BY
+        # since all results have the same client_type value.
+        
+        logger.debug(f"[sql-gen][select] skipping {len(dimension_entities)} domain_value entities - used for filtering only")
 
         # If no columns yet but we have tables, select primary keys or common display columns
         if not columns and table_entities:
@@ -1372,6 +1362,7 @@ class SQLGenerator:
         select_columns: List[SQLColumn],
         entities: List[Dict[str, Any]],
         plan: Dict[str, Any],
+        filters: List[str] = None,
     ) -> List[SQLColumn]:
         """
         Use LLM to identify and add implicit context columns that would make
@@ -1386,6 +1377,7 @@ class SQLGenerator:
             select_columns: Currently selected columns
             entities: Discovered entities
             plan: Query plan with tables
+            filters: List of filter conditions to avoid adding filter-only columns
 
         Returns:
             Enhanced list of SQLColumn objects with context columns added
@@ -1467,6 +1459,23 @@ class SQLGenerator:
                 for col in select_columns
             ]
 
+            # Extract filter columns to avoid adding them to SELECT
+            # Parse filters to identify equality filter columns (e.g., "client_type = 'Individual'")
+            filter_columns = set()
+            if filters:
+                import re
+                for filter_str in filters:
+                    # Match patterns like "table.column = 'value'" or "column = 'value'"
+                    match = re.search(r"(\w+\.)?(\w+)\s*=\s*['\"]", filter_str)
+                    if match:
+                        column = match.group(2)
+                        filter_columns.add(column)
+                        logger.debug(f"[sql-gen][llm-enrich] identified filter column: {column}")
+
+            filters_info = ""
+            if filter_columns:
+                filters_info = f"\n\nFilter Columns (DO NOT add these to SELECT):\n{list(filter_columns)}\nThese columns are used only for filtering with equality conditions, so including them in SELECT/GROUP BY adds no value."
+
             # Build LLM prompt
             # Extract the main entity being ranked/listed from the question
             ranking_entity_hint = ""
@@ -1495,7 +1504,7 @@ Currently Selected Columns:
 {json.dumps(current_cols, indent=2)}
 
 Available Schema (columns per table):
-{json.dumps(available_columns, indent=2)}
+{json.dumps(available_columns, indent=2)}{filters_info}
 
 Task: Identify additional columns that would make the query output more meaningful for human consumption.
 
@@ -1527,9 +1536,11 @@ Return a JSON object with:
 Guidelines:
 - For ranking queries, adding entity identifiers is MANDATORY, not optional
 - Don't suggest columns already selected
+- **DO NOT suggest columns that are used only for equality filtering** (listed above as Filter Columns)
 - Prioritize human-readable identifiers (names over IDs, but include both when helpful)
 - Keep the list focused (max 10 additional columns)
 - All suggested columns must be compatible with GROUP BY if aggregations are present
+- Focus on columns that will vary across result rows (not constant filter values)
 """
 
             # Log the prompt payload
