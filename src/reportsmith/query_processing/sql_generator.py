@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass
 import re
+import difflib
 
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.logger import get_logger
@@ -667,8 +668,6 @@ class SQLGenerator:
         # If no exact match, try fuzzy match (e.g., "customer_type" matches "client_type")
         if not matching_nodes:
             # Try removing common prefixes/suffixes and checking similarity
-            import difflib
-
             candidates = []
             for node in self.kg.nodes.values():
                 if node.type == "column" and node.name:
