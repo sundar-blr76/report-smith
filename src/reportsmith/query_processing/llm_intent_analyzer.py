@@ -154,10 +154,10 @@ For entities, use the exact terms from the query when possible.
 
 IMPORTANT: For temporal filters (quarters, months, years, dates):
 - Identify which table's temporal column should be used based on the query intent:
-  * "fees PAID in Q1" → use fee_transactions.fee_period_start (when fee period starts)
-  * "fees FOR Q1" or "fee period Q1" → use fee_transactions.fee_period_start/fee_period_end (the period being charged for)
+  * "fees PAID in Q1" or "paid on" → use fee_transactions.payment_date (when fee was actually paid)
+  * "fees FOR Q1" or "fee period Q1" → use fee_transactions.fee_period_start/fee_period_end (the period the fee covers)
   * "transactions in Q1" → use transaction_date (when transaction occurred)
-- For PAID/RECEIVED/COLLECTED fees use fee_period_start date (fees don't have payment dates, they have fee periods)
+- **CRITICAL**: "PAID" indicates actual payment → use payment_date
 - For period-based queries use fee_period_start/fee_period_end dates
 - Format filters as: "EXTRACT(QUARTER FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For months: "EXTRACT(MONTH FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
@@ -280,6 +280,97 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         
         logger.info("=" * 80)
     
+    def _get_business_context(self, query: str) -> str:
+        """
+        Get business context from semantic and local search to help LLM.
+        
+        This provides the LLM with:
+        - Relevant tables and their descriptions
+        - Available columns and their business meanings
+        - Date/time columns for temporal predicates
+        
+        Args:
+            query: User's natural language query
+            
+        Returns:
+            Formatted business context string
+        """
+        logger.info(f"[business-context] Building context for query: {query[:50]}...")
+        
+        try:
+            # Do semantic search to find relevant schema elements
+            schema_results = self.embedding_manager.search_schema(
+                query, 
+                top_k=self.max_search_results
+            )
+            
+            # Collect relevant tables and columns
+            tables_info = {}
+            
+            for result in schema_results:
+                if result.score < self.schema_score_threshold:
+                    continue
+                
+                metadata = result.metadata
+                entity_type = metadata.get("type")
+                
+                if entity_type == "table":
+                    table_name = metadata.get("entity_name")
+                    if table_name and table_name not in tables_info:
+                        tables_info[table_name] = {
+                            "description": metadata.get("description", ""),
+                            "columns": []
+                        }
+                
+                elif entity_type == "column":
+                    table_name = metadata.get("table")
+                    column_name = metadata.get("entity_name")
+                    column_type = metadata.get("column_type", "")
+                    description = metadata.get("description", "")
+                    
+                    if table_name and column_name:
+                        if table_name not in tables_info:
+                            tables_info[table_name] = {
+                                "description": "",
+                                "columns": []
+                            }
+                        
+                        tables_info[table_name]["columns"].append({
+                            "name": column_name,
+                            "type": column_type,
+                            "description": description
+                        })
+            
+            if not tables_info:
+                logger.warning("[business-context] No relevant schema found")
+                return ""
+            
+            # Build formatted context
+            context_parts = ["\n\nBUSINESS CONTEXT (from semantic search):"]
+            context_parts.append("\nRelevant Tables and Columns:")
+            
+            for table_name, table_data in tables_info.items():
+                context_parts.append(f"\n{table_name}:")
+                if table_data["description"]:
+                    context_parts.append(f"  Description: {table_data['description']}")
+                
+                # Show columns
+                for col in table_data["columns"][:10]:  # Limit to 10 columns per table
+                    col_desc = f" - {col['description']}" if col['description'] else ""
+                    context_parts.append(f"  - {col['name']} ({col['type']}){col_desc}")
+                
+                if len(table_data["columns"]) > 10:
+                    context_parts.append(f"  ... and {len(table_data['columns']) - 10} more columns")
+            
+            context_str = "\n".join(context_parts)
+            logger.info(f"[business-context] Built context with {len(tables_info)} tables")
+            
+            return context_str
+            
+        except Exception as e:
+            logger.warning(f"[business-context] Failed to build context: {e}")
+            return ""
+    
     def _build_temporal_schema_context(self, query: str) -> str:
         """
         Build a concise schema context focused on temporal columns.
@@ -383,8 +474,11 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         """
         logger.info(f"Analyzing query with LLM: {query}")
         
-        # Step 1: Get structured intent from LLM
-        llm_intent = self._extract_with_llm(query)
+        # Step 1: Get business context from semantic search (BEFORE LLM)
+        business_context = self._get_business_context(query)
+        
+        # Step 2: Get structured intent from LLM (with business context)
+        llm_intent = self._extract_with_llm(query, business_context)
         
         # Log extracted filters to show predicate resolution
         if llm_intent.filters:
@@ -399,10 +493,10 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         else:
             logger.debug("[predicate-resolution] No filters extracted by LLM")
         
-        # Step 2: Enrich entities with semantic search
+        # Step 3: Enrich entities with semantic search
         enriched_entities = self._enrich_entities(llm_intent.entities, query)
         
-        # Step 3: Build final intent object
+        # Step 4: Build final intent object
         intent = QueryIntent(
             original_query=query,
             intent_type=llm_intent.intent_type,
@@ -419,7 +513,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         logger.info(f"Extracted: {llm_intent.intent_type.value}, {len(enriched_entities)} entities")
         return intent
     
-    def _extract_with_llm(self, query: str) -> LLMQueryIntent:
+    def _extract_with_llm(self, query: str, business_context: str = "") -> LLMQueryIntent:
         """Extract intent using LLM with structured output."""
         import time
         t0 = time.perf_counter()
@@ -438,7 +532,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         
         # Build schema context with temporal columns
         schema_context = self._build_temporal_schema_context(query)
-        system_prompt = self.SYSTEM_PROMPT_BASE + schema_context
+        system_prompt = self.SYSTEM_PROMPT_BASE + business_context + schema_context
         
         if self.llm_provider == "openai":
             def _trunc(s: str) -> str:
