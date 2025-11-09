@@ -474,7 +474,7 @@ class HybridIntentAnalyzer:
             "}"
         )
         la = self.llm_analyzer
-        provider = getattr(la, "llm_provider", "gemini")
+        provider = getattr(la, "llm_provider", "openai")
         t0 = time.perf_counter()
         try:
             if provider == "openai":

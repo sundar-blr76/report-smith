@@ -66,7 +66,7 @@ class AgentNodes:
         
         # Domain value enricher for matching user values to database values
         try:
-            self.domain_value_enricher = DomainValueEnricher(llm_provider="gemini")
+            self.domain_value_enricher = DomainValueEnricher(llm_provider="openai")
             logger.info("[nodes] Initialized domain value enricher")
         except Exception as e:
             logger.warning(f"[nodes] Could not initialize domain value enricher: {e}")
@@ -640,7 +640,7 @@ class AgentNodes:
                     f"}}\n"
                 )
 
-                provider = getattr(la, "llm_provider", "gemini")
+                provider = getattr(la, "llm_provider", "openai")
                 t0 = time.perf_counter()
                 data = None
                 try:

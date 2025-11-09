@@ -171,7 +171,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
     def __init__(
         self, 
         embedding_manager: EmbeddingManager,
-        llm_provider: str = "gemini",  # "openai", "anthropic", or "gemini"
+        llm_provider: str = "openai",  # "openai", "anthropic", or "gemini"
         model: str = None,
         api_key: str = None,
         max_search_results: int = 100,

@@ -53,7 +53,7 @@ def startup_event() -> None:
         # Initialize LLM analyzer (from env) and hybrid analyzer
         from reportsmith.query_processing.llm_intent_analyzer import LLMIntentAnalyzer
         import os
-        llm_provider = os.getenv("LLM_PROVIDER", "gemini")
+        llm_provider = os.getenv("LLM_PROVIDER", "openai")
         llm_model = os.getenv("LLM_MODEL")
         llm_analyzer = LLMIntentAnalyzer(
             embedding_manager=rs_app.embedding_manager,

@@ -53,7 +53,7 @@ columns:
   balance:
     canonical_name: current_balance
     table: accounts
-    column: current_balance
+    column: available_balance
     aliases: [account balance, holdings, position]
     description: "Current account balance"
   

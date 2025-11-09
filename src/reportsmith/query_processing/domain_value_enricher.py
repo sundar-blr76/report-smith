@@ -57,7 +57,7 @@ class DomainValueEnricher:
     the LLM to perform intelligent matching based on context.
     """
     
-    def __init__(self, llm_provider: str = "gemini", model: Optional[str] = None, enable_cache: bool = True):
+    def __init__(self, llm_provider: str = "openai", model: Optional[str] = None, enable_cache: bool = True):
         """
         Initialize domain value enricher.
         

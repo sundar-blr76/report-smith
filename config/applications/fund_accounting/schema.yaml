@@ -627,8 +627,16 @@ tables:
         default: true
         auto_filter_on_default: true
       
+      management_company_id:
+        type: integer
+        description: FK to management_companies
+      
       created_at:
         type: timestamp
+      
+      updated_at:
+        type: timestamp
+        description: Record update time
   
   # ----------------------------------------------------------------------------
   # FUND MANAGER ASSIGNMENTS
