@@ -161,11 +161,22 @@ class SQLGenerator:
         llm_client=None,
         enable_extraction_enhancement: bool = True,
         enable_cache: bool = True,
+        fail_on_llm_error: bool = False,  # If True, raise exceptions on LLM failures instead of fallback
     ):
         self.kg = knowledge_graph
         self.llm_client = llm_client  # Optional LLM for column enrichment
         self.enable_cache = enable_cache
         self.cache = get_cache_manager() if enable_cache else None
+        self.fail_on_llm_error = fail_on_llm_error  # Control LLM error behavior
+        
+        # Detect and store LLM provider/model info
+        if llm_client:
+            self.llm_provider = self._detect_llm_provider()
+            self.llm_model = self._detect_llm_model()
+            logger.info(f"[sql-gen] LLM client detected: {self.llm_provider}/{self.llm_model}")
+        else:
+            self.llm_provider = None
+            self.llm_model = None
 
         # Initialize SQL validator if LLM client available
         self.validator = None
@@ -229,6 +240,33 @@ class SQLGenerator:
                     select_columns=select_columns,
                     entities=entities,
                 )
+            
+            # Determine column ordering using LLM and reorder columns (FR-2)
+            if self.validator:
+                column_metadata = [
+                    {
+                        "table": col.table,
+                        "column": col.column,
+                        "aggregation": col.aggregation,
+                        "alias": col.alias,
+                    }
+                    for col in select_columns
+                ]
+                column_ordering = self.validator.determine_column_order(
+                    question=question,
+                    columns=column_metadata,
+                    intent_type=intent_type,
+                )
+                
+                # Apply the ordering to select_columns
+                if column_ordering and column_ordering.ordered_columns:
+                    logger.info(f"[sql-gen] applying LLM column ordering: {len(column_ordering.ordered_columns)} columns")
+                    select_columns = self._apply_column_ordering(
+                        select_columns, 
+                        column_ordering.ordered_columns
+                    )
+            else:
+                column_ordering = None
 
             from_table, joins = self._build_from_and_joins(plan)
             where_conditions = self._build_where_conditions(entities, filters)
@@ -261,24 +299,6 @@ class SQLGenerator:
                 joins=joins,
                 where_conditions=where_conditions,
             )
-
-            # Determine column ordering using LLM (FR-2)
-            column_ordering = None
-            if self.validator:
-                column_metadata = [
-                    {
-                        "table": col.table,
-                        "column": col.column,
-                        "aggregation": col.aggregation,
-                        "alias": col.alias,
-                    }
-                    for col in select_columns
-                ]
-                column_ordering = self.validator.determine_column_order(
-                    question=question,
-                    columns=column_metadata,
-                    intent_type=intent_type,
-                )
 
             # Generate extraction summary using LLM (FR-1)
             extraction_summary = None
@@ -1353,6 +1373,50 @@ class SQLGenerator:
             logger.debug(f"[sql-gen][limit] applying limit: {limit}")
 
         return limit
+    
+    def _apply_column_ordering(
+        self,
+        select_columns: List[SQLColumn],
+        ordered_column_names: List[str],
+    ) -> List[SQLColumn]:
+        """
+        Apply LLM-determined column ordering to select_columns list.
+        
+        Args:
+            select_columns: Current list of SQLColumn objects
+            ordered_column_names: Ordered list of "table.column" strings from LLM
+            
+        Returns:
+            Reordered list of SQLColumn objects
+        """
+        # Create a map of "table.column" -> SQLColumn for quick lookup
+        column_map = {}
+        for col in select_columns:
+            key = f"{col.table}.{col.column}"
+            column_map[key] = col
+        
+        # Build reordered list based on LLM ordering
+        reordered = []
+        seen = set()
+        
+        for ordered_name in ordered_column_names:
+            if ordered_name in column_map and ordered_name not in seen:
+                reordered.append(column_map[ordered_name])
+                seen.add(ordered_name)
+        
+        # Add any columns that weren't in the ordering (safety fallback)
+        for col in select_columns:
+            key = f"{col.table}.{col.column}"
+            if key not in seen:
+                reordered.append(col)
+                logger.debug(f"[sql-gen] column not in LLM ordering, appending: {key}")
+        
+        logger.info(
+            f"[sql-gen] column ordering applied: {len(reordered)} columns "
+            f"(original: {len(select_columns)})"
+        )
+        
+        return reordered
 
     def _enrich_with_context_columns(
         self,
@@ -1413,7 +1477,7 @@ class SQLGenerator:
                 tables_key,
             )
             if cached:
-                logger.info(f"[sql-gen][llm-enrich] Using cached enrichment result")
+                logger.info(f"[cache-hit] llm_sql: enrichment result")
                 # Reconstruct SQLColumn objects from cached data
                 enriched_columns = []
                 for col_data in cached:
@@ -1495,10 +1559,20 @@ class SQLGenerator:
                         ranking_entity_hint = f"\nRANKING ENTITY: '{entity}' - MUST include identifying columns for this entity!"
                         break
             
+            # Extract aggregation level from question (e.g., "by fund type", "by region", "by client")
+            aggregation_level_hint = ""
+            if intent_type in ["aggregation", "aggregate"]:
+                import re
+                # Look for "by X" pattern to identify intended grouping level
+                by_match = re.search(r'\bby\s+(\w+(?:\s+\w+)?)', question.lower())
+                if by_match:
+                    grouping = by_match.group(1)
+                    aggregation_level_hint = f"\n**AGGREGATION LEVEL**: User wants results grouped 'by {grouping}'. DO NOT add columns that would create finer granularity than this grouping level!"
+            
             prompt = f"""You are a SQL expert helping to make query results more meaningful by identifying implicit context columns.
 
 User Question: "{question}"
-Query Intent: {intent_type}{ranking_entity_hint}
+Query Intent: {intent_type}{ranking_entity_hint}{aggregation_level_hint}
 
 Currently Selected Columns:
 {json.dumps(current_cols, indent=2)}
@@ -1507,6 +1581,16 @@ Available Schema (columns per table):
 {json.dumps(available_columns, indent=2)}{filters_info}
 
 Task: Identify additional columns that would make the query output more meaningful for human consumption.
+
+**CRITICAL FOR AGGREGATION QUERIES** (intent_type="{intent_type}"):
+When the query asks to aggregate data (e.g., "average fees by fund type", "total sales by region"):
+  1. **RESPECT THE GROUPING LEVEL**: If user asks for "by fund type", DO NOT add fund_name, fund_code, or other fund-level details
+  2. **ONLY ADD THE GROUPING COLUMN**: Only suggest the actual grouping column mentioned (e.g., fund_type for "by fund type")
+  3. **AVOID EXPLOSION**: Adding extra columns will break the aggregation and create too many rows
+  4. Examples:
+     - "average fees by fund type" → Add ONLY fund_type (not fund_name, fund_code)
+     - "total sales by region" → Add ONLY region (not city, country, branch_name)
+     - "count by client type" → Add ONLY client_type (not client_name, client_id)
 
 **CRITICAL FOR RANKING/TOP_N QUERIES** (intent_type="{intent_type}"):
 When the query asks for "top N" entities (e.g., "top 5 clients", "top 10 funds"), you MUST:
@@ -1534,12 +1618,14 @@ Return a JSON object with:
 }}
 
 Guidelines:
+- **FOR AGGREGATION QUERIES**: Only suggest the grouping column explicitly mentioned in the query. DO NOT add detail columns.
 - For ranking queries, adding entity identifiers is MANDATORY, not optional
 - Don't suggest columns already selected
 - **DO NOT suggest columns that are used only for equality filtering** (listed above as Filter Columns)
 - Prioritize human-readable identifiers (names over IDs, but include both when helpful)
 - Keep the list focused (max 10 additional columns)
-- All suggested columns must be compatible with GROUP BY if aggregations are present
+- **All suggested columns must be compatible with GROUP BY if aggregations are present**
+- **DO NOT add columns that would increase granularity beyond what user requested**
 - Focus on columns that will vary across result rows (not constant filter values)
 """
 
@@ -1598,8 +1684,10 @@ Guidelines:
 
             # Log the response
             logger.info(
-                f"[sql-gen][llm-enrich] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}"
+                f"[llm-result] provider={self.llm_provider} model={self.llm_model} "
+                f"latency_ms={dt_ms:.1f} response_chars={len(result_text)}"
             )
+            logger.debug(f"[llm-result] Response text:\n{result_text}")
 
             # Parse response
             result = json.loads(result_text)
@@ -1686,7 +1774,59 @@ Guidelines:
             return select_columns
 
         except Exception as e:
-            logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using fallback logic")
+            # Enhanced error logging with detailed context
+            import traceback
+            
+            # Determine if this should be treated as a critical error
+            error_level = logger.error if self.fail_on_llm_error else logger.warning
+            
+            error_level("=" * 80)
+            error_level("[sql-gen][llm-enrich] ENRICHMENT FAILED - DETAILED ERROR REPORT")
+            error_level("=" * 80)
+            error_level(f"Exception Type: {type(e).__name__}")
+            error_level(f"Exception Message: {str(e)}")
+            error_level(f"Fail on LLM Error: {self.fail_on_llm_error}")
+            error_level("-" * 80)
+            error_level("Context Information:")
+            error_level(f"  Question: {question}")
+            error_level(f"  Intent Type: {intent_type}")
+            error_level(f"  Current Columns: {len(select_columns)}")
+            error_level(f"  Tables in Plan: {plan.get('tables', [])}")
+            error_level(f"  Entities Count: {len(entities) if entities else 0}")
+            error_level(f"  Has LLM Client: {self.llm_client is not None}")
+            error_level(f"  LLM Provider: {self.llm_provider or 'unknown'}")
+            error_level(f"  LLM Model: {self.llm_model or 'unknown'}")
+            
+            # Log available columns if populated
+            if 'available_columns' in locals():
+                error_level(f"  Available Columns Tables: {list(available_columns.keys())}")
+                total_cols = sum(len(cols) for cols in available_columns.values())
+                error_level(f"  Total Available Columns: {total_cols}")
+            
+            # Log prompt info if available
+            if 'prompt' in locals():
+                error_level(f"  Prompt Length: {len(prompt)} chars")
+                error_level(f"  Prompt Preview (first 300 chars): {prompt[:300]}...")
+            
+            # Log response info if available
+            if 'result_text' in locals():
+                error_level(f"  Response Length: {len(result_text)} chars")
+                error_level(f"  Response Text: {result_text}")
+            elif 'response' in locals():
+                error_level(f"  Response Object Type: {type(response)}")
+                error_level(f"  Response Object: {response}")
+            
+            error_level("-" * 80)
+            error_level("Full Traceback:")
+            error_level(traceback.format_exc())
+            error_level("=" * 80)
+            
+            # If configured to fail on LLM errors, re-raise the exception
+            if self.fail_on_llm_error:
+                logger.error("[sql-gen][llm-enrich] Re-raising exception due to fail_on_llm_error=True")
+                raise
+            
+            logger.warning(f"[sql-gen][llm-enrich] Using fallback logic after error")
             
             # Fallback: For ranking queries, add entity identifiers heuristically
             if intent_type in ["ranking", "top_n"]:
@@ -1859,7 +1999,7 @@ Guidelines:
                 cols_key,
             )
             if cached:
-                logger.info(f"[sql-gen][llm-refine] Using cached transformation result")
+                logger.info(f"[cache-hit] llm_sql: transformation result")
                 # Reconstruct SQLColumn objects from cached data
                 refined_columns = []
                 for col_data in cached:
@@ -1980,8 +2120,10 @@ Guidelines:
 
             # Log the response
             logger.info(
-                f"[sql-gen][llm-refine] LLM response (chars={len(result_text)}, latency={dt_ms:.1f}ms):\n{result_text}"
+                f"[llm-result] provider={self.llm_provider} model={self.llm_model} "
+                f"latency_ms={dt_ms:.1f} response_chars={len(result_text)}"
             )
+            logger.debug(f"[llm-result] Response text:\n{result_text}")
 
             # Parse response
             result = json.loads(result_text)
@@ -2080,7 +2222,59 @@ Guidelines:
             return new_columns
 
         except Exception as e:
-            logger.warning(f"[sql-gen][llm-refine] failed: {e}; using original columns")
+            # Enhanced error logging with detailed context
+            import traceback
+            
+            # Determine if this should be treated as a critical error
+            error_level = logger.error if self.fail_on_llm_error else logger.warning
+            
+            error_level("=" * 80)
+            error_level("[sql-gen][llm-refine] TRANSFORMATION REFINEMENT FAILED - DETAILED ERROR REPORT")
+            error_level("=" * 80)
+            error_level(f"Exception Type: {type(e).__name__}")
+            error_level(f"Exception Message: {str(e)}")
+            error_level(f"Fail on LLM Error: {self.fail_on_llm_error}")
+            error_level("-" * 80)
+            error_level("Context Information:")
+            error_level(f"  Question: {question}")
+            error_level(f"  Intent Type: {intent_type}")
+            error_level(f"  Current Columns: {len(select_columns)}")
+            error_level(f"  Entities Count: {len(entities) if entities else 0}")
+            error_level(f"  Has LLM Client: {self.llm_client is not None}")
+            error_level(f"  LLM Provider: {self.llm_provider or 'unknown'}")
+            error_level(f"  LLM Model: {self.llm_model or 'unknown'}")
+            
+            # Log column details
+            error_level("  Selected Columns:")
+            for col in select_columns[:5]:  # First 5 columns
+                error_level(f"    - {col.table}.{col.column} (agg={col.aggregation}, transform={col.transformation})")
+            if len(select_columns) > 5:
+                error_level(f"    ... and {len(select_columns) - 5} more columns")
+            
+            # Log prompt info if available
+            if 'prompt' in locals():
+                error_level(f"  Prompt Length: {len(prompt)} chars")
+                error_level(f"  Prompt Preview (first 300 chars): {prompt[:300]}...")
+            
+            # Log response info if available
+            if 'result_text' in locals():
+                error_level(f"  Response Length: {len(result_text)} chars")
+                error_level(f"  Response Text: {result_text}")
+            elif 'response' in locals():
+                error_level(f"  Response Object Type: {type(response)}")
+                error_level(f"  Response Object: {response}")
+            
+            error_level("-" * 80)
+            error_level("Full Traceback:")
+            error_level(traceback.format_exc())
+            error_level("=" * 80)
+            
+            # If configured to fail on LLM errors, re-raise the exception
+            if self.fail_on_llm_error:
+                logger.error("[sql-gen][llm-refine] Re-raising exception due to fail_on_llm_error=True")
+                raise
+            
+            logger.warning(f"[sql-gen][llm-refine] Using original columns after error")
             return select_columns
 
     def _get_column_data_type(self, table: str, column: str) -> str:
@@ -2093,6 +2287,8 @@ Guidelines:
 
     def _detect_llm_provider(self) -> str:
         """Detect which LLM provider is being used"""
+        if not self.llm_client:
+            return "none"
         if hasattr(self.llm_client, "chat") and hasattr(
             self.llm_client.chat, "completions"
         ):
@@ -2101,6 +2297,27 @@ Guidelines:
             return "anthropic"
         else:
             return "gemini"
+    
+    def _detect_llm_model(self) -> str:
+        """Detect which LLM model is being used"""
+        if not self.llm_client:
+            return "none"
+        
+        provider = self._detect_llm_provider()
+        
+        # Try to get model from client attributes
+        if provider == "openai":
+            # OpenAI clients don't store default model, return common default
+            return "gpt-4o-mini"
+        elif provider == "anthropic":
+            return "claude-3-haiku-20240307"
+        elif provider == "gemini":
+            # Try to get from client
+            if hasattr(self.llm_client, "model_name"):
+                return self.llm_client.model_name
+            return "gemini-2.5-flash"
+        
+        return "unknown"
 
     def _build_explanation(
         self,

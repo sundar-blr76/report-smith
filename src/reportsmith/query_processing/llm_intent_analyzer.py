@@ -386,7 +386,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         if self.enable_cache and self.cache:
             cached = self.cache.get("llm_intent", query.lower(), version=self.CACHE_VERSION)
             if cached:
-                logger.info(f"[cache] Using cached intent result for query: '{query}'")
+                logger.info(f"[cache-hit] llm_intent: Using cached result for query: '{query}'")
                 return cached
         
         # Build schema context with temporal columns
@@ -445,7 +445,7 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             }
             self.last_metrics = metrics
             self.metrics_events.append(metrics)
-            logger.info(f"LLM summary: provider=openai model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
+            logger.info(f"[llm-result] provider=openai model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             if self.debug_prompts:
                 logger.debug(f"OpenAI Parsed (trunc): {_trunc(parsed_result.model_dump_json(indent=2))}")
             
@@ -514,7 +514,7 @@ Return only valid JSON, no other text."""
             }
             self.last_metrics = metrics
             self.metrics_events.append(metrics)
-            logger.info(f"LLM summary: provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
+            logger.info(f"[llm-result] provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
             result = LLMQueryIntent(**intent_data)
             
@@ -588,7 +588,7 @@ Return only valid JSON, no other text."""
             }
             self.last_metrics = metrics
             self.metrics_events.append(metrics)
-            logger.info(f"LLM summary: provider=gemini model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
+            logger.info(f"[llm-result] provider=gemini model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             if self.debug_prompts:
                 logger.debug(f"Gemini Parsed (trunc): {_trunc(json.dumps(intent_data, indent=2))}")
             

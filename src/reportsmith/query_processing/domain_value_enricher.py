@@ -133,7 +133,7 @@ class DomainValueEnricher:
                 values_hash
             )
             if cached:
-                logger.info(f"[domain-enricher] Using cached result for '{user_value}' -> {table}.{column}")
+                logger.info(f"[cache-hit] llm_domain: '{user_value}' -> {table}.{column}")
                 return cached
         
         # Build context for LLM
@@ -240,13 +240,13 @@ Example response format:
                     matches.sort(key=lambda m: m.confidence, reverse=True)
                     match_summary = ", ".join([f"'{m.matched_value}' ({m.confidence:.2f})" for m in matches])
                     logger.info(
-                        f"[domain-enricher] LLM response ({dt_ms:.1f}ms): "
-                        f"Found {len(matches)} match(es): {match_summary}"
+                        f"[llm-result] provider={self.llm_provider} model={self.model} "
+                        f"latency_ms={dt_ms:.1f} matches={len(matches)}: {match_summary}"
                     )
                     for m in matches:
-                        logger.info(f"[domain-enricher]   - '{m.matched_value}' (conf={m.confidence:.2f}): {m.reasoning}")
+                        logger.info(f"  - '{m.matched_value}' (conf={m.confidence:.2f}): {m.reasoning}")
                 else:
-                    logger.info(f"[domain-enricher] LLM response ({dt_ms:.1f}ms): No confident matches found")
+                    logger.info(f"[llm-result] provider={self.llm_provider} model={self.model} latency_ms={dt_ms:.1f}: No confident matches found")
                 
                 result = DomainValueEnrichmentResult(
                     user_value=user_value,

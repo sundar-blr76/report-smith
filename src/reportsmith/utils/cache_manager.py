@@ -188,6 +188,9 @@ class CacheManager:
             f"CacheManager initialized: L1=enabled, L2={'enabled' if self.redis_enabled else 'disabled'}, "
             f"L3={'enabled' if self.disk_enabled else 'disabled'}"
         )
+        
+        # Print cache entries loaded from persistence
+        self._print_persistent_cache_entries()
     
     def _init_redis(self, redis_url: Optional[str] = None):
         """Initialize Redis connection."""
@@ -214,6 +217,54 @@ class CacheManager:
             self.redis_client = None
             self.redis_enabled = False
     
+    def _print_persistent_cache_entries(self):
+        """Print cache entries loaded from persistent storage (L2/L3) at startup."""
+        logger.info("=" * 80)
+        logger.info("PERSISTENT CACHE ENTRIES (L2: Redis / L3: Disk)")
+        logger.info("=" * 80)
+        
+        total_l2_entries = 0
+        total_l3_entries = 0
+        
+        for category in self.CACHE_CATEGORIES:
+            l2_count = 0
+            l3_count = 0
+            
+            # Count L2 (Redis) entries
+            if self.redis_enabled:
+                try:
+                    pattern = f"reportsmith:{category}:*"
+                    keys = self.redis_client.keys(pattern)
+                    l2_count = len(keys) if keys else 0
+                    total_l2_entries += l2_count
+                except Exception as e:
+                    logger.warning(f"Failed to count Redis entries for {category}: {e}")
+            
+            # Count L3 (Disk) entries
+            if self.disk_enabled:
+                try:
+                    disk_dir = self.disk_cache_dir / category
+                    if disk_dir.exists():
+                        # Count only non-expired files
+                        current_time = time.time()
+                        ttl = self.CACHE_CATEGORIES[category]
+                        valid_files = 0
+                        for file in disk_dir.glob("*.pkl"):
+                            age = current_time - file.stat().st_mtime
+                            if age < ttl:
+                                valid_files += 1
+                        l3_count = valid_files
+                        total_l3_entries += l3_count
+                except Exception as e:
+                    logger.warning(f"Failed to count disk entries for {category}: {e}")
+            
+            if l2_count > 0 or l3_count > 0:
+                logger.info(f"{category:20s} L2={l2_count:4d} entries, L3={l3_count:4d} entries")
+        
+        logger.info("-" * 80)
+        logger.info(f"{'TOTAL':20s} L2={total_l2_entries:4d} entries, L3={total_l3_entries:4d} entries")
+        logger.info("=" * 80)
+    
     def _generate_key(self, category: str, *args, **kwargs) -> str:
         """Generate cache key from category and parameters."""
         # Create stable key from args and kwargs
@@ -222,6 +273,82 @@ class CacheManager:
         key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
         key_str = "|".join(key_parts)
         return hashlib.sha256(key_str.encode()).hexdigest()
+    
+    def _print_cache_payload(self, category: str, value: Any, source: str):
+        """
+        Format and print the cached payload for debugging and observability.
+        
+        Args:
+            category: Cache category (e.g., "llm_intent")
+            value: The cached value to format
+            source: Cache source (L1/L2/L3)
+        """
+        logger.info("=" * 80)
+        logger.info(f"CACHE PAYLOAD RETRIEVED FROM {source}")
+        logger.info("=" * 80)
+        logger.info(f"Category: {category}")
+        logger.info(f"Source: {source}")
+        logger.info("-" * 80)
+        
+        try:
+            # Handle different types of cached values
+            if hasattr(value, 'model_dump'):  # Pydantic models
+                payload_dict = value.model_dump()
+                logger.info("Payload Type: Pydantic Model")
+                logger.info(f"Model Class: {value.__class__.__name__}")
+                logger.info("\nPayload Content:")
+                logger.info(json.dumps(payload_dict, indent=2, default=str))
+                
+                # For intent analysis, print additional structured info
+                if category == "llm_intent":
+                    logger.info("\n--- Intent Analysis Details ---")
+                    logger.info(f"Intent Type: {payload_dict.get('intent_type', 'N/A')}")
+                    logger.info(f"Entities: {len(payload_dict.get('entities', []))}")
+                    if payload_dict.get('entities'):
+                        logger.info("Entity List:")
+                        for idx, entity in enumerate(payload_dict.get('entities', []), 1):
+                            logger.info(f"  {idx}. {entity}")
+                    logger.info(f"Time Scope: {payload_dict.get('time_scope', 'N/A')}")
+                    logger.info(f"Aggregations: {payload_dict.get('aggregations', [])}")
+                    logger.info(f"Filters: {payload_dict.get('filters', [])}")
+                    if payload_dict.get('filters'):
+                        logger.info("Filter Details:")
+                        for idx, filter_str in enumerate(payload_dict.get('filters', []), 1):
+                            logger.info(f"  {idx}. {filter_str}")
+                    logger.info(f"Limit: {payload_dict.get('limit', 'None')}")
+                    logger.info(f"Order By: {payload_dict.get('order_by', 'None')} {payload_dict.get('order_direction', '')}")
+                    logger.info(f"Reasoning: {payload_dict.get('reasoning', 'N/A')}")
+                    
+            elif hasattr(value, '__dict__'):  # Dataclass or object with __dict__
+                logger.info("Payload Type: Object/Dataclass")
+                logger.info(f"Class: {value.__class__.__name__}")
+                logger.info("\nPayload Content:")
+                logger.info(json.dumps(value.__dict__, indent=2, default=str))
+                
+            elif isinstance(value, dict):  # Dictionary
+                logger.info("Payload Type: Dictionary")
+                logger.info(f"Keys: {list(value.keys())}")
+                logger.info("\nPayload Content:")
+                logger.info(json.dumps(value, indent=2, default=str))
+                
+            elif isinstance(value, list):  # List
+                logger.info("Payload Type: List")
+                logger.info(f"Length: {len(value)}")
+                logger.info("\nPayload Content (first 5 items):")
+                for idx, item in enumerate(value[:5], 1):
+                    logger.info(f"  {idx}. {item}")
+                if len(value) > 5:
+                    logger.info(f"  ... and {len(value) - 5} more items")
+                    
+            else:  # Other types (str, int, etc.)
+                logger.info(f"Payload Type: {type(value).__name__}")
+                logger.info(f"\nPayload Content:\n{value}")
+                
+        except Exception as e:
+            logger.warning(f"Failed to format cache payload: {e}")
+            logger.info(f"Raw Payload: {repr(value)}")
+        
+        logger.info("=" * 80)
     
     def get(
         self,
@@ -251,7 +378,8 @@ class CacheManager:
         value = self.l1_caches[category].get(key)
         if value is not None:
             self.global_stats[category].hits += 1
-            logger.debug(f"Cache hit [L1] {category}: {key[:16]}...")
+            logger.info(f"[cache-hit] {category} [L1 memory] key={key[:16]}...")
+            self._print_cache_payload(category, value, "L1 memory")
             return value
         
         # Try L2 (Redis)
@@ -264,7 +392,8 @@ class CacheManager:
                     # Populate L1
                     self.l1_caches[category].set(key, value)
                     self.global_stats[category].hits += 1
-                    logger.debug(f"Cache hit [L2] {category}: {key[:16]}...")
+                    logger.info(f"[cache-hit] {category} [L2 Redis] key={key[:16]}...")
+                    self._print_cache_payload(category, value, "L2 Redis")
                     return value
             except Exception as e:
                 logger.warning(f"Redis get error: {e}")
@@ -284,14 +413,15 @@ class CacheManager:
                         if self.redis_enabled:
                             self._set_redis(category, key, value)
                         self.global_stats[category].hits += 1
-                        logger.debug(f"Cache hit [L3] {category}: {key[:16]}...")
+                        logger.info(f"[cache-hit] {category} [L3 disk] key={key[:16]}...")
+                        self._print_cache_payload(category, value, "L3 disk")
                         return value
             except Exception as e:
                 logger.warning(f"Disk cache read error: {e}")
         
         # Cache miss
         self.global_stats[category].misses += 1
-        logger.debug(f"Cache miss {category}: {key[:16]}...")
+        logger.debug(f"[cache-miss] {category}: key={key[:16]}...")
         return None
     
     def set(
@@ -339,7 +469,7 @@ class CacheManager:
                 logger.warning(f"Disk cache write error: {e}")
         
         self.global_stats[category].sets += 1
-        logger.debug(f"Cache set {category}: {key[:16]}... (ttl={ttl}s)")
+        logger.info(f"[cache-set] {category} key={key[:16]}... ttl={ttl}s")
     
     def _set_redis(self, category: str, key: str, value: Any, ttl: int):
         """Set value in Redis."""

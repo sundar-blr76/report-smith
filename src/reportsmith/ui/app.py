@@ -173,12 +173,45 @@ if submitted:
                                     import pandas as pd
 
                                     df = pd.DataFrame(rows, columns=columns)
+                                    
+                                    # Format economic/financial fields with thousand separators
+                                    economic_fields = ['fee_amount', 'fees', 'balance', 'total_balance', 
+                                                       'available_balance', 'aum_value', 'total_aum', 'aum',
+                                                       'transaction_amount', 'nav_per_share', 'minimum_investment',
+                                                       'amount', 'value', 'price', 'cost']
+                                    
+                                    # Build column config for formatting
+                                    column_config = {}
+                                    for col in df.columns:
+                                        col_lower = col.lower()
+                                        # Check if column name contains any economic field keywords
+                                        if any(field in col_lower for field in economic_fields):
+                                            # Convert to numeric if needed
+                                            if df[col].dtype == 'object':
+                                                try:
+                                                    df[col] = pd.to_numeric(df[col], errors='ignore')
+                                                except:
+                                                    pass
+                                            
+                                            if pd.api.types.is_numeric_dtype(df[col]):
+                                                column_config[col] = st.column_config.NumberColumn(
+                                                    col,
+                                                    format="%.2f"
+                                                )
 
                                     st.subheader(
                                         f"Query Results ({row_count} rows{' - truncated' if truncated else ''})"
                                     )
+                                    
+                                    # Debug info
+                                    if column_config:
+                                        st.caption(f"Formatted columns: {', '.join(column_config.keys())}")
+                                    
                                     st.dataframe(
-                                        df, use_container_width=True, hide_index=True
+                                        df, 
+                                        use_container_width=True, 
+                                        hide_index=True,
+                                        column_config=column_config if column_config else None
                                     )
 
                                     # Download as CSV
