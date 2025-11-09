@@ -280,6 +280,62 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         
         logger.info("=" * 80)
     
+    def _print_llm_request(self, query: str, system_prompt: str, business_context: str, schema_context: str):
+        """Print LLM intent extraction request with nice formatting."""
+        logger.info("=" * 80)
+        logger.info("LLM INTENT EXTRACTION REQUEST")
+        logger.info("=" * 80)
+        logger.info(f"Provider: {self.llm_provider.upper()}")
+        logger.info(f"Model: {self.model}")
+        logger.info(f"Query: \"{query}\"")
+        logger.info("-" * 80)
+        
+        # Show prompt components
+        logger.info("PROMPT STRUCTURE:")
+        
+        # 1. Base system prompt
+        base_lines = self.SYSTEM_PROMPT_BASE.strip().split('\n')
+        logger.info(f"\n1. BASE SYSTEM PROMPT ({len(self.SYSTEM_PROMPT_BASE)} chars):")
+        logger.info("   First 5 lines:")
+        for i, line in enumerate(base_lines[:5], 1):
+            logger.info(f"   {i}. {line.strip()}")
+        if len(base_lines) > 5:
+            logger.info(f"   ... +{len(base_lines) - 5} more lines")
+        
+        # 2. Business context
+        if business_context:
+            context_lines = business_context.strip().split('\n')
+            logger.info(f"\n2. BUSINESS CONTEXT ({len(business_context)} chars):")
+            logger.info(f"   {len(context_lines)} lines of table/column context")
+            # Show first few lines
+            for line in context_lines[:8]:
+                if line.strip():
+                    logger.info(f"   {line}")
+            if len(context_lines) > 8:
+                logger.info(f"   ... +{len(context_lines) - 8} more lines")
+        else:
+            logger.info("\n2. BUSINESS CONTEXT: None")
+        
+        # 3. Temporal schema context
+        if schema_context:
+            schema_lines = schema_context.strip().split('\n')
+            logger.info(f"\n3. TEMPORAL SCHEMA CONTEXT ({len(schema_context)} chars):")
+            logger.info(f"   {len(schema_lines)} lines of temporal column info")
+            # Show first few lines
+            for line in schema_lines[:8]:
+                if line.strip():
+                    logger.info(f"   {line}")
+            if len(schema_lines) > 8:
+                logger.info(f"   ... +{len(schema_lines) - 8} more lines")
+        else:
+            logger.info("\n3. TEMPORAL SCHEMA CONTEXT: None")
+        
+        # Total size
+        total_chars = len(system_prompt)
+        logger.info("-" * 80)
+        logger.info(f"TOTAL PROMPT SIZE: {total_chars:,} characters")
+        logger.info("=" * 80)
+    
     def _get_business_context(self, query: str) -> str:
         """
         Get business context from semantic and local search to help LLM.
@@ -534,6 +590,9 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         schema_context = self._build_temporal_schema_context(query)
         system_prompt = self.SYSTEM_PROMPT_BASE + business_context + schema_context
         
+        # Print formatted LLM request
+        self._print_llm_request(query, system_prompt, business_context, schema_context)
+        
         if self.llm_provider == "openai":
             def _trunc(s: str) -> str:
                 if not isinstance(s, str):
@@ -551,17 +610,6 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
                 "temperature": 0
             }
             prompt_chars = sum(len(m["content"]) for m in request_payload["messages"]) if request_payload.get("messages") else 0
-            
-            # Always log prompt for OpenAI Intent Extraction Request
-            logger.info(f"OpenAI Intent Extraction Request - Prompt ({prompt_chars} chars):")
-            logger.info(f"--- SYSTEM PROMPT ---")
-            logger.info(system_prompt)
-            logger.info(f"--- USER PROMPT ---")
-            logger.info(f"Analyze this query: {query}")
-            logger.info(f"--- PROMPT END ---")
-            
-            if self.debug_prompts:
-                logger.debug(f"OpenAI Prompt (trunc): {_trunc(json.dumps(request_payload, indent=2))}")
             
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
