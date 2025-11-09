@@ -233,6 +233,53 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
         
         logger.info(f"Initialized LLM Intent Analyzer with {llm_provider}/{self.model}")
     
+    def _print_llm_intent_result(self, result: LLMQueryIntent, query: str):
+        """Print LLM intent result in formatted, human-readable way."""
+        logger.info("=" * 80)
+        logger.info("LLM INTENT ANALYSIS RESULT")
+        logger.info("=" * 80)
+        logger.info(f"Query: \"{query}\"")
+        logger.info("-" * 80)
+        logger.info(f"Intent Type: {result.intent_type.value.upper()}")
+        logger.info(f"Time Scope: {result.time_scope.value}")
+        
+        if result.entities:
+            logger.info(f"\nEntities Extracted: {len(result.entities)}")
+            for i, entity in enumerate(result.entities, 1):
+                logger.info(f"  {i}. {entity}")
+        else:
+            logger.info("\nEntities: None")
+        
+        if result.aggregations:
+            agg_list = ', '.join([a.value for a in result.aggregations])
+            logger.info(f"\nAggregations: {agg_list}")
+        
+        if result.filters:
+            logger.info(f"\nFilters: {len(result.filters)}")
+            for i, filter_str in enumerate(result.filters, 1):
+                is_temporal = any(kw in filter_str.upper() for kw in 
+                                 ['EXTRACT', 'QUARTER', 'MONTH', 'YEAR', 'DATE', 'BETWEEN'])
+                filter_type = "[TEMPORAL]" if is_temporal else "[STANDARD]"
+                logger.info(f"  {i}. {filter_type} {filter_str}")
+        else:
+            logger.info("\nFilters: None")
+        
+        if result.limit:
+            logger.info(f"\nLimit: TOP {result.limit}")
+        
+        if result.order_by:
+            logger.info(f"Order By: {result.order_by} ({result.order_direction})")
+        
+        if result.reasoning:
+            logger.info(f"\nLLM Reasoning:")
+            # Wrap long reasoning text
+            reasoning_lines = result.reasoning.split('. ')
+            for line in reasoning_lines:
+                if line.strip():
+                    logger.info(f"  {line.strip()}.")
+        
+        logger.info("=" * 80)
+    
     def _build_temporal_schema_context(self, query: str) -> str:
         """
         Build a concise schema context focused on temporal columns.
@@ -449,6 +496,9 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
             if self.debug_prompts:
                 logger.debug(f"OpenAI Parsed (trunc): {_trunc(parsed_result.model_dump_json(indent=2))}")
             
+            # Print formatted result
+            self._print_llm_intent_result(parsed_result, query)
+            
             # Cache result
             if self.enable_cache and self.cache:
                 self.cache.set("llm_intent", parsed_result, query.lower(), version=self.CACHE_VERSION)
@@ -517,6 +567,9 @@ Return only valid JSON, no other text."""
             logger.info(f"[llm-result] provider=anthropic model={self.model} prompt_chars={prompt_chars} latency_ms={dt_ms:.1f}")
             
             result = LLMQueryIntent(**intent_data)
+            
+            # Print formatted result
+            self._print_llm_intent_result(result, query)
             
             # Cache result
             if self.enable_cache and self.cache:
@@ -593,6 +646,9 @@ Return only valid JSON, no other text."""
                 logger.debug(f"Gemini Parsed (trunc): {_trunc(json.dumps(intent_data, indent=2))}")
             
             result = LLMQueryIntent(**intent_data)
+            
+            # Print formatted result
+            self._print_llm_intent_result(result, query)
             
             # Cache result
             if self.enable_cache and self.cache:
