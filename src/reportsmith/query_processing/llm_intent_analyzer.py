@@ -154,11 +154,11 @@ For entities, use the exact terms from the query when possible.
 
 IMPORTANT: For temporal filters (quarters, months, years, dates):
 - Identify which table's temporal column should be used based on the query intent:
-  * "fees PAID in Q1" → use payment_date (when payment occurred)
-  * "fees FOR Q1" or "fee period Q1" → use fee_period_start/fee_period_end (the period being charged for)
+  * "fees PAID in Q1" → use fee_transactions.fee_period_start (when fee period starts)
+  * "fees FOR Q1" or "fee period Q1" → use fee_transactions.fee_period_start/fee_period_end (the period being charged for)
   * "transactions in Q1" → use transaction_date (when transaction occurred)
-- For PAID/RECEIVED/COLLECTED use payment/transaction dates
-- For period-based queries use period_start/period_end dates
+- For PAID/RECEIVED/COLLECTED fees use fee_period_start date (fees don't have payment dates, they have fee periods)
+- For period-based queries use fee_period_start/fee_period_end dates
 - Format filters as: "EXTRACT(QUARTER FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For months: "EXTRACT(MONTH FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For date ranges (quarters/months), use BETWEEN for accuracy:

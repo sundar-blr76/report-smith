@@ -965,7 +965,8 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
             schema_context += "\n"
         
         schema_context += "⚠️ IMPORTANT:\n"
-        schema_context += "- Use payment_date/transaction_date for business queries, NOT created_at\n"
+        schema_context += "- Use fee_period_start/fee_period_end for fee-related date queries, NOT payment_date\n"
+        schema_context += "- Use transaction_date for transaction queries\n"
         schema_context += "- created_at/updated_at are metadata timestamps, not business dates\n"
         schema_context += "- Check column descriptions to understand business meaning\n"
         schema_context += "=========================\n"
@@ -1034,7 +1035,8 @@ Common fixes:
 - Ensure proper join conditions
 - Add necessary type casts
 - Check table and column names match schema exactly
-- Use business date columns (payment_date, transaction_date) NOT metadata timestamps (created_at, updated_at)
+- Use business date columns (fee_period_start/fee_period_end for fees, transaction_date for transactions) NOT metadata timestamps (created_at, updated_at)
+- There is NO "payments" table - fee_transactions is the correct table for fees
 
 Return JSON:
 {{
