@@ -1468,10 +1468,28 @@ class SQLGenerator:
             ]
 
             # Build LLM prompt
+            # Extract the main entity being ranked/listed from the question
+            ranking_entity_hint = ""
+            if intent_type in ["ranking", "top_n"]:
+                # Try to extract the entity (e.g., "clients", "funds", "managers")
+                import re
+                patterns = [
+                    r'top\s+\d+\s+(\w+)',
+                    r'list.*?(\w+)\s+by',
+                    r'show.*?(\w+)\s+by',
+                    r'rank.*?(\w+)\s+by',
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, question.lower())
+                    if match:
+                        entity = match.group(1)
+                        ranking_entity_hint = f"\nRANKING ENTITY: '{entity}' - MUST include identifying columns for this entity!"
+                        break
+            
             prompt = f"""You are a SQL expert helping to make query results more meaningful by identifying implicit context columns.
 
 User Question: "{question}"
-Query Intent: {intent_type}
+Query Intent: {intent_type}{ranking_entity_hint}
 
 Currently Selected Columns:
 {json.dumps(current_cols, indent=2)}
@@ -1480,15 +1498,19 @@ Available Schema (columns per table):
 {json.dumps(available_columns, indent=2)}
 
 Task: Identify additional columns that would make the query output more meaningful for human consumption.
-Consider adding:
-- Identifying columns (names, codes, IDs) for entities being aggregated
-- Descriptive columns that provide context
-- Columns that help interpret the results
 
-**CRITICAL FOR RANKING/TOP_N QUERIES**: When showing "top N" entities (e.g., "top 5 clients"), ALWAYS include:
-  1. The entity's name column (e.g., client_name, fund_name, company_name)
-  2. The entity's ID if helpful for uniqueness
-  Otherwise the result will just show aggregated numbers without identifying WHICH entities they belong to.
+**CRITICAL FOR RANKING/TOP_N QUERIES** (intent_type="{intent_type}"):
+When the query asks for "top N" entities (e.g., "top 5 clients", "top 10 funds"), you MUST:
+  1. Identify which table represents the entity being ranked
+  2. Add the entity's name column (e.g., client_name, fund_name, first_name+last_name)
+  3. Add the entity's ID for uniqueness
+  
+WITHOUT these columns, the result will only show aggregated metrics without identifying WHICH entities they belong to!
+
+For other query types, consider adding:
+- Identifying columns (names, codes, IDs) for entities being aggregated or listed
+- Descriptive columns that provide context
+- Columns that help interpret the results (e.g., currency for monetary amounts)
 
 Return a JSON object with:
 {{
@@ -1503,11 +1525,11 @@ Return a JSON object with:
 }}
 
 Guidelines:
-- Only suggest columns that truly add value
+- For ranking queries, adding entity identifiers is MANDATORY, not optional
 - Don't suggest columns already selected
-- Prioritize human-readable identifiers (names over IDs when both exist)
+- Prioritize human-readable identifiers (names over IDs, but include both when helpful)
 - Keep the list focused (max 10 additional columns)
-- If aggregating, ensure suggested columns are compatible with GROUP BY
+- All suggested columns must be compatible with GROUP BY if aggregations are present
 """
 
             # Log the prompt payload
@@ -1653,8 +1675,125 @@ Guidelines:
             return select_columns
 
         except Exception as e:
-            logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using original columns")
+            logger.warning(f"[sql-gen][llm-enrich] failed: {e}; using fallback logic")
+            
+            # Fallback: For ranking queries, add entity identifiers heuristically
+            if intent_type in ["ranking", "top_n"]:
+                logger.info("[sql-gen][llm-enrich] Applying fallback logic for ranking query")
+                return self._fallback_add_ranking_identifiers(
+                    select_columns=select_columns,
+                    plan=plan,
+                    question=question,
+                )
+            
             return select_columns
+
+    def _fallback_add_ranking_identifiers(
+        self,
+        select_columns: List[SQLColumn],
+        plan: Dict[str, Any],
+        question: str,
+    ) -> List[SQLColumn]:
+        """
+        Fallback method to add entity identifiers for ranking queries when LLM enrichment fails.
+        
+        Heuristically identifies which table represents the entity being ranked and adds
+        its identifying columns (name, ID, etc.)
+        """
+        import re
+        
+        tables = plan.get("tables", [])
+        if not tables:
+            return select_columns
+        
+        # Try to extract entity from question
+        entity_patterns = [
+            r'top\s+\d+\s+(\w+)',
+            r'list.*?(\w+)\s+by',
+            r'show.*?(\w+)\s+by',
+            r'rank.*?(\w+)\s+by',
+        ]
+        
+        entity_keyword = None
+        for pattern in entity_patterns:
+            match = re.search(pattern, question.lower())
+            if match:
+                entity_keyword = match.group(1).rstrip('s')  # singular form
+                break
+        
+        if not entity_keyword:
+            logger.debug("[sql-gen][fallback] Could not extract entity keyword from question")
+            return select_columns
+        
+        logger.info(f"[sql-gen][fallback] Detected ranking entity keyword: '{entity_keyword}'")
+        
+        # Find matching table
+        candidate_table = None
+        for table in tables:
+            # Check if table name contains the entity keyword
+            if entity_keyword in table.lower() or table.lower() in entity_keyword:
+                candidate_table = table
+                break
+        
+        if not candidate_table:
+            # Default to first table with joins
+            candidate_table = tables[0]
+            logger.debug(f"[sql-gen][fallback] No exact match, using first table: {candidate_table}")
+        else:
+            logger.info(f"[sql-gen][fallback] Matched entity to table: {candidate_table}")
+        
+        # Get table schema from knowledge graph
+        table_node = self.kg.nodes.get(candidate_table)
+        if not table_node:
+            logger.warning(f"[sql-gen][fallback] Table node not found in KG: {candidate_table}")
+            return select_columns
+        
+        # Find identifier columns (name, id, code, etc.)
+        identifier_patterns = [
+            f"{candidate_table[:-1]}_name",  # e.g., client_name from clients
+            "name",
+            f"{candidate_table[:-1]}_id",
+            "id",
+            f"{candidate_table[:-1]}_code",
+            "code",
+            "first_name",  # for people tables
+            "last_name",
+        ]
+        
+        added_count = 0
+        for col_name in identifier_patterns:
+            col_node = self.kg.nodes.get(f"{candidate_table}.{col_name}")
+            if col_node:
+                # Check if already selected
+                already_selected = any(
+                    c.table == candidate_table and c.column == col_name
+                    for c in select_columns
+                )
+                if not already_selected:
+                    select_columns.append(SQLColumn(
+                        table=candidate_table,
+                        column=col_name,
+                        alias=col_name,
+                    ))
+                    added_count += 1
+                    logger.info(
+                        f"[sql-gen][fallback] Added identifier column: {candidate_table}.{col_name}"
+                    )
+                    
+                    # Stop after adding 2-3 identifiers
+                    if added_count >= 3:
+                        break
+        
+        if added_count == 0:
+            logger.warning(
+                f"[sql-gen][fallback] No identifier columns found for table: {candidate_table}"
+            )
+        else:
+            logger.info(
+                f"[sql-gen][fallback] Added {added_count} identifier column(s) for ranking query"
+            )
+        
+        return select_columns
 
     def _refine_column_transformations(
         self,
