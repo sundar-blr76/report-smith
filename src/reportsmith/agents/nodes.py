@@ -173,6 +173,9 @@ class AgentNodes:
                 "time_scope": intent.time_scope.value,
                 "aggregations": [a.value for a in intent.aggregations],
                 "filters": intent.filters,
+                "limit": intent.limit,
+                "order_by": intent.order_by,
+                "order_direction": intent.order_direction,
             }
             state.entities = entities
             return state
