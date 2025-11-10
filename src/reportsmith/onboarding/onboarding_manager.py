@@ -1,6 +1,6 @@
 """Onboarding manager to orchestrate database schema inference and configuration generation."""
 
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from pathlib import Path
 import os
 

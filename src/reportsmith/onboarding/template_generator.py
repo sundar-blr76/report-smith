@@ -321,6 +321,8 @@ class TemplateGenerator:
     
     def _add_section_separators(self, yaml_str: str) -> str:
         """Add visual separators between major sections."""
+        import re
+        
         separators = {
             'application:': '# ' + '=' * 78 + '\n# APPLICATION DEFINITION\n# ' + '=' * 78,
             'relationships:': '\n# ' + '=' * 78 + '\n# RELATIONSHIPS\n# ' + '=' * 78,
@@ -329,8 +331,11 @@ class TemplateGenerator:
             'tables:': '# ' + '=' * 78 + '\n# TABLE DEFINITIONS\n# ' + '=' * 78
         }
         
+        # Only replace keys at the beginning of lines (top-level keys)
         for key, separator in separators.items():
-            yaml_str = yaml_str.replace(key, f"{separator}\n\n{key}")
+            pattern = r'^(' + re.escape(key) + r')'
+            replacement = f"{separator}\n\n\\1"
+            yaml_str = re.sub(pattern, replacement, yaml_str, flags=re.MULTILINE)
         
         # Add document start marker
         yaml_str = '---\n' + yaml_str
