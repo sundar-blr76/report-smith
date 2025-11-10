@@ -140,7 +140,8 @@ class OnboardingManager:
         # Test connection
         try:
             with engine.connect() as conn:
-                conn.execute("SELECT 1")
+                from sqlalchemy import text
+                conn.execute(text("SELECT 1"))
             logger.info("Database connection successful")
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
