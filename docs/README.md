@@ -13,6 +13,7 @@ This directory contains all technical documentation for ReportSmith.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
 - **[HLD.md](HLD.md)** - High-level design
 - **[LLD.md](LLD.md)** - Low-level design
+- **[CROSS_APPLICATION_DATA_EXTRACTION_ANALYSIS.md](CROSS_APPLICATION_DATA_EXTRACTION_ANALYSIS.md)** - Analysis for cross-application data extraction
 
 ### Implementation & Best Practices
 - **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - Implementation strategies, performance optimization
@@ -35,21 +36,22 @@ This directory contains all technical documentation for ReportSmith.
 
 ```
 docs/
-├── README.md                     # This file - documentation index
-├── ARCHITECTURE.md               # System architecture
-├── HLD.md                        # High-level design
-├── LLD.md                        # Low-level design  
-├── IMPLEMENTATION_GUIDE.md       # Implementation & performance
-├── DOMAIN_VALUES.md              # Domain value handling
-├── DATABASE_SCHEMA.md            # Database design
-├── modules/                      # Module-specific docs
+├── README.md                                    # This file - documentation index
+├── ARCHITECTURE.md                              # System architecture
+├── HLD.md                                       # High-level design
+├── LLD.md                                       # Low-level design  
+├── CROSS_APPLICATION_DATA_EXTRACTION_ANALYSIS.md # Cross-app data extraction analysis
+├── IMPLEMENTATION_GUIDE.md                      # Implementation & performance
+├── DOMAIN_VALUES.md                             # Domain value handling
+├── DATABASE_SCHEMA.md                           # Database design
+├── modules/                                     # Module-specific docs
 │   ├── AGENTS_MODULE.md
 │   ├── QUERY_PROCESSING_MODULE.md
 │   ├── SCHEMA_INTELLIGENCE_MODULE.md
 │   ├── QUERY_EXECUTION_MODULE.md
 │   ├── API_MODULE.md
 │   └── UI_MODULE.md
-└── archive/                      # Historical documentation
+└── archive/                                     # Historical documentation
     ├── IMPLEMENTATION_HISTORY.md
     ├── SQL_VALIDATION_FAILURE_ANALYSIS.md
     ├── EMBEDDING_STRATEGY.md (merged into IMPLEMENTATION_GUIDE)
@@ -75,8 +77,9 @@ Start with:
 1. [HLD.md](HLD.md) - High-level design
 2. [LLD.md](LLD.md) - Low-level design
 3. [ARCHITECTURE.md](ARCHITECTURE.md) - Architecture details
+4. [CROSS_APPLICATION_DATA_EXTRACTION_ANALYSIS.md](CROSS_APPLICATION_DATA_EXTRACTION_ANALYSIS.md) - Cross-app federation analysis
 
 ---
 
-**Last Updated**: November 8, 2025  
-**Version**: Post domain-value resolution fixes
+**Last Updated**: November 10, 2025  
+**Version**: Added cross-application data extraction analysis
