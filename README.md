@@ -83,6 +83,22 @@ ReportSmith/
    python3 setup_database.py
    ```
 
+3a. **[Optional] Onboard New Database**
+   Use the onboarding tool to introspect and configure a new database:
+   ```bash
+   python -m reportsmith.onboarding.cli \
+     --app-id my_app \
+     --app-name "My Application" \
+     --db-type postgresql \
+     --host localhost \
+     --port 5432 \
+     --database mydb \
+     --username user \
+     --password pass \
+     --output-dir ./config/applications
+   ```
+   See [docs/ONBOARDING_GUIDE.md](docs/ONBOARDING_GUIDE.md) for details.
+
 4. **Start Application**
    ```bash
    ./start.sh
@@ -105,6 +121,7 @@ curl -X POST http://127.0.0.1:8000/query \
 
 ### Documentation
 - **[SETUP.md](SETUP.md)** - Detailed setup guide
+- **[docs/ONBOARDING_GUIDE.md](docs/ONBOARDING_GUIDE.md)** - Database onboarding and schema introspection
 - **[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)** - Current system status
 - **[docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema details
 - **[docs/LATENCY_IMPROVEMENTS.md](docs/LATENCY_IMPROVEMENTS.md)** - Performance optimization analysis
