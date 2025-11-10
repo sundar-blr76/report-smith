@@ -2035,11 +2035,13 @@ Currently Selected Columns:
 Task: Identify if any columns should be transformed to better match the user's request.
 
 Examples of transformations:
-- User asks "by month" but timestamp selected → EXTRACT(MONTH FROM timestamp) AS month
+- User asks "by month" but timestamp selected → DATE_TRUNC('month', timestamp) AS month (if grouping needed)
+- User asks "by month" for display → TO_CHAR(DATE_TRUNC('month', timestamp), 'YYYY-MM') AS month (formatted)
 - User asks "by year" but date selected → EXTRACT(YEAR FROM date) AS year
 - User asks "day name" but date selected → TO_CHAR(date, 'Day') AS day_name
 - User asks "quarter" but date selected → EXTRACT(QUARTER FROM date) AS quarter
 - User asks "hour" but timestamp selected → EXTRACT(HOUR FROM timestamp) AS hour
+- For month grouping/display, use TO_CHAR to format: TO_CHAR(DATE_TRUNC('month', date), 'YYYY-MM') or 'Mon YYYY'
 
 Return a JSON object with:
 {{

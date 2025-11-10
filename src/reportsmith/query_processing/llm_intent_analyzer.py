@@ -159,6 +159,16 @@ IMPORTANT: For temporal filters (quarters, months, years, dates):
   * "transactions in Q1" → use transaction_date (when transaction occurred)
 - **CRITICAL**: "PAID" indicates actual payment → use payment_date
 - For period-based queries use fee_period_start/fee_period_end dates
+
+RELATIVE DATE RANGES (use CURRENT_DATE for dynamic dates):
+- "last 12 months" → table.column >= CURRENT_DATE - INTERVAL '12 months'
+- "last 6 months" → table.column >= CURRENT_DATE - INTERVAL '6 months'
+- "last year" → table.column >= CURRENT_DATE - INTERVAL '1 year'
+- "past 30 days" → table.column >= CURRENT_DATE - INTERVAL '30 days'
+- "last quarter" → table.column >= DATE_TRUNC('quarter', CURRENT_DATE) - INTERVAL '3 months' AND table.column < DATE_TRUNC('quarter', CURRENT_DATE)
+- Always use CURRENT_DATE for "last/past" to ensure query runs correctly at any time
+
+ABSOLUTE DATE RANGES:
 - Format filters as: "EXTRACT(QUARTER FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For months: "EXTRACT(MONTH FROM table.column) = N AND EXTRACT(YEAR FROM table.column) = YYYY"
 - For date ranges (quarters/months), use BETWEEN for accuracy:
