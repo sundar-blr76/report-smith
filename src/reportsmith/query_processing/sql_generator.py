@@ -273,7 +273,7 @@ class SQLGenerator:
             where_conditions = self._build_where_conditions(entities, filters)
             group_by = self._build_group_by(select_columns, intent_type)
             order_by = self._build_order_by(select_columns, intent_type)
-            limit = self._determine_limit(intent_type)
+            limit = self._determine_limit(intent_type, intent.get("limit"))
 
             # Construct SQL query object
             sql_query = SQLQuery(
@@ -1358,18 +1358,36 @@ class SQLGenerator:
 
         return order_by
 
-    def _determine_limit(self, intent_type: str) -> Optional[int]:
-        """Determine LIMIT value based on intent"""
-        # Default limits by intent type
+    def _determine_limit(self, intent_type: str, intent_limit: Optional[int] = None) -> Optional[int]:
+        """
+        Determine LIMIT value based on intent.
+        
+        Priority:
+        1. Use explicit limit from intent (e.g., "top 5" → limit=5)
+        2. Fall back to default limits by intent type
+        
+        Args:
+            intent_type: Type of query intent
+            intent_limit: Explicit limit extracted from query (e.g., "top 5" → 5)
+        
+        Returns:
+            Limit value or None
+        """
+        # First, check if intent has explicit limit
+        if intent_limit is not None:
+            logger.debug(f"[sql-gen][limit] using intent limit: {intent_limit}")
+            return intent_limit
+        
+        # Fall back to default limits by intent type
         limits = {
             "list": 100,
             "top_n": 10,
-            "ranking": 10,  # Add ranking as well
+            "ranking": 10,
         }
 
         limit = limits.get(intent_type)
         if limit:
-            logger.debug(f"[sql-gen][limit] applying limit: {limit}")
+            logger.debug(f"[sql-gen][limit] applying default limit for {intent_type}: {limit}")
 
         return limit
     
