@@ -107,7 +107,7 @@ ps aux | grep -E "streamlit|uvicorn" | grep -v grep
 tail -100 logs/app.log | grep -E "UNMAPPED|domain-enricher|llm-enrich|local-mapping"
 
 # Run comprehensive test (if script exists)
-python validate_test_queries.py test_queries_comprehensive_new.yaml
+python validate_test_queries.py test_queries.yaml
 
 # Clear cache if needed (to test fresh)
 # Redis: redis-cli FLUSHDB
@@ -191,7 +191,7 @@ export CACHE_ENABLED=false
 ## Files to Reference
 
 - **Implementation details**: `IMPLEMENTATION_NOTES.md`
-- **Test queries**: `test_queries_comprehensive_new.yaml`
+- **Test queries**: `test_queries.yaml` (canonical version)
 - **Task summary**: `TASK_SUMMARY_2025-11-08.md`
 - **Setup guide**: `SETUP.md`
 - **Changelog**: `CHANGELOG.md`

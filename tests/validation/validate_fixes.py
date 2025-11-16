@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 def test_imports():
     """Test that modified modules import successfully."""
@@ -47,6 +47,9 @@ def test_documentation():
     print("TEST 2: Documentation Consolidation")
     print("=" * 60)
     
+    # Get root directory
+    root_dir = Path(__file__).parent.parent.parent
+    
     required_files = [
         "CHANGELOG.md",
         "CONTRIBUTING.md",
@@ -54,7 +57,7 @@ def test_documentation():
         "SETUP.md",
         "TEST_QUERIES_README.md",
         "IMPLEMENTATION_SUMMARY.md",
-        "test_queries_comprehensive.yaml"
+        "test_queries.yaml"  # Canonical test queries file
     ]
     
     deleted_files = [
@@ -67,8 +70,8 @@ def test_documentation():
     # Check required files exist
     all_exist = True
     for file in required_files:
-        if Path(file).exists():
-            size = Path(file).stat().st_size
+        if (root_dir / file).exists():
+            size = (root_dir / file).stat().st_size
             print(f"✓ {file} ({size} bytes)")
         else:
             print(f"✗ {file} MISSING")
@@ -76,13 +79,13 @@ def test_documentation():
     
     # Check deleted files don't exist
     for file in deleted_files:
-        if Path(file).exists():
+        if (root_dir / file).exists():
             print(f"⚠ {file} should have been deleted but still exists")
         else:
             print(f"✓ {file} deleted as expected")
     
     # Check CONTRIBUTING.md is smaller
-    contrib_size = Path("CONTRIBUTING.md").stat().st_size if Path("CONTRIBUTING.md").exists() else 0
+    contrib_size = (root_dir / "CONTRIBUTING.md").stat().st_size if (root_dir / "CONTRIBUTING.md").exists() else 0
     if contrib_size < 5000:  # Should be under 5KB (simplified)
         print(f"✓ CONTRIBUTING.md is simplified ({contrib_size} bytes < 5000)")
     else:
@@ -168,7 +171,8 @@ def test_test_queries():
     try:
         import yaml
         
-        with open("test_queries_comprehensive.yaml") as f:
+        root_dir = Path(__file__).parent.parent.parent
+        with open(root_dir / "test_queries.yaml") as f:
             data = yaml.safe_load(f)
         
         queries = data.get("test_queries", [])

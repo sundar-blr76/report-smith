@@ -38,8 +38,8 @@ def main():
     print("="*80)
     
     validation_scripts = [
-        ("validate_currency_handling.py", "Currency Auto-Inclusion Validation"),
-        ("validate_temporal_predicates.py", "Temporal Predicate Resolution Validation"),
+        ("tests/validation/validate_currency_handling.py", "Currency Auto-Inclusion Validation"),
+        ("tests/validation/validate_temporal_predicates.py", "Temporal Predicate Resolution Validation"),
     ]
     
     results = []
