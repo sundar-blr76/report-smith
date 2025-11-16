@@ -26,7 +26,7 @@ The current canonical test queries file is:
 - Includes validation rules and success criteria
 - Use this file for all test query validation
 
-## Consolidation Rationale
+## Test Query Consolidation Rationale
 
 These files were consolidated because:
 1. Having 3 similar files created confusion about which to use
@@ -57,6 +57,45 @@ The original connection_manager.py was archived because:
 2. All imports reference simple_connection_manager
 3. Having two similar implementations created confusion
 4. simple_connection_manager.py is cleaner and more maintainable
+
+## Documentation Files
+
+### Archived Documentation (Issue #6)
+
+The following documentation files have been archived to keep the root directory clean and focused:
+
+**Implementation and History:**
+- **IMPLEMENTATION_HISTORY.md** - Detailed implementation notes and historical context
+- **COMMIT_SUMMARY.md** - Commit-level change summary (now tracked in CHANGELOG.md)
+- **OUTSTANDING_ISSUES.md** - Historical issues list (use GitHub Issues instead)
+
+**Task-Specific Documentation:**
+- **GITHUB_ISSUES_TEMPLATE.md** - Template for creating GitHub issues (task completed)
+- **HOW_TO_CREATE_ISSUES.md** - Guide for issue creation (task completed)
+- **CLEANUP_ANALYSIS.md** - Analysis that led to these cleanup tasks
+
+**Technical Documentation:**
+- **EMBEDDING_STRATEGY.md** - Vector embedding strategy details
+- **PERFORMANCE.md** - Performance analysis and benchmarks
+- **SQL_VALIDATION_FAILURE_ANALYSIS.md** - SQL validation debugging notes
+
+### Current Core Documentation
+
+The root directory now contains only essential documentation:
+- **README.md** - Project overview and quick start
+- **SETUP.md** - Detailed setup instructions
+- **CHANGELOG.md** - Version history and changes
+- **CONTRIBUTING.md** - Contribution guidelines (includes cleanup procedures)
+- **TESTING_GUIDE.md** - Testing procedures and validation
+
+### Documentation Consolidation Rationale
+
+Documentation was consolidated to:
+1. Reduce clutter in root directory (from 11 to 5 .md files)
+2. Keep only actively maintained documentation visible
+3. Archive historical/task-specific docs for reference
+4. Make it easier for new contributors to find relevant docs
+5. Follow best practices for OSS project structure
 
 ## Date Archived
 
