@@ -1,0 +1,539 @@
+# Comprehensive Test Query Suite for ReportSmith
+# Generated: 2025-11-06
+# Database: Fund Accounting System
+# Purpose: Regression testing and capability validation
+
+test_queries:
+  # ================================
+  # BASIC RETRIEVAL QUERIES (1-5)
+  # ================================
+  
+  - id: Q001
+    category: basic_retrieval
+    complexity: simple
+    query: "List all active funds"
+    expected_intent: retrieval
+    expected_entities:
+      - funds
+      - active
+    expected_filters:
+      - is_active
+    notes: "Tests basic table retrieval with default filter"
+  
+  - id: Q002
+    category: basic_retrieval
+    complexity: simple
+    query: "Show me all equity funds"
+    expected_intent: retrieval
+    expected_entities:
+      - funds
+      - equity
+    expected_filters:
+      - fund_type
+    expected_domain_values:
+      - "Equity Growth OR Equity Value"
+    notes: "Tests domain value matching with partial text"
+  
+  - id: Q003
+    category: basic_retrieval
+    complexity: simple
+    query: "Get all individual clients"
+    expected_intent: retrieval
+    expected_entities:
+      - clients
+      - individual
+    expected_filters:
+      - client_type = 'Individual'
+    notes: "Tests basic filtering on dimension column"
+  
+  - id: Q004
+    category: basic_retrieval
+    complexity: simple
+    query: "List bond funds with conservative risk rating"
+    expected_intent: retrieval
+    expected_entities:
+      - funds
+      - bond
+      - conservative
+    expected_filters:
+      - fund_type = 'Bond'
+      - risk_rating = 'Conservative'
+    notes: "Tests multiple filter conditions"
+  
+  - id: Q005
+    category: basic_retrieval
+    complexity: simple
+    query: "Show all funds managed by TrustPoint Capital"
+    expected_intent: retrieval
+    expected_entities:
+      - funds
+      - management_companies
+      - TrustPoint Capital
+    expected_joins:
+      - funds <-> management_companies
+    notes: "Tests join between funds and management companies"
+  
+  # ================================
+  # AGGREGATION QUERIES (6-10)
+  # ================================
+  
+  - id: Q006
+    category: aggregation
+    complexity: medium
+    query: "What is the total AUM across all funds?"
+    expected_intent: aggregation
+    expected_entities:
+      - funds
+      - total_aum
+    expected_aggregations:
+      - sum
+    expected_columns:
+      - total_aum (aggregated)
+    notes: "Tests simple aggregation without grouping"
+  
+  - id: Q007
+    category: aggregation
+    complexity: medium
+    query: "Count the number of clients by client type"
+    expected_intent: aggregation
+    expected_entities:
+      - clients
+      - client_type
+    expected_aggregations:
+      - count
+    expected_group_by:
+      - client_type
+    notes: "Tests COUNT with GROUP BY"
+  
+  - id: Q008
+    category: aggregation
+    complexity: medium
+    query: "Calculate average NAV for each fund type"
+    expected_intent: aggregation
+    expected_entities:
+      - funds
+      - nav_per_share
+      - fund_type
+    expected_aggregations:
+      - avg
+    expected_group_by:
+      - fund_type
+    notes: "Tests AVG aggregation with grouping"
+  
+  - id: Q009
+    category: aggregation
+    complexity: medium
+    query: "Total transaction volume by transaction type in 2024"
+    expected_intent: aggregation
+    expected_entities:
+      - transactions
+      - transaction_type
+      - gross_amount
+    expected_aggregations:
+      - sum
+    expected_filters:
+      - transaction_date BETWEEN '2024-01-01' AND '2024-12-31'
+    expected_group_by:
+      - transaction_type
+    expected_columns:
+      - currency (auto-added for monetary)
+    notes: "Tests temporal filter with aggregation and currency auto-inclusion"
+  
+  - id: Q010
+    category: aggregation
+    complexity: medium
+    query: "Sum of fees collected by fee type"
+    expected_intent: aggregation
+    expected_entities:
+      - fee_transactions
+      - fee_type
+      - fee_amount
+    expected_aggregations:
+      - sum
+    expected_group_by:
+      - fee_type
+    expected_columns:
+      - currency (auto-added)
+    notes: "Tests monetary aggregation with auto currency"
+  
+  # ================================
+  # RANKING/TOP-N QUERIES (11-15)
+  # ================================
+  
+  - id: Q011
+    category: ranking
+    complexity: medium
+    query: "Top 10 funds by AUM"
+    expected_intent: ranking
+    expected_entities:
+      - funds
+      - total_aum
+    expected_order_by:
+      - total_aum DESC
+    expected_limit: 10
+    notes: "Tests basic ranking query"
+  
+  - id: Q012
+    category: ranking
+    complexity: medium
+    query: "List the top 5 clients by total fees paid on bond funds in Q1 2025"
+    expected_intent: ranking
+    expected_entities:
+      - clients
+      - fees
+      - bond
+    expected_filters:
+      - fund_type = 'Bond'
+      - payment_date BETWEEN '2025-01-01' AND '2025-03-31'
+    expected_aggregations:
+      - sum
+    expected_limit: 5
+    expected_columns:
+      - currency (auto-added)
+    notes: "Tests temporal predicate resolution with BETWEEN and currency"
+  
+  - id: Q013
+    category: ranking
+    complexity: hard
+    query: "Top 3 performing funds in each category for 2024"
+    expected_intent: ranking
+    expected_entities:
+      - funds
+      - performance_reports
+      - fund_type
+      - return_percentage
+    expected_filters:
+      - period_start_date >= '2024-01-01'
+      - period_end_date <= '2024-12-31'
+    expected_group_by:
+      - fund_type
+    window_function: true
+    notes: "Tests window function / partition by scenario"
+  
+  - id: Q014
+    category: ranking
+    complexity: medium
+    query: "Show the 5 largest transactions in September 2024"
+    expected_intent: ranking
+    expected_entities:
+      - transactions
+      - gross_amount
+    expected_filters:
+      - transaction_date BETWEEN '2024-09-01' AND '2024-09-30'
+    expected_order_by:
+      - gross_amount DESC
+    expected_limit: 5
+    expected_columns:
+      - currency (auto-added)
+    notes: "Tests temporal filter with month and ranking"
+  
+  - id: Q015
+    category: ranking
+    complexity: medium
+    query: "Top 10 clients by number of accounts"
+    expected_intent: ranking
+    expected_entities:
+      - clients
+      - accounts
+    expected_aggregations:
+      - count
+    expected_joins:
+      - clients <-> accounts
+    expected_limit: 10
+    notes: "Tests count aggregation with join and ranking"
+  
+  # ================================
+  # TEMPORAL QUERIES (16-20)
+  # ================================
+  
+  - id: Q016
+    category: temporal
+    complexity: medium
+    query: "Show transactions from Q2 2024"
+    expected_intent: retrieval
+    expected_entities:
+      - transactions
+    expected_filters:
+      - transaction_date BETWEEN '2024-04-01' AND '2024-06-30'
+    notes: "Tests quarter temporal predicate (Q2)"
+  
+  - id: Q017
+    category: temporal
+    complexity: medium
+    query: "Fees paid in January 2025"
+    expected_intent: retrieval
+    expected_entities:
+      - fee_transactions
+      - fees
+    expected_filters:
+      - payment_date BETWEEN '2025-01-01' AND '2025-01-31'
+    expected_columns:
+      - currency (auto-added for fee_amount)
+    notes: "Tests month temporal filter and correct date column (payment_date not fee_period_start)"
+  
+  - id: Q018
+    category: temporal
+    complexity: hard
+    query: "Compare Q1 vs Q2 2024 transaction volumes"
+    expected_intent: comparison
+    expected_entities:
+      - transactions
+      - gross_amount
+    expected_aggregations:
+      - sum
+    expected_filters:
+      - "(Q1: 2024-01-01 to 2024-03-31) OR (Q2: 2024-04-01 to 2024-06-30)"
+    case_when: true
+    notes: "Tests comparison with multiple temporal ranges"
+  
+  - id: Q019
+    category: temporal
+    complexity: medium
+    query: "Monthly fee collection trend for 2024"
+    expected_intent: trend
+    expected_entities:
+      - fee_transactions
+      - fee_amount
+    expected_filters:
+      - payment_date >= '2024-01-01'
+      - payment_date <= '2024-12-31'
+    expected_aggregations:
+      - sum
+    expected_group_by:
+      - EXTRACT(MONTH FROM payment_date) OR DATE_TRUNC('month', payment_date)
+    expected_columns:
+      - currency (auto-added)
+    notes: "Tests trend analysis with temporal grouping"
+  
+  - id: Q020
+    category: temporal
+    complexity: medium
+    query: "Year-to-date performance for all funds"
+    expected_intent: retrieval
+    expected_entities:
+      - funds
+      - performance_reports
+    expected_filters:
+      - period_start_date >= '2025-01-01'
+    expected_joins:
+      - funds <-> performance_reports
+    notes: "Tests year-to-date temporal scope"
+  
+  # ================================
+  # MULTI-TABLE JOINS (21-25)
+  # ================================
+  
+  - id: Q021
+    category: joins
+    complexity: hard
+    query: "List all clients with their fund holdings"
+    expected_intent: retrieval
+    expected_entities:
+      - clients
+      - funds
+      - holdings
+    expected_joins:
+      - clients <-> accounts <-> holdings <-> funds
+    notes: "Tests multi-hop join path"
+  
+  - id: Q022
+    category: joins
+    complexity: hard
+    query: "Show fund managers and their assigned funds with current AUM"
+    expected_intent: retrieval
+    expected_entities:
+      - fund_managers
+      - funds
+      - total_aum
+    expected_joins:
+      - fund_managers <-> fund_manager_assignments <-> funds
+    notes: "Tests many-to-many relationship through junction table"
+  
+  - id: Q023
+    category: joins
+    complexity: hard
+    query: "Total fees paid by each client across all their accounts"
+    expected_intent: aggregation
+    expected_entities:
+      - clients
+      - fee_transactions
+      - fee_amount
+    expected_joins:
+      - clients <-> accounts <-> fee_transactions
+    expected_aggregations:
+      - sum
+    expected_group_by:
+      - clients (client identifying columns)
+    expected_columns:
+      - currency (auto-added)
+    notes: "Tests join with aggregation across account boundary"
+  
+  - id: Q024
+    category: joins
+    complexity: hard
+    query: "Management companies ranked by total AUM under management"
+    expected_intent: ranking
+    expected_entities:
+      - management_companies
+      - funds
+      - total_aum
+    expected_joins:
+      - management_companies <-> funds
+    expected_aggregations:
+      - sum
+    expected_group_by:
+      - management_companies (company identifying columns)
+    expected_order_by:
+      - total_aum DESC
+    notes: "Tests aggregation across one-to-many relationship"
+  
+  - id: Q025
+    category: joins
+    complexity: hard
+    query: "Clients who purchased equity funds in Q1 2024"
+    expected_intent: retrieval
+    expected_entities:
+      - clients
+      - equity
+      - transactions
+    expected_joins:
+      - clients <-> accounts <-> transactions <-> funds
+    expected_filters:
+      - fund_type LIKE '%Equity%'
+      - transaction_type = 'Purchase'
+      - transaction_date BETWEEN '2024-01-01' AND '2024-03-31'
+    notes: "Tests filtered join with temporal and domain conditions"
+  
+  # ================================
+  # ADVANCED/COMPLEX QUERIES (26-30)
+  # ================================
+  
+  - id: Q026
+    category: advanced
+    complexity: hard
+    query: "Show clients with holdings where unrealized gains exceed 20%"
+    expected_intent: filtering
+    expected_entities:
+      - clients
+      - holdings
+      - unrealized_gain_loss
+      - cost_basis
+    expected_joins:
+      - clients <-> accounts <-> holdings
+    calculated_column: "(unrealized_gain_loss / cost_basis) > 0.20"
+    notes: "Tests filtering on calculated percentage"
+  
+  - id: Q027
+    category: advanced
+    complexity: hard
+    query: "Funds with above-average performance in their category"
+    expected_intent: comparison
+    expected_entities:
+      - funds
+      - performance_reports
+      - fund_type
+      - return_percentage
+    subquery: true
+    notes: "Tests subquery with category-specific average"
+  
+  - id: Q028
+    category: advanced
+    complexity: hard
+    query: "Monthly redemption to purchase ratio for 2024"
+    expected_intent: trend
+    expected_entities:
+      - transactions
+      - transaction_type
+      - gross_amount
+    expected_aggregations:
+      - sum (conditional)
+    case_when: true
+    calculated_column: "SUM(CASE WHEN transaction_type='Redemption') / SUM(CASE WHEN transaction_type='Purchase')"
+    notes: "Tests conditional aggregation and ratio calculation"
+  
+  - id: Q029
+    category: advanced
+    complexity: very_hard
+    query: "Identify clients with declining portfolio values over last 3 months"
+    expected_intent: filtering
+    expected_entities:
+      - clients
+      - holdings
+      - market_value
+    window_function: true
+    temporal_comparison: true
+    notes: "Tests time-series analysis with window functions"
+  
+  - id: Q030
+    category: advanced
+    complexity: very_hard
+    query: "Fund managers with consistently high performance across multiple funds"
+    expected_intent: filtering
+    expected_entities:
+      - fund_managers
+      - funds
+      - performance_reports
+      - return_percentage
+    expected_joins:
+      - fund_managers <-> fund_manager_assignments <-> funds <-> performance_reports
+    expected_aggregations:
+      - avg
+      - count
+    having_clause: true
+    notes: "Tests multi-table aggregation with HAVING filter"
+
+# ================================
+# METADATA
+# ================================
+metadata:
+  total_queries: 30
+  complexity_distribution:
+    simple: 5
+    medium: 13
+    hard: 10
+    very_hard: 2
+  
+  category_distribution:
+    basic_retrieval: 5
+    aggregation: 5
+    ranking: 5
+    temporal: 5
+    joins: 5
+    advanced: 5
+  
+  feature_coverage:
+    - basic_filtering
+    - domain_value_matching
+    - temporal_predicates (quarters, months, year-to-date)
+    - temporal_column_selection (payment_date vs fee_period_start)
+    - BETWEEN_for_date_ranges
+    - currency_auto_inclusion
+    - multi_table_joins
+    - aggregations (sum, count, avg, min, max)
+    - group_by
+    - order_by_and_limit
+    - window_functions (Q013, Q029)
+    - subqueries (Q027)
+    - calculated_columns (Q026, Q028)
+    - case_when_expressions (Q018, Q028)
+    - having_clauses (Q030)
+  
+  validation_approach:
+    - Execute each query via API
+    - Verify SQL syntax is valid
+    - Check expected entities are recognized
+    - Verify filters are correctly applied
+    - Confirm joins are proper
+    - Validate currency is included for monetary queries
+    - Check temporal predicates use BETWEEN
+    - Verify correct temporal column is used (payment_date vs period_start)
+  
+  notes: |
+    These queries are designed to test:
+    1. Current capabilities (basic retrieval, aggregation, ranking)
+    2. Recent fixes (temporal predicates, currency auto-inclusion)
+    3. Edge cases (multi-table joins, complex filters)
+    4. Future capabilities (window functions, subqueries)
+    
+    Queries marked with flags like 'window_function: true' or 'subquery: true'
+    may not fully work yet and can be used to guide future development.

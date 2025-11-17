@@ -45,18 +45,27 @@ pytest tests/
 3. **Test Thoroughly**
    ```bash
    pytest tests/                           # Run all tests
-   python validate_test_queries.py          # Validate test queries
+   python tests/validation/validate_test_queries.py  # Validate test queries
    pytest tests/test_specific.py -v       # Run specific test
    ```
 
-4. **Commit with Clear Messages**
+4. **Clean Up Generated Files**
+   ```bash
+   make clean                              # Clean all generated files
+   make clean-coverage                     # Clean coverage reports only
+   make clean-logs                         # Clean logs only
+   # Or use the script directly:
+   ./scripts/cleanup.sh all
+   ```
+
+5. **Commit with Clear Messages**
    ```bash
    git commit -m "feat: add currency auto-inclusion for fee queries"
    git commit -m "fix: prevent incorrect fuzzy column mapping"
    git commit -m "docs: update API documentation"
    ```
 
-5. **Push and Create PR**
+6. **Push and Create PR**
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -185,6 +194,45 @@ def test_feature_name():
 - **Documentation**: See README.md and SETUP.md
 - **Issues**: Search existing issues or create new one
 - **Questions**: Ask in GitHub Discussions
+
+## Cleanup and Maintenance
+
+### Cleaning Generated Files
+
+The project generates various temporary files during development and testing. Use the provided cleanup tools to keep your workspace clean:
+
+#### Using Make (recommended)
+```bash
+make clean              # Clean all generated files
+make clean-coverage     # Clean coverage reports and .coverage files
+make clean-logs         # Clean log files (keeps directory structure)
+make clean-cache        # Clean Python __pycache__ and .pyc files
+make clean-temp         # Clean temporary files
+```
+
+#### Using the Cleanup Script Directly
+```bash
+./scripts/cleanup.sh              # Clean all
+./scripts/cleanup.sh coverage     # Clean coverage only
+./scripts/cleanup.sh logs         # Clean logs only
+./scripts/cleanup.sh cache        # Clean Python cache only
+./scripts/cleanup.sh temp         # Clean temp files only
+```
+
+### What Gets Cleaned
+
+- **Coverage reports**: `htmlcov/`, `.coverage`, `.coverage.*`
+- **Pytest cache**: `.pytest_cache/`
+- **Logs**: `logs/*.log`, `logs/*.json`, `logs/semantic_debug/*.json`
+- **Python cache**: `__pycache__/`, `*.pyc`, `*.pyo`
+- **Temporary files**: `/tmp/reportsmith_*`, `*.tmp`
+
+### Best Practices
+
+- Run `make clean` before committing to ensure no generated files are included
+- Clean logs periodically to save disk space
+- Clean coverage reports before running new test coverage analysis
+- All generated files are already in `.gitignore`
 
 ## License
 
