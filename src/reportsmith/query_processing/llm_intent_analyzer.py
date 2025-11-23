@@ -176,7 +176,16 @@ ABSOLUTE DATE RANGES:
   * Q2 2025: "table.column BETWEEN '2025-04-01' AND '2025-06-30'"
   * Q3 2025: "table.column BETWEEN '2025-07-01' AND '2025-09-30'"
   * Q4 2025: "table.column BETWEEN '2025-10-01' AND '2025-12-31'"
-- BETWEEN ensures all dates within the period are included, not just those where the quarter starts"""
+- BETWEEN ensures all dates within the period are included, not just those where the quarter starts
+
+PERCENTAGE-BASED FILTERS (gains, returns, performance):
+- When query mentions percentages like "exceed 20%", "over 15%", "gains > 10%":
+  * For unrealized gains: "(table.unrealized_gain_loss / table.cost_basis) > 0.20"
+  * For returns: "(table.current_value - table.cost_basis) / table.cost_basis > 0.15"
+  * For performance metrics: use the percentage column directly if available (e.g., "performance_metric > 10")
+- Convert percentage to decimal (20% → 0.20, 15% → 0.15)
+- Use appropriate base value for calculation (cost_basis, total_value, initial_investment, etc.)
+- Include safety check: "AND table.cost_basis > 0" or "AND table.cost_basis IS NOT NULL" to avoid division by zero"""
 
     def __init__(
         self, 
