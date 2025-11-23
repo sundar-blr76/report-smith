@@ -37,5 +37,5 @@ if __name__ == '__main__':
     print("For help with arguments:")
     print("  python scripts/onboard_database.py --help")
     print()
-    
+
     sys.exit(main())
