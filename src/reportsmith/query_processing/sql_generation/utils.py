@@ -6,9 +6,12 @@ This module contains helper functions used throughout the SQL generation process
 
 import re
 import difflib
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
 from reportsmith.logger import get_logger
+
+if TYPE_CHECKING:
+    from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 
 logger = get_logger(__name__)
 
@@ -66,7 +69,7 @@ def normalize_filter_value(value_str: str) -> str:
 def normalize_column_reference(
     col_ref: str,
     entities: List[Dict[str, Any]],
-    knowledge_graph,
+    knowledge_graph: "SchemaKnowledgeGraph",
 ) -> str:
     """
     Normalize column references in filters to use actual table/column names.
@@ -180,7 +183,7 @@ def normalize_column_reference(
     return col_ref
 
 
-def detect_llm_provider(llm_client) -> str:
+def detect_llm_provider(llm_client: Any) -> str:
     """Detect which LLM provider is being used"""
     if not llm_client:
         return "none"
@@ -192,7 +195,7 @@ def detect_llm_provider(llm_client) -> str:
         return "gemini"
 
 
-def detect_llm_model(llm_client) -> str:
+def detect_llm_model(llm_client: Any) -> str:
     """Detect which LLM model is being used"""
     if not llm_client:
         return "none"
