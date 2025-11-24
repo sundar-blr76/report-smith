@@ -1,4 +1,14 @@
-"""Onboarding manager to orchestrate database schema inference and configuration generation."""
+"""Onboarding manager to orchestrate database schema inference and configuration generation.
+
+This manager connects to your database and extracts schema information by:
+1. Creating a SQLAlchemy engine with your database credentials
+2. Using SchemaIntrospector to query system catalogs (pg_catalog, information_schema, etc.)
+3. Detecting tables, columns, data types, constraints, and relationships
+4. Generating YAML configuration files ready for ReportSmith
+
+The introspection process reads directly from database system catalogs to ensure
+accurate schema extraction across PostgreSQL, MySQL, Oracle, SQL Server, and SQLite.
+"""
 
 from typing import Dict, Optional, Any, List
 from pathlib import Path

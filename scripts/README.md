@@ -39,14 +39,24 @@ python scripts/onboard_database.py \
 
 ### What These Scripts Do
 
+These scripts **connect directly to your database system catalogs** to automatically extract schema information:
+
 1. **Connect to your database** using the credentials you provide
-2. **Extract the schema** - tables, columns, data types, constraints, foreign keys
-3. **Detect relationships** - one-to-many, one-to-one, many-to-many
-4. **Generate configuration files** in `config/applications/<app_id>/`:
-   - `app.yaml` - Application configuration with relationships
-   - `schema.yaml` - Complete schema definition
-   - `user_input_template.yaml` - Template for business context
+2. **Query system catalogs** to extract schema metadata:
+   - PostgreSQL: `pg_catalog.pg_tables`, `pg_attribute`, `pg_constraint`, `pg_class`
+   - MySQL: `information_schema.tables`, `columns`, `referential_constraints`
+   - Oracle: `all_tables`, `all_tab_columns`, `all_constraints`
+   - SQL Server: `sys.tables`, `sys.columns`, `sys.foreign_keys`
+   - SQLite: `sqlite_master`, internal schema tables
+3. **Extract complete schema** - tables, columns, data types, constraints, foreign keys, indexes
+4. **Detect relationships** - one-to-many, one-to-one, many-to-many from foreign keys
+5. **Generate configuration files** in `config/applications/<app_id>/`:
+   - `app.yaml` - Application configuration with detected relationships
+   - `schema.yaml` - Complete schema definition with normalized data types
+   - `user_input_template.yaml` - Template for adding business context
    - `README.md` - Next steps guide
+
+**Technical details**: See [docs/ONBOARDING_TECHNICAL_FLOW.md](../docs/ONBOARDING_TECHNICAL_FLOW.md) for complete flow diagram showing system catalog queries.
 
 ### Supported Databases
 

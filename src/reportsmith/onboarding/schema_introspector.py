@@ -1,4 +1,20 @@
-"""Database schema introspection for multiple database vendors."""
+"""Database schema introspection for multiple database vendors.
+
+This module connects to database system catalogs to extract schema metadata:
+- Tables, columns, data types, constraints
+- Primary keys, foreign keys, indexes
+- Relationships between tables
+
+System catalogs queried (via SQLAlchemy Inspector):
+- PostgreSQL: pg_catalog (pg_tables, pg_attribute, pg_constraint, pg_class)
+- MySQL: information_schema (tables, columns, referential_constraints)
+- Oracle: all_tables, all_tab_columns, all_constraints
+- SQL Server: sys.tables, sys.columns, sys.foreign_keys, sys.dm_db_partition_stats
+- SQLite: sqlite_master and internal schema tables
+
+The inspector uses SQLAlchemy's database-agnostic Inspector API which internally
+queries the appropriate system catalogs for each database vendor.
+"""
 
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
