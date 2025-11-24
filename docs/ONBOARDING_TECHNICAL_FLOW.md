@@ -157,12 +157,12 @@ The script will:
 File: `src/reportsmith/onboarding/schema_introspector.py`
 
 Key methods that query system catalogs:
-- `_get_table_names()` - Lines 104-112
-- `_get_columns()` - Lines 145-169
-- `_get_primary_keys()` - Lines 171-178
-- `_get_foreign_keys()` - Lines 180-201
-- `_get_indexes()` - Lines 225-238
-- `_estimate_row_count()` - Lines 246-304 (direct SQL to system catalogs)
+- `_get_table_names()` - Discovers all tables in the schema
+- `_get_columns()` - Extracts column definitions, types, and nullability
+- `_get_primary_keys()` - Identifies primary key columns
+- `_get_foreign_keys()` - Detects foreign key relationships
+- `_get_indexes()` - Retrieves index definitions
+- `_estimate_row_count()` - Queries system catalogs for row count estimates (direct SQL)
 
 ### SQLAlchemy Inspector
 
@@ -181,10 +181,10 @@ inspector.get_foreign_keys()   # -> pg_constraint, information_schema.referentia
 
 ## Verification
 
-To verify the script connects to system catalogs, run with verbose logging:
+To verify the script connects to system catalogs, run with debug logging:
 
 ```bash
-export LOGLEVEL=DEBUG
+# Enable debug logging to see system catalog queries
 python scripts/onboard_database.py --app-id test --db-type sqlite --database test.db
 ```
 
