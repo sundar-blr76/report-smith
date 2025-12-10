@@ -18,7 +18,15 @@ from pathlib import Path
 
 from ..logger import get_logger
 from ..schema_intelligence.embedding_manager import EmbeddingManager
-from .llm_intent_analyzer import LLMIntentAnalyzer, LLMQueryIntent, IntentType, TimeScope, AggregationType
+from .llm_intent_analyzer import LLMIntentAnalyzer, LLMQueryIntent
+from .base_intent_analyzer import (
+    BaseIntentAnalyzer,
+    BaseQueryIntent,
+    IntentType,
+    TimeScope,
+    AggregationType,
+    EnrichedEntity
+)
 
 logger = get_logger(__name__)
 
@@ -50,42 +58,12 @@ class EntityMappingConfig:
     business_terms: Dict[str, LocalEntityMapping] = field(default_factory=dict)
 
 
-@dataclass
-class EnrichedEntity:
-    """Entity enriched with both local mappings and LLM/semantic search."""
-    text: str
-    entity_type: str
-    canonical_name: Optional[str] = None  # From local mapping
-    table: Optional[str] = None
-    column: Optional[str] = None
-    value: Optional[str] = None
-    source: str = "llm"  # "local" or "llm" or "semantic"
-    confidence: float = 0.0
-    semantic_matches: List[Dict[str, Any]] = field(default_factory=list)
-    local_mapping: Optional[LocalEntityMapping] = None
-    
-    def __str__(self):
-        source_emoji = {"local": "📌", "llm": "🤖", "semantic": "🔍"}.get(self.source, "❓")
-        parts = [f"{source_emoji} {self.text}"]
-        if self.canonical_name and self.canonical_name != self.text:
-            parts.append(f"→ {self.canonical_name}")
-        parts.append(f"({self.entity_type}, conf: {self.confidence:.2f})")
-        return " ".join(parts)
+
 
 
 @dataclass
-class HybridQueryIntent:
+class HybridQueryIntent(BaseQueryIntent):
     """Query intent with hybrid analysis results."""
-    original_query: str
-    intent_type: IntentType
-    entities: List[EnrichedEntity]
-    time_scope: TimeScope
-    aggregations: List[AggregationType]
-    filters: List[str]
-    limit: Optional[int]
-    order_by: Optional[str]
-    order_direction: str
-    llm_reasoning: Optional[str] = None
     local_mappings_used: int = 0
     llm_entities_found: int = 0
     
@@ -114,7 +92,7 @@ class HybridQueryIntent:
         return "\n".join(parts)
 
 
-class HybridIntentAnalyzer:
+class HybridIntentAnalyzer(BaseIntentAnalyzer):
     """
     Hybrid analyzer combining local mappings with LLM intelligence.
     

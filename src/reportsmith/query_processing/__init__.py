@@ -1,11 +1,17 @@
 """Query Processing Module for ReportSmith."""
 
-from .intent_analyzer import (
-    QueryIntentAnalyzer,
-    QueryIntent,
+from .base_intent_analyzer import (
+    BaseIntentAnalyzer,
+    BaseQueryIntent,
     IntentType,
     TimeScope,
     AggregationType,
+    EnrichedEntity,
+)
+
+from .intent_analyzer import (
+    QueryIntentAnalyzer,
+    QueryIntent,
     ExtractedEntity,
 )
 
@@ -22,19 +28,24 @@ from .hybrid_intent_analyzer import (
 )
 
 __all__ = [
-    # Pattern-based (fallback)
-    'QueryIntentAnalyzer',
-    'QueryIntent',
+    # Base types (New)
+    'BaseIntentAnalyzer',
+    'BaseQueryIntent',
     'IntentType',
     'TimeScope',
     'AggregationType',
+    'EnrichedEntity',
+
+    # Pattern-based (Legacy)
+    'QueryIntentAnalyzer',
+    'QueryIntent',
     'ExtractedEntity',
     
     # LLM-based
     'LLMIntentAnalyzer',
     'LLMQueryIntent',
     
-    # Hybrid (recommended - combines all approaches)
+    # Hybrid (Recommended)
     'HybridIntentAnalyzer',
     'HybridQueryIntent',
     'LocalEntityMapping',

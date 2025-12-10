@@ -53,7 +53,29 @@ class QueryValidator:
                 timeout=timeout
             )
             response.raise_for_status()
-            return response.json()
+            response.raise_for_status()
+            resp = response.json()
+            
+            # Unwrap standard response format
+            if "data" in resp:
+                data = resp["data"]
+                output = {}
+                
+                # Extract SQL from result
+                if data.get("result") and isinstance(data["result"], dict):
+                    output["sql"] = data["result"].get("sql")
+                    output["result"] = data["result"] # Include distinct result for execution checks
+                
+                # Extract intent
+                output["intent"] = data.get("intent")
+                
+                # Extract errors
+                if data.get("errors"):
+                    output["error"] = "; ".join(str(e) for e in data["errors"])
+                    
+                return output
+                
+            return resp
         except requests.exceptions.RequestException as e:
             logger.error(f"API request failed: {e}")
             return {"error": str(e)}
@@ -266,7 +288,7 @@ def main():
     parser = argparse.ArgumentParser(description="Validate ReportSmith test queries")
     parser.add_argument(
         "--queries-file",
-        default="test_queries.yaml",
+        default="tests/data/test_queries.yaml",
         help="Path to test queries YAML file"
     )
     parser.add_argument(

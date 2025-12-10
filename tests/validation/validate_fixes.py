@@ -57,7 +57,7 @@ def test_documentation():
         "SETUP.md",
         "TEST_QUERIES_README.md",
         "IMPLEMENTATION_SUMMARY.md",
-        "test_queries.yaml"  # Canonical test queries file
+        "tests/data/test_queries.yaml"  # Canonical test queries file
     ]
     
     deleted_files = [
@@ -73,6 +73,9 @@ def test_documentation():
         if (root_dir / file).exists():
             size = (root_dir / file).stat().st_size
             print(f"✓ {file} ({size} bytes)")
+        elif file == "tests/data/test_queries.yaml" and (root_dir / "tests/data/test_queries.yaml").exists():
+             size = (root_dir / file).stat().st_size
+             print(f"✓ {file} ({size} bytes)")
         else:
             print(f"✗ {file} MISSING")
             all_exist = False
@@ -172,7 +175,7 @@ def test_test_queries():
         import yaml
         
         root_dir = Path(__file__).parent.parent.parent
-        with open(root_dir / "test_queries.yaml") as f:
+        with open(root_dir / "tests/data/test_queries.yaml") as f:
             data = yaml.safe_load(f)
         
         queries = data.get("test_queries", [])

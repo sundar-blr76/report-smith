@@ -15,41 +15,16 @@ import os
 from ..logger import get_logger
 from ..schema_intelligence.embedding_manager import EmbeddingManager
 from ..utils.cache_manager import get_cache_manager
+from .base_intent_analyzer import (
+    BaseIntentAnalyzer, 
+    BaseQueryIntent, 
+    IntentType, 
+    TimeScope, 
+    AggregationType, 
+    EnrichedEntity
+)
 
 logger = get_logger(__name__)
-
-
-class IntentType(str, Enum):
-    """Types of query intents."""
-    RETRIEVAL = "retrieval"
-    AGGREGATION = "aggregation"
-    FILTERING = "filtering"
-    COMPARISON = "comparison"
-    RANKING = "ranking"
-    TREND = "trend"
-
-
-class TimeScope(str, Enum):
-    """Time-based scopes for queries."""
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    MONTHLY = "monthly"
-    QUARTERLY = "quarterly"
-    YEARLY = "yearly"
-    YTD = "year_to_date"
-    MTD = "month_to_date"
-    CUSTOM = "custom"
-    NONE = "none"
-
-
-class AggregationType(str, Enum):
-    """Types of aggregations."""
-    SUM = "sum"
-    COUNT = "count"
-    AVERAGE = "avg"
-    MIN = "min"
-    MAX = "max"
-    DISTINCT_COUNT = "count_distinct"
 
 
 class EntityMatch(BaseModel):
@@ -75,60 +50,13 @@ class LLMQueryIntent(BaseModel):
     reasoning: str = Field(description="Brief explanation of the analysis")
 
 
-@dataclass
-class EnrichedEntity:
-    """Entity enriched with semantic search results."""
-    text: str
-    entity_type: str
-    semantic_matches: List[Dict[str, Any]]
-    confidence: float
-    
-    def __str__(self):
-        return f"{self.text} ({self.entity_type}, conf: {self.confidence:.2f})"
+class QueryIntent(BaseQueryIntent):
+    """Final query intent with enriched entities (Backwards compatibility alias)."""
+    pass
 
 
-@dataclass
-class QueryIntent:
-    """Final query intent with enriched entities."""
-    original_query: str
-    intent_type: IntentType
-    entities: List[EnrichedEntity]
-    time_scope: TimeScope
-    aggregations: List[AggregationType]
-    filters: List[str]
-    limit: Optional[int]
-    order_by: Optional[str]
-    order_direction: str
-    llm_reasoning: str
-    
-    def __str__(self) -> str:
-        parts = [
-            f"Query: {self.original_query}",
-            f"Intent: {self.intent_type.value}",
-            f"Time Scope: {self.time_scope.value}",
-        ]
-        
-        if self.entities:
-            parts.append(f"\nEntities ({len(self.entities)}):")
-            for entity in self.entities:
-                parts.append(f"  - {entity}")
-        
-        if self.aggregations:
-            parts.append(f"\nAggregations: {', '.join([a.value for a in self.aggregations])}")
-        
-        if self.filters:
-            parts.append(f"Filters: {', '.join(self.filters)}")
-        
-        if self.limit:
-            parts.append(f"Limit: {self.limit}")
-        
-        if self.llm_reasoning:
-            parts.append(f"\nReasoning: {self.llm_reasoning}")
-        
-        return "\n".join(parts)
 
-
-class LLMIntentAnalyzer:
+class LLMIntentAnalyzer(BaseIntentAnalyzer):
     """
     LLM-based intent analyzer using structured output.
     

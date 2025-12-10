@@ -1,32 +1,32 @@
 [
   {
     "id": "TC001",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f44fadb4680>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Currency column not found in SQL. Expected one of: ['currency']",
+    "sql": ""
   },
   {
     "id": "TC002",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f44fadb45c0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Currency column not found in SQL. Expected one of: ['currency']",
+    "sql": ""
   },
   {
     "id": "TC003",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f44fadb54f0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Currency column not found in SQL. Expected one of: ['currency']",
+    "sql": ""
   },
   {
     "id": "TC004",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f44fadb5c40>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Currency column not found in SQL. Expected one of: ['currency']",
+    "sql": ""
   },
   {
     "id": "TC005",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f44fadb6390>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Currency column not found in SQL. Expected one of: ['base_currency']",
+    "sql": ""
   }
 ]

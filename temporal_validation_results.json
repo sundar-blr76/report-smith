@@ -1,38 +1,44 @@
 [
   {
     "id": "TP001",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b7ef800>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'PAYMENT_DATE' not found in SQL",
+    "sql": "",
+    "filters": []
   },
   {
     "id": "TP002",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b682ab0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'PAYMENT_DATE' not found in SQL",
+    "sql": "",
+    "filters": []
   },
   {
     "id": "TP003",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b6831a0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'FEE_PERIOD_START' or 'FEE_PERIOD_END' not found in SQL",
+    "sql": "",
+    "filters": []
   },
   {
     "id": "TP004",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b6838f0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'PAYMENT_DATE' not found in SQL",
+    "sql": "",
+    "filters": []
   },
   {
     "id": "TP005",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b468080>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'TRANSACTION_DATE' not found in SQL",
+    "sql": "",
+    "filters": []
   },
   {
     "id": "TP006",
-    "status": "ERROR",
-    "error": "HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /query (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7ff90b4687d0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
-    "sql": null
+    "status": "FAIL",
+    "error": "Expected date column 'PAYMENT_DATE' not found in SQL",
+    "sql": "",
+    "filters": []
   }
 ]
