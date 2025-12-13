@@ -131,13 +131,50 @@ class ContextEnricher:
                         ranking_entity_hint = f"\nRANKING ENTITY: '{entity}' - MUST include identifying columns!"
                         break
             
+            # Detect aggregation/comparison grouping level from question
             aggregation_level_hint = ""
-            if intent_type in ["aggregation", "aggregate"]:
+            grouping_dimension = None
+            is_aggregation_query = intent_type in ["aggregation", "aggregate", "comparison"]
+            
+            if is_aggregation_query:
                 import re
+                
+                # For "by X" patterns
                 by_match = re.search(r'\bby\s+(\w+(?:\s+\w+)?)', question.lower())
                 if by_match:
-                    grouping = by_match.group(1)
-                    aggregation_level_hint = f"\n**AGGREGATION LEVEL**: User wants results grouped 'by {grouping}'. DO NOT add columns that would create finer granularity!"
+                    # Normalize: replace spaces with underscores for column name matching
+                    grouping_dimension = by_match.group(1).strip().replace(' ', '_')
+                
+                # For comparison "between X and Y" patterns - extract the comparison dimension
+                between_match = re.search(r'\bbetween\s+(\w+)\s+and\s+(\w+)', question.lower())
+                if between_match and not grouping_dimension:
+                    # The comparison is between values, not columns - detect what dimension they belong to
+                    val1, val2 = between_match.group(1), between_match.group(2)
+                    # Common patterns: "conservative and aggressive" → risk_rating
+                    if any(x in val1 or x in val2 for x in ['conservative', 'aggressive', 'moderate']):
+                        grouping_dimension = "risk_rating"
+                    elif any(x in val1 or x in val2 for x in ['equity', 'bond', 'balanced', 'money']):
+                        grouping_dimension = "fund_type"
+                    else:
+                        grouping_dimension = f"{val1}/{val2}"
+                
+                if grouping_dimension:
+                    aggregation_level_hint = f"""
+
+**CRITICAL - {'COMPARISON' if intent_type == 'comparison' else 'AGGREGATION'} QUERY DETECTED**:
+User wants results grouped BY '{grouping_dimension}' ONLY.
+
+⚠️ DO NOT ADD ANY COLUMNS THAT WOULD CREATE FINER GRANULARITY!
+
+Examples of FORBIDDEN columns:
+- fund_name, fund_code (breaks grouping - shows each fund individually)
+- fund_type (if comparing by risk_rating, do NOT add fund_type)
+- risk_rating (if comparing by fund_type, do NOT add risk_rating)
+- Any unique identifier columns
+
+✓ ALLOWED: The comparison dimension column + aggregated metrics
+✗ FORBIDDEN: Other dimension columns that would multiply rows
+"""
 
             prompt = f"""You are a SQL expert helping to make query results more meaningful by identifying implicit context columns.
 
@@ -152,8 +189,12 @@ Available Schema (columns per table):
 
 Task: Identify additional columns that would make the query output more meaningful for human consumption.
 
-**CRITICAL FOR RANKING/TOP_N QUERIES**:
-If ranking entities (like "top 5 clients"), you MUST add the entity's name and ID.
+**CRITICAL RULES**:
+1. For AGGREGATION queries: NEVER add columns that would break the grouping granularity!
+   - If grouping "by fund type", do NOT add fund_name, fund_code, fund_id
+   - If grouping "by client", do NOT add individual transaction columns
+2. For RANKING/TOP_N queries: DO add identifying columns (name, code, ID)
+3. For LIST queries: Add helpful context columns
 
 Return a JSON object with:
 {{
@@ -178,7 +219,13 @@ Return a JSON object with:
             
             logger.info(f"[sql-gen][llm-enrich] suggested {len(add_columns)} columns; reasoning: {reasoning}")
 
-            # Add columns
+            # Columns that typically break aggregation granularity
+            granularity_breaking_suffixes = ['_name', '_code', '_id', 'name', 'code', 'id']
+            
+            # Dimension columns that should not mix (e.g., don't add fund_type when grouping by risk_rating)
+            dimension_columns = {'fund_type', 'risk_rating', 'client_type', 'account_type', 'fee_type'}
+            
+            # Add columns with aggregation guard
             for col_suggestion in add_columns:
                 table = col_suggestion.get("table")
                 column = col_suggestion.get("column")
@@ -190,12 +237,77 @@ Return a JSON object with:
                 # Verify not already selected
                 if any(c.table == table and c.column == column for c in select_columns): continue
 
+                # AGGREGATION GUARD: Skip columns that would break grouping granularity
+                if is_aggregation_query and grouping_dimension:
+                    col_lower = column.lower()
+                    
+                    # Check 1: Skip if column ends with name/code/id patterns (breaks granularity)
+                    if any(col_lower.endswith(suffix) for suffix in granularity_breaking_suffixes):
+                        # Exception: if the column IS the grouping dimension, allow it
+                        if grouping_dimension not in col_lower:
+                            logger.info(f"[sql-gen][llm-enrich] SKIPPED {table}.{column} - would break aggregation granularity (identifier)")
+                            continue
+                    
+                    # Check 2: Skip if column is a different dimension than the grouping dimension
+                    if col_lower in dimension_columns:
+                        # Only allow if this IS the grouping dimension
+                        if col_lower != grouping_dimension and grouping_dimension not in col_lower:
+                            logger.info(f"[sql-gen][llm-enrich] SKIPPED {table}.{column} - would break aggregation granularity (different dimension)")
+                            continue
+
                 select_columns.append(SQLColumn(
                     table=table,
                     column=column,
                     alias=column,
                 ))
                 logger.debug(f"[sql-gen][llm-enrich] added: {table}.{column}")
+
+            # POST-ENRICHMENT FILTER: For aggregation/comparison queries, ensure we don't have conflicting dimensions
+            if is_aggregation_query and grouping_dimension:
+                columns_to_remove = []
+                for col in select_columns:
+                    col_lower = col.column.lower()
+                    # Skip aggregated columns - they're fine
+                    if col.aggregation:
+                        continue
+                    # Check if this is a conflicting dimension column
+                    if col_lower in dimension_columns:
+                        if col_lower != grouping_dimension and grouping_dimension not in col_lower:
+                            columns_to_remove.append(col)
+                            logger.info(f"[sql-gen][llm-enrich] POST-FILTER: Removed conflicting dimension {col.table}.{col.column}")
+                
+                for col in columns_to_remove:
+                    select_columns.remove(col)
+                
+                # Ensure the grouping dimension IS in the select columns (important for aggregation/comparison queries)
+                has_grouping_dimension = any(
+                    col.column.lower() == grouping_dimension or grouping_dimension in col.column.lower()
+                    for col in select_columns if not col.aggregation
+                )
+                logger.info(f"[sql-gen][llm-enrich] POST-FILTER: grouping_dimension='{grouping_dimension}', has_it={has_grouping_dimension}")
+                
+                if not has_grouping_dimension:
+                    # Try to find and add the grouping dimension column from available tables
+                    added = False
+                    for table in plan.get("tables", []):
+                        table_cols = available_columns.get(table, [])
+                        col_names = [c["name"].lower() for c in table_cols]
+                        logger.debug(f"[sql-gen][llm-enrich] POST-FILTER: checking table '{table}', columns: {col_names[:5]}...")
+                        
+                        if grouping_dimension in col_names:
+                            # Find the exact column name (preserving case)
+                            exact_name = next(c["name"] for c in table_cols if c["name"].lower() == grouping_dimension)
+                            select_columns.insert(0, SQLColumn(
+                                table=table,
+                                column=exact_name,
+                                alias=exact_name,
+                            ))
+                            logger.info(f"[sql-gen][llm-enrich] POST-FILTER: Added missing grouping dimension {table}.{exact_name}")
+                            added = True
+                            break
+                    
+                    if not added:
+                        logger.warning(f"[sql-gen][llm-enrich] POST-FILTER: Could not find grouping dimension '{grouping_dimension}' in available tables")
 
             # Cache result
             if self.cache:

@@ -112,9 +112,17 @@ class SelectBuilder:
         
         # Add essential context columns for financial queries
         # If selecting monetary amounts, include currency (whether aggregated or not)
-        monetary_columns = {'fee_amount', 'amount', 'fees', 'charges', 'price', 'cost', 'value', 'balance'}
+        monetary_columns = {
+            'fee_amount', 'amount', 'fees', 'charges', 'price', 'cost', 'value', 'balance',
+            'total_aum', 'aum', 'nav_per_share', 'nav', 'market_value', 'net_amount', 'gross_amount',
+            'total_invested', 'current_value', 'cost_basis', 'unrealized_gain_loss'
+        }
+        
+        # Also check for columns with monetary suffixes/aliases
+        aum_aliases = {'aum'}  # Alias might be used instead of column name
+        
         has_monetary_column = any(
-            col.column in monetary_columns  # Check ANY monetary column (aggregated or not)
+            col.column in monetary_columns or col.alias in aum_aliases
             for col in columns
         )
         
@@ -122,21 +130,26 @@ class SelectBuilder:
             # Find the table with currency column
             currency_added = False
             for col in columns:
-                if col.column in monetary_columns:
-                    # Check if this table has a currency column
-                    currency_node = self.kg.nodes.get(f"{col.table}.currency")
-                    if currency_node and not any(c.column == 'currency' and c.table == col.table for c in columns):
-                        columns.append(
-                            SQLColumn(
-                                table=col.table,
-                                column='currency',
-                                alias='currency'
+                if col.column in monetary_columns or col.alias in aum_aliases:
+                    # Check for currency column (try multiple possible names)
+                    for currency_col in ['currency', 'base_currency']:
+                        currency_node = self.kg.nodes.get(f"{col.table}.{currency_col}")
+                        if currency_node and not any(
+                            c.column == currency_col and c.table == col.table for c in columns
+                        ):
+                            columns.append(
+                                SQLColumn(
+                                    table=col.table,
+                                    column=currency_col,
+                                    alias='currency' if currency_col == 'base_currency' else currency_col
+                                )
                             )
-                        )
-                        logger.info(
-                            f"[sql-gen][select] ✓ Auto-added currency column for monetary column: {col.table}.currency"
-                        )
-                        currency_added = True
+                            logger.info(
+                                f"[sql-gen][select] ✓ Auto-added currency column for monetary column: {col.table}.{currency_col}"
+                            )
+                            currency_added = True
+                            break
+                    if currency_added:
                         break
             
             if not currency_added:

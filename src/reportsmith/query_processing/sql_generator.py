@@ -137,7 +137,17 @@ class SQLGenerator:
 
             # 4. Build other clauses
             from_table, joins = self.join_builder.build_from_and_joins(plan)
-            where_conditions = self.filter_builder.build_where_conditions(entities, filters)
+            all_conditions = self.filter_builder.build_where_conditions(entities, filters)
+            
+            # Fix any invalid column references in conditions
+            all_conditions = [
+                self.filter_builder.fix_column_references(cond) 
+                for cond in all_conditions
+            ]
+            
+            # Separate WHERE and HAVING conditions (aggregations must go to HAVING)
+            where_conditions, having_conditions = self.filter_builder.separate_having_conditions(all_conditions)
+            
             group_by = self.modifiers_builder.build_group_by(select_columns)
             order_by = self.modifiers_builder.build_order_by(select_columns, intent_type)
             limit = self.modifiers_builder.determine_limit(intent_type, intent.get("limit"))
@@ -149,7 +159,7 @@ class SQLGenerator:
                 joins=joins,
                 where_conditions=where_conditions,
                 group_by=group_by,
-                having_conditions=[],
+                having_conditions=having_conditions,
                 order_by=order_by,
                 limit=limit,
             )

@@ -13,6 +13,78 @@ class FilterBuilder:
     def __init__(self, knowledge_graph: SchemaKnowledgeGraph):
         self.kg = knowledge_graph
 
+    def validate_column_exists(self, table: str, column: str) -> bool:
+        """Check if a column exists in the schema."""
+        col_key = f"{table}.{column}"
+        return col_key in self.kg.nodes
+    
+    def get_date_column_for_table(self, table: str) -> str:
+        """Get the appropriate date column for a table."""
+        # Common date column names in order of preference
+        date_priorities = [
+            'payment_date', 'transaction_date', 'fee_period_start', 
+            'as_of_date', 'report_date', 'created_at'
+        ]
+        
+        for date_col in date_priorities:
+            if self.validate_column_exists(table, date_col):
+                return date_col
+        return None
+    
+    def separate_having_conditions(
+        self,
+        conditions: List[str],
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Separate conditions into WHERE and HAVING clauses.
+        
+        Conditions with aggregation functions (SUM, AVG, COUNT, MIN, MAX)
+        must go to HAVING, not WHERE.
+        
+        Returns:
+            Tuple of (where_conditions, having_conditions)
+        """
+        where_conditions = []
+        having_conditions = []
+        
+        agg_pattern = re.compile(r'\b(SUM|AVG|COUNT|MIN|MAX)\s*\(', re.IGNORECASE)
+        
+        for condition in conditions:
+            if agg_pattern.search(condition):
+                having_conditions.append(condition)
+                logger.info(f"[sql-gen][filter] Moved to HAVING (contains aggregation): {condition}")
+            else:
+                where_conditions.append(condition)
+        
+        return where_conditions, having_conditions
+    
+    def fix_column_references(self, condition: str) -> str:
+        """
+        Fix invalid column references in a condition by validating against schema.
+        Returns the fixed condition or original if no fix needed.
+        """
+        # Pattern to match table.column references
+        col_pattern = re.compile(r'(\w+)\.(\w+)')
+        
+        def fix_column(match):
+            table = match.group(1)
+            column = match.group(2)
+            
+            # Check if column exists
+            if self.validate_column_exists(table, column):
+                return f"{table}.{column}"
+            
+            # Try to find correct column (common mistakes)
+            if column == 'transaction_date' and not self.validate_column_exists(table, column):
+                correct_col = self.get_date_column_for_table(table)
+                if correct_col:
+                    logger.warning(f"[sql-gen][filter] Fixed column: {table}.{column} -> {table}.{correct_col}")
+                    return f"{table}.{correct_col}"
+            
+            return f"{table}.{column}"
+        
+        return col_pattern.sub(fix_column, condition)
+
     def build_where_conditions(
         self,
         entities: List[Dict[str, Any]],
