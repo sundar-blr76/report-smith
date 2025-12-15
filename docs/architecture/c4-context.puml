@@ -1,0 +1,27 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context Diagram for ReportSmith
+
+Person(user, "Business User", "Financial analyst, fund manager, or business user who needs to query financial data")
+Person(developer, "Developer/Admin", "System administrator or developer who configures and maintains the system")
+
+System(reportsmith, "ReportSmith", "Intelligent natural language to SQL system that translates user questions into executable database queries for financial reporting")
+
+System_Ext(openai, "OpenAI API", "Provides LLM capabilities and embeddings for semantic understanding")
+System_Ext(gemini, "Google Gemini API", "Provides LLM capabilities for intent analysis and query understanding")
+System_Ext(postgres, "PostgreSQL Database", "Primary metadata storage and target database for financial data queries")
+System_Ext(oracle, "Oracle Database", "Optional target database for financial data")
+System_Ext(sqlserver, "SQL Server Database", "Optional target database for financial data")
+
+Rel(user, reportsmith, "Asks questions in natural language via UI or API", "HTTPS")
+Rel(developer, reportsmith, "Configures schemas, entity mappings, and system settings", "YAML/Config")
+Rel(reportsmith, openai, "Generates embeddings and performs semantic analysis", "HTTPS/REST API")
+Rel(reportsmith, gemini, "Performs intent analysis and LLM reasoning", "HTTPS/REST API")
+Rel(reportsmith, postgres, "Stores metadata, executes queries, retrieves financial data", "SQL/JDBC")
+Rel(reportsmith, oracle, "Executes queries, retrieves financial data", "SQL/JDBC")
+Rel(reportsmith, sqlserver, "Executes queries, retrieves financial data", "SQL/JDBC")
+
+@enduml

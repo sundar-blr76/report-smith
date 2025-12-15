@@ -1,0 +1,124 @@
+@startuml workflow
+!theme plain
+skinparam defaultFontSize 11
+skinparam BoxPadding 10
+
+title ReportSmith Query Processing Workflow (8-Stage LangGraph Pipeline)
+
+|User Interface|
+start
+:User asks question\n"Show AUM for all equity funds";
+
+|LangGraph Orchestrator|
+:Initialize QueryState;
+
+|Stage 1: Intent Analysis|
+:**analyze_intent()**\n----\nHybridIntentAnalyzer;
+note right
+  • Extracts intent type (aggregate)
+  • Identifies entities: metrics, dimensions
+  • Local entity mappings
+  • Initial filters extraction
+end note
+:Entities Detected:\n- metric: "AUM"\n- dimension: "equity"\n- intent: aggregate;
+
+|Stage 2: Semantic Enrichment|
+:**semantic_enrich()**\n----\nEmbeddingManager;
+note right
+  • Vector search in ChromaDB
+  • Find unmapped entities
+  • Semantic similarity matching
+  • Confidence scoring
+end note
+:Enriched Entities:\n- "AUM" → funds.total_aum\n- "equity" → candidate matches;
+
+|Stage 3: Semantic Filtering|
+:**semantic_filter()**\n----\nLLMIntentAnalyzer;
+note right
+  • LLM validates candidates
+  • Filters false positives
+  • Contextual understanding
+  • Uses Gemini/OpenAI
+end note
+:Filtered Results:\n- "equity" → funds.fund_type='Equity Growth';
+
+|Stage 4: Entity Refinement|
+:**refine_entities()**\n----\nDomainValueEnricher;
+note right
+  • Refines entity mappings
+  • Adds domain-specific context
+  • Validates against schema
+  • Resolves ambiguities
+end note
+:Refined Mappings:\n- Validated column mappings\n- Applied business rules;
+
+|Stage 5: Schema Mapping|
+:**map_schema()**\n----\nSchemaKnowledgeGraph;
+note right
+  • Maps entities to schema objects
+  • Identifies required tables
+  • Determines relationships
+  • Validates mappings
+end note
+:Schema Objects:\n- Table: funds\n- Columns: total_aum, fund_type\n- Filters: is_active=true;
+
+|Stage 6: Query Planning|
+:**plan_query()**\n----\nKnowledgeGraphBuilder;
+note right
+  • Generates optimal join paths
+  • Uses NetworkX graph algorithms
+  • Minimizes table joins
+  • Resolves foreign keys
+end note
+:Query Plan:\n- Single table: funds\n- No joins needed\n- GROUP BY fund_type;
+
+|Stage 7: SQL Generation|
+:**generate_sql()**\n----\nSQLGenerator;
+note right
+  **Uses 4 Builder Components:**
+  1. SelectBuilder → SELECT clauses
+  2. JoinBuilder → JOIN paths
+  3. FilterBuilder → WHERE conditions
+  4. ModifiersBuilder → GROUP/ORDER/LIMIT
+  
+  • Auto-applies filters
+  • Validates SQL syntax
+  • Prevents SQL injection
+end note
+:Generated SQL:\n\nSELECT SUM(funds.total_aum) AS aum,\n       funds.fund_type AS fund_type\nFROM funds\nWHERE funds.fund_type = 'Equity Growth'\n  AND funds.is_active = true\nGROUP BY funds.fund_type;
+
+|Stage 8: Finalization|
+:**finalize()**;
+
+|Query Execution Engine|
+:Execute SQL via SQLExecutor;
+note right
+  • Connection pooling
+  • Execute against target DB
+  • Error handling
+  • Timeout management
+end note
+
+:Format Results;
+note right
+  • ResultFormatter
+  • Convert to display format
+  • Apply formatting rules
+end note
+
+|User Interface|
+:Return Results to User;
+:Display formatted results;
+stop
+
+legend right
+  |= Component |= Technology |
+  | Orchestrator | LangGraph |
+  | Intent Analysis | Hybrid (Local + Semantic + LLM) |
+  | Vector Search | ChromaDB + OpenAI Embeddings |
+  | LLM | Google Gemini / OpenAI |
+  | Knowledge Graph | NetworkX |
+  | SQL Execution | SQLAlchemy |
+endlegend
+
+@enduml

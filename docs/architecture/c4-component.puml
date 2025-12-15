@@ -1,0 +1,104 @@
+@startuml C4_Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_TOP_DOWN()
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for ReportSmith - Query Processing Pipeline
+
+Container(fastapi, "FastAPI Server", "Python/FastAPI", "REST API entry point")
+ContainerDb(chromadb, "ChromaDB", "Vector Database", "Embedding storage")
+System_Ext(openai, "OpenAI API", "LLM and embeddings")
+System_Ext(gemini, "Google Gemini API", "LLM provider")
+System_Ext(databases, "Target Databases", "PostgreSQL/Oracle/SQL Server")
+
+Container_Boundary(orchestrator_boundary, "LangGraph Orchestrator") {
+    Component(orchestrator, "MultiAgentOrchestrator", "Python/LangGraph", "Coordinates the multi-agent workflow pipeline")
+    Component(agent_nodes, "Agent Nodes", "Python", "Individual processing nodes in the workflow graph")
+}
+
+Container_Boundary(query_proc_boundary, "Query Processing") {
+    Component(hybrid_intent, "HybridIntentAnalyzer", "Python", "Combines local mappings, semantic search, and LLM for intent analysis")
+    Component(llm_intent, "LLMIntentAnalyzer", "Python", "Uses LLM (Gemini/OpenAI) for deep intent understanding")
+    Component(domain_enricher, "DomainValueEnricher", "Python", "Enriches queries with domain-specific values")
+    Component(sql_generator, "SQLGenerator", "Python", "Generates executable SQL from query plans")
+    Component(sql_validator, "SQLValidator", "Python", "Validates SQL syntax and semantics")
+    
+    Container_Boundary(sql_gen_boundary, "SQL Generation Components") {
+        Component(select_builder, "SelectBuilder", "Python", "Builds SELECT clauses with aggregations")
+        Component(join_builder, "JoinBuilder", "Python", "Constructs optimal JOIN paths")
+        Component(filter_builder, "FilterBuilder", "Python", "Builds WHERE clauses with auto-filters")
+        Component(modifiers_builder, "ModifiersBuilder", "Python", "Adds GROUP BY, ORDER BY, LIMIT")
+    }
+}
+
+Container_Boundary(schema_intel_boundary, "Schema Intelligence") {
+    Component(embedding_mgr, "EmbeddingManager", "Python", "Manages vector embeddings for semantic search")
+    Component(knowledge_graph, "SchemaKnowledgeGraph", "Python/NetworkX", "Graph-based schema representation with relationships")
+    Component(graph_builder, "KnowledgeGraphBuilder", "Python", "Constructs knowledge graph from schema configs")
+    Component(dimension_loader, "DimensionLoader", "Python", "Loads dimension values from databases")
+}
+
+Container_Boundary(query_exec_boundary, "Query Execution") {
+    Component(sql_executor, "SQLExecutor", "Python/SQLAlchemy", "Executes SQL against target databases")
+    Component(result_formatter, "ResultFormatter", "Python", "Formats query results for display")
+}
+
+Container_Boundary(config_boundary, "Configuration System") {
+    Component(config_mgr, "ConfigurationManager", "Python", "Loads and manages application configurations")
+    Component(conn_mgr, "ConnectionManager", "Python/SQLAlchemy", "Manages database connections and pooling")
+}
+
+Container_Boundary(utils_boundary, "Utilities") {
+    Component(logger, "Logger", "Python/structlog", "Structured logging with request ID tracking")
+    Component(llm_tracker, "LLMTracker", "Python", "Tracks LLM usage, tokens, and costs")
+    Component(cache_mgr, "CacheManager", "Python", "Query result caching (LRU/Redis/Disk)")
+}
+
+' Orchestrator relationships
+Rel(fastapi, orchestrator, "Invokes", "Python")
+Rel(orchestrator, agent_nodes, "Executes nodes", "Python")
+
+' Agent nodes to components
+Rel(agent_nodes, hybrid_intent, "analyze_intent", "Python")
+Rel(agent_nodes, embedding_mgr, "semantic_enrich", "Python")
+Rel(agent_nodes, llm_intent, "semantic_filter", "Python")
+Rel(agent_nodes, knowledge_graph, "map_schema, plan_query", "Python")
+Rel(agent_nodes, sql_generator, "generate_sql", "Python")
+Rel(agent_nodes, sql_executor, "execute_sql", "Python")
+
+' Query processing relationships
+Rel(hybrid_intent, embedding_mgr, "Semantic search", "Python")
+Rel(hybrid_intent, llm_intent, "Deep analysis", "Python")
+Rel(hybrid_intent, config_mgr, "Loads mappings", "Python")
+Rel(domain_enricher, dimension_loader, "Fetches domain values", "Python")
+
+Rel(sql_generator, select_builder, "Builds SELECT", "Python")
+Rel(sql_generator, join_builder, "Builds JOINs", "Python")
+Rel(sql_generator, filter_builder, "Builds WHERE", "Python")
+Rel(sql_generator, modifiers_builder, "Adds modifiers", "Python")
+Rel(sql_generator, sql_validator, "Validates SQL", "Python")
+
+' Schema intelligence relationships
+Rel(embedding_mgr, chromadb, "Stores/retrieves vectors", "Python API")
+Rel(graph_builder, knowledge_graph, "Builds graph", "Python")
+Rel(dimension_loader, conn_mgr, "Queries databases", "Python")
+Rel(knowledge_graph, join_builder, "Provides join paths", "Python")
+
+' Query execution relationships
+Rel(sql_executor, conn_mgr, "Gets connections", "Python")
+Rel(sql_executor, databases, "Executes SQL", "SQL Protocol")
+Rel(sql_executor, result_formatter, "Formats results", "Python")
+
+' LLM interactions
+Rel(llm_intent, gemini, "Intent analysis", "HTTPS/REST")
+Rel(embedding_mgr, openai, "Generate embeddings", "HTTPS/REST")
+Rel(llm_tracker, llm_intent, "Tracks usage", "Python")
+Rel(llm_tracker, embedding_mgr, "Tracks usage", "Python")
+
+' Configuration and utilities
+Rel(config_mgr, conn_mgr, "Provides DB configs", "Python")
+Rel_U(logger, orchestrator, "Logs events", "Python")
+Rel_U(logger, agent_nodes, "Logs events", "Python")
+
+@enduml
