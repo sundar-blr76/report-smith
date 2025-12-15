@@ -6,6 +6,9 @@ This directory contains the C4 model architecture diagrams and documentation for
 
 ### Main Documentation
 - **[C4_ARCHITECTURE.md](C4_ARCHITECTURE.md)** - Complete C4 architecture documentation with detailed explanations
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference guide for the architecture
+- **[VIEWING_GUIDE.md](VIEWING_GUIDE.md)** - How to view and work with PlantUML diagrams
+- **[DIAGRAM_SELECTION_GUIDE.md](DIAGRAM_SELECTION_GUIDE.md)** - Choose the right diagram for your needs
 
 ### C4 Model Diagrams
 - **[c4-context.puml](c4-context.puml)** - Level 1: System Context diagram
