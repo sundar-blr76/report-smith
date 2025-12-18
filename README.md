@@ -104,11 +104,23 @@ curl -X POST http://127.0.0.1:8000/query \
 ```
 
 ### Documentation
+
+#### Architecture & Design
+- **[docs/architecture/C4_ARCHITECTURE.md](docs/architecture/C4_ARCHITECTURE.md)** - 📐 **C4 model architecture diagrams** - System context, containers, and components
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Detailed architecture documentation
+- **[docs/HLD.md](docs/HLD.md)** - High-level design document
+- **[docs/LLD.md](docs/LLD.md)** - Low-level design document
+
+#### Setup & Operations
 - **[SETUP.md](SETUP.md)** - Detailed setup guide
 - **[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)** - Current system status
 - **[docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema details
+
+#### Performance & Optimization
 - **[docs/LATENCY_IMPROVEMENTS.md](docs/LATENCY_IMPROVEMENTS.md)** - Performance optimization analysis
 - **[docs/LATENCY_QUICK_WINS.md](docs/LATENCY_QUICK_WINS.md)** - Quick implementation guide
+
+#### Development
 - **[REFACTORING_PROPOSAL.md](REFACTORING_PROPOSAL.md)** - Architecture refactoring plan
 
 ## Example Use Case

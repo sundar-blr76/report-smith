@@ -1,0 +1,103 @@
+@startuml data_flow
+!theme plain
+
+title ReportSmith Data Flow & Component Interactions
+
+actor "Business User" as user
+participant "Streamlit UI\n(Port 8501)" as ui
+participant "FastAPI\n(Port 8000)" as api
+participant "LangGraph\nOrchestrator" as orchestrator
+participant "Hybrid Intent\nAnalyzer" as hybrid
+participant "Embedding\nManager" as embeddings
+database "ChromaDB\nVector Store" as chromadb
+participant "LLM Intent\nAnalyzer" as llm
+cloud "Google Gemini\nAPI" as gemini
+cloud "OpenAI\nAPI" as openai
+participant "Knowledge\nGraph" as kg
+participant "SQL\nGenerator" as sqlgen
+participant "SQL\nExecutor" as executor
+database "PostgreSQL\nTarget DB" as postgres
+participant "Result\nFormatter" as formatter
+participant "LLM Tracker" as tracker
+participant "Logger" as logger
+
+== Query Submission ==
+user -> ui: Enter question:\n"Show AUM for equity funds"
+ui -> api: POST /query\n{"question": "..."}
+api -> logger: Log request with ID
+api -> orchestrator: invoke(QueryState)
+
+== Stage 1-2: Intent Analysis & Semantic Enrichment ==
+orchestrator -> hybrid: analyze_intent(question)
+hybrid -> embeddings: search_similar("AUM")
+embeddings -> chromadb: similarity_search(embedding)
+chromadb --> embeddings: results [0.98 similarity]
+embeddings --> hybrid: entity candidates
+hybrid -> hybrid: apply local mappings
+hybrid --> orchestrator: entities + confidence scores
+
+orchestrator -> embeddings: semantic_enrich(entities)
+embeddings -> chromadb: search unmapped entities
+chromadb --> embeddings: enriched results
+embeddings --> orchestrator: enriched entities
+
+== Stage 3: LLM Filtering ==
+orchestrator -> llm: semantic_filter(candidates)
+llm -> tracker: track LLM call start
+llm -> gemini: Analyze and filter:\n"equity" candidates
+gemini --> llm: "fund_type='Equity Growth'"
+llm -> tracker: track tokens & cost
+llm --> orchestrator: filtered entities
+
+== Stage 4-6: Schema Mapping & Planning ==
+orchestrator -> kg: map_schema(entities)
+kg -> kg: lookup tables/columns
+kg --> orchestrator: schema mappings
+
+orchestrator -> kg: plan_query(mappings)
+kg -> kg: compute join paths\n(NetworkX algorithms)
+kg --> orchestrator: query plan
+
+== Stage 7: SQL Generation ==
+orchestrator -> sqlgen: generate_sql(plan)
+sqlgen -> sqlgen: SelectBuilder:\nSUM(total_aum)
+sqlgen -> sqlgen: JoinBuilder:\n(no joins needed)
+sqlgen -> sqlgen: FilterBuilder:\nfund_type + is_active
+sqlgen -> sqlgen: ModifiersBuilder:\nGROUP BY fund_type
+sqlgen -> sqlgen: validate SQL syntax
+sqlgen --> orchestrator: validated SQL
+
+== Stage 8: Execution ==
+orchestrator -> executor: execute(sql)
+executor -> logger: log SQL execution
+executor -> postgres: Execute:\nSELECT SUM(total_aum)...\nWHERE fund_type='Equity Growth'\nAND is_active=true
+postgres --> executor: result rows
+executor -> formatter: format_results(rows)
+formatter --> executor: formatted data
+executor --> orchestrator: query results
+
+== Response ==
+orchestrator -> tracker: get_summary()
+tracker --> orchestrator: LLM usage stats
+orchestrator --> api: QueryState with results
+api -> logger: log response
+api --> ui: JSON response
+ui --> user: Display results table
+
+note over tracker
+  **LLM Usage Summary**
+  Total calls: 3
+  Total tokens: 1,247
+  Total cost: $0.003
+  Latency: 1,850ms
+end note
+
+note over logger
+  **Request Tracking**
+  Request ID: abc123
+  Timestamps at each stage
+  Component-level logging
+  Full audit trail
+end note
+
+@enduml

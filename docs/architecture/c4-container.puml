@@ -1,0 +1,50 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram for ReportSmith
+
+Person(user, "Business User", "Queries financial data using natural language")
+Person(developer, "Developer/Admin", "Configures and maintains the system")
+
+System_Boundary(reportsmith, "ReportSmith") {
+    Container(streamlit_ui, "Streamlit UI", "Python/Streamlit", "Interactive web interface for asking questions and viewing results (Port 8501)")
+    Container(fastapi, "FastAPI Server", "Python/FastAPI", "REST API server that orchestrates query processing (Port 8000)")
+    Container(orchestrator, "LangGraph Orchestrator", "Python/LangGraph", "Multi-agent workflow engine that coordinates the query processing pipeline")
+    Container(query_processing, "Query Processing", "Python", "Intent analysis, SQL generation, and query validation modules")
+    Container(schema_intelligence, "Schema Intelligence", "Python", "Embedding manager, knowledge graph, and dimension loaders")
+    Container(query_execution, "Query Execution Engine", "Python/SQLAlchemy", "Executes SQL queries against target databases and formats results")
+    Container(chromadb, "ChromaDB", "Vector Database", "Stores embeddings for semantic search of schema metadata and domain values")
+    ContainerDb(config_files, "Configuration Files", "YAML", "Application configs, schema definitions, and entity mappings")
+}
+
+System_Ext(openai, "OpenAI API", "LLM and embeddings provider")
+System_Ext(gemini, "Google Gemini API", "LLM provider for intent analysis")
+System_Ext(postgres, "PostgreSQL Database", "Metadata and target database")
+System_Ext(oracle, "Oracle Database", "Optional target database")
+System_Ext(sqlserver, "SQL Server Database", "Optional target database")
+
+Rel(user, streamlit_ui, "Asks questions", "HTTPS")
+Rel(user, fastapi, "Sends API requests", "HTTPS/JSON")
+Rel(developer, config_files, "Configures", "File System")
+
+Rel(streamlit_ui, fastapi, "Calls", "HTTP/REST")
+Rel(fastapi, orchestrator, "Invokes workflow", "Python")
+Rel(orchestrator, query_processing, "Analyzes intent, generates SQL", "Python")
+Rel(orchestrator, schema_intelligence, "Maps entities, plans queries", "Python")
+Rel(orchestrator, query_execution, "Executes SQL", "Python")
+
+Rel(query_processing, chromadb, "Searches embeddings", "Python API")
+Rel(schema_intelligence, chromadb, "Stores/retrieves embeddings", "Python API")
+Rel(schema_intelligence, config_files, "Loads schemas", "File System")
+Rel(query_processing, config_files, "Loads mappings", "File System")
+
+Rel(query_processing, openai, "Generates embeddings, LLM calls", "HTTPS/REST")
+Rel(query_processing, gemini, "LLM intent analysis", "HTTPS/REST")
+
+Rel(query_execution, postgres, "Executes SQL queries", "PostgreSQL Protocol")
+Rel(query_execution, oracle, "Executes SQL queries", "Oracle Protocol")
+Rel(query_execution, sqlserver, "Executes SQL queries", "TDS Protocol")
+
+@enduml
