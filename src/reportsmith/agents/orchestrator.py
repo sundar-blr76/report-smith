@@ -105,6 +105,11 @@ class MultiAgentOrchestrator:
         """Run graph and stream node events via callback. on_event(event, payload)."""
         logger.info("[supervisor] received payload; starting orchestration (stream)")
         state = QueryState(question=question)
+        
+        # Initialize LLM tracker for this request (for stream too)
+        llm_tracker = LLMTracker()
+        self.nodes._llm_tracker = llm_tracker
+        
         # Map node functions to event names to stream progress
         steps = [
             ("intent", self.nodes.analyze_intent),
@@ -116,13 +121,50 @@ class MultiAgentOrchestrator:
             ("sql", self.nodes.generate_sql),
             ("finalize", self.nodes.finalize),
         ]
+        
+        import time
+        
         for name, fn in steps:
             try:
+                start_ts = time.time()
                 on_event("node_start", {"name": name})
+                
                 state = fn(state)
-                on_event("node_end", {"name": name})
+                
+                duration_ms = (time.time() - start_ts) * 1000
+                state.timings[name] = duration_ms
+                
+                # Snapshot state for UI
+                # We use model_dump(mode='json') for Pydantic v2 to ensure serializable output
+                try:
+                    snapshot = state.model_dump(mode='json') if hasattr(state, "model_dump") else state.dict()
+                except Exception as e:
+                    logger.warning(f"[supervisor] failed to serialize state at {name}: {e}")
+                    snapshot = {"error": f"Serialization check failed: {str(e)}", "partial_state": str(state)}
+                
+                on_event("node_end", {
+                    "name": name, 
+                    "duration_ms": duration_ms,
+                    "state": snapshot
+                })
             except Exception as e:
+                import traceback
+                logger.error(f"[supervisor] stream error at {name}: {traceback.format_exc()}")
                 on_event("error", {"name": name, "error": str(e)})
                 raise
-        on_event("complete", {"name": "orchestration"})
+                
+        # Final LLM summary
+        llm_summary = llm_tracker.get_summary()
+        state.llm_usage = llm_summary
+        
+        try:
+            final_snapshot = state.model_dump(mode='json') if hasattr(state, "model_dump") else state.dict()
+        except Exception as e:
+            final_snapshot = {"error": f"Final serialization failed: {e}"}
+            
+        on_event("complete", {
+            "name": "orchestration", 
+            "result": final_snapshot
+        })
         return state
+

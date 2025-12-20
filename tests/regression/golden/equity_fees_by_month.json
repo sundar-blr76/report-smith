@@ -1,0 +1,851 @@
+{
+  "test_id": "equity_fees_by_month",
+  "question": "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)",
+  "timestamp": "2025-12-20T10:57:04.815623Z",
+  "response": {
+    "status": "ok",
+    "message": null,
+    "data": {
+      "question": "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)",
+      "intent": {
+        "type": "aggregation",
+        "time_scope": "monthly",
+        "aggregations": [
+          "sum"
+        ],
+        "filters": [
+          "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')",
+          "funds.performance_rating >= 4"
+        ],
+        "limit": null,
+        "order_by": "fee_transactions.payment_date",
+        "order_direction": "ASC"
+      },
+      "entities": [
+        {
+          "text": "funds",
+          "entity_type": "table",
+          "confidence": 1.0,
+          "canonical_name": "funds",
+          "value": null,
+          "top_match": {
+            "content": "funds",
+            "metadata": {
+              "entity_type": "table",
+              "estimated_rows": 0,
+              "description": "Master fund information",
+              "primary_key": "id",
+              "application": "fund_accounting",
+              "match_type": "primary",
+              "entity_name": "funds",
+              "related_tables_json": "[]",
+              "embedded_text": "funds",
+              "relationships_json": "[]",
+              "table": "funds"
+            },
+            "score": 0.9999988151103025,
+            "source_type": "schema",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": null,
+          "source": "local",
+          "local_mapping": {
+            "term": "funds",
+            "canonical_name": "funds",
+            "entity_type": "table",
+            "table": null,
+            "column": null,
+            "value": null,
+            "aliases": [
+              "fund",
+              "portfolio",
+              "portfolios",
+              "investment"
+            ],
+            "description": "Fund master table",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "funds",
+              "metadata": {
+                "entity_type": "table",
+                "estimated_rows": 0,
+                "description": "Master fund information",
+                "primary_key": "id",
+                "application": "fund_accounting",
+                "match_type": "primary",
+                "entity_name": "funds",
+                "related_tables_json": "[]",
+                "embedded_text": "funds",
+                "relationships_json": "[]",
+                "table": "funds"
+              },
+              "score": 0.9999988151103025,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "fees",
+          "entity_type": "column",
+          "confidence": 1.0,
+          "canonical_name": "fee_amount",
+          "value": null,
+          "top_match": {
+            "content": "fees",
+            "metadata": {
+              "description": "",
+              "embedded_text": "fees",
+              "full_path": "fee_transactions.fee_amount",
+              "related_tables_json": "[]",
+              "column": "fee_amount",
+              "table": "fee_transactions",
+              "synonym": "fees",
+              "entity_type": "column",
+              "nullable": true,
+              "data_type": "numeric",
+              "is_dimension": false,
+              "entity_name": "fee_amount",
+              "application": "fund_accounting",
+              "match_type": "synonym"
+            },
+            "score": 1.0,
+            "source_type": "schema",
+            "match_count": 2,
+            "primary_count": 0,
+            "synonym_count": 2
+          },
+          "table": "fee_transactions",
+          "column": "fee_amount",
+          "source": "local",
+          "local_mapping": {
+            "term": "fees",
+            "canonical_name": "fee_amount",
+            "entity_type": "column",
+            "table": "fee_transactions",
+            "column": "fee_amount",
+            "value": null,
+            "aliases": [
+              "fee",
+              "charges",
+              "management fees",
+              "advisory fees"
+            ],
+            "description": "Fee amounts charged to clients",
+            "context": null,
+            "priority": "high",
+            "optimal_source": true,
+            "source_notes": "Primary source for fee amounts from transaction records"
+          },
+          "semantic_matches": [
+            {
+              "content": "fees",
+              "metadata": {
+                "description": "",
+                "embedded_text": "fees",
+                "full_path": "fee_transactions.fee_amount",
+                "related_tables_json": "[]",
+                "column": "fee_amount",
+                "table": "fee_transactions",
+                "synonym": "fees",
+                "entity_type": "column",
+                "nullable": true,
+                "data_type": "numeric",
+                "is_dimension": false,
+                "entity_name": "fee_amount",
+                "application": "fund_accounting",
+                "match_type": "synonym"
+              },
+              "score": 1.0,
+              "source_type": "schema",
+              "match_count": 2,
+              "primary_count": 0,
+              "synonym_count": 2
+            },
+            {
+              "content": "fees",
+              "metadata": {
+                "column": "fees",
+                "match_type": "primary",
+                "nullable": true,
+                "application": "fund_accounting",
+                "description": "",
+                "embedded_text": "fees",
+                "related_tables_json": "[]",
+                "full_path": "transactions.fees",
+                "table": "transactions",
+                "data_type": "numeric",
+                "entity_name": "fees",
+                "is_dimension": false,
+                "entity_type": "column"
+              },
+              "score": 0.9999988301055964,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        },
+        {
+          "text": "equity",
+          "entity_type": "domain_value",
+          "confidence": 1.0,
+          "canonical_name": "Equity",
+          "value": "Equity Growth",
+          "top_match": {
+            "content": "Equity Growth",
+            "metadata": {
+              "embedded_text": "Equity Growth",
+              "full_path": "funds.fund_type",
+              "value": "Equity Growth",
+              "entity_type": "domain_value",
+              "table": "funds",
+              "match_type": "primary",
+              "count": 6,
+              "application": "fund_accounting",
+              "entity_name": "Equity Growth",
+              "context": "Used to categorize funds by investment approach and asset class",
+              "column": "fund_type"
+            },
+            "score": 0.3651547431945801,
+            "source_type": "domain_value",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": "fund_type",
+          "source": "local",
+          "local_mapping": {
+            "term": "equity",
+            "canonical_name": "Equity",
+            "entity_type": "domain_value",
+            "table": "funds",
+            "column": "fund_type",
+            "value": "Equity Growth",
+            "aliases": [
+              "equities",
+              "stocks",
+              "equity funds",
+              "stock funds",
+              "stock portfolios",
+              "stock portfolio",
+              "portfolio",
+              "portfolios"
+            ],
+            "description": "Equity type funds (includes Growth, Value, Blend)",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "Equity Growth",
+              "metadata": {
+                "embedded_text": "Equity Growth",
+                "full_path": "funds.fund_type",
+                "value": "Equity Growth",
+                "entity_type": "domain_value",
+                "table": "funds",
+                "match_type": "primary",
+                "count": 6,
+                "application": "fund_accounting",
+                "entity_name": "Equity Growth",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "column": "fund_type"
+              },
+              "score": 0.3651547431945801,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            },
+            {
+              "content": "Equity Value",
+              "metadata": {
+                "count": 9,
+                "match_type": "primary",
+                "full_path": "funds.fund_type",
+                "application": "fund_accounting",
+                "entity_type": "domain_value",
+                "entity_name": "Equity Value",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "embedded_text": "Equity Value",
+                "table": "funds",
+                "value": "Equity Value",
+                "column": "fund_type"
+              },
+              "score": 0.31686609983444214,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        },
+        {
+          "text": "performance_rating",
+          "entity_type": "unknown",
+          "confidence": 0.0,
+          "canonical_name": null,
+          "value": null,
+          "top_match": {
+            "content": "performance_rating",
+            "metadata": {
+              "entity_type": "column",
+              "entity_name": "performance_rating",
+              "match_type": "primary",
+              "table": "fund_managers",
+              "application": "fund_accounting",
+              "description": "Fund manager performance score",
+              "embedded_text": "performance_rating",
+              "related_tables_json": "[]",
+              "data_type": "numeric",
+              "nullable": true,
+              "column": "performance_rating",
+              "full_path": "fund_managers.performance_rating",
+              "is_dimension": true
+            },
+            "score": 0.9999982686460953,
+            "source_type": "schema",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "fund_managers",
+          "column": "performance_rating",
+          "source": "llm",
+          "local_mapping": null,
+          "semantic_matches": [
+            {
+              "content": "performance_rating",
+              "metadata": {
+                "entity_type": "column",
+                "entity_name": "performance_rating",
+                "match_type": "primary",
+                "table": "fund_managers",
+                "application": "fund_accounting",
+                "description": "Fund manager performance score",
+                "embedded_text": "performance_rating",
+                "related_tables_json": "[]",
+                "data_type": "numeric",
+                "nullable": true,
+                "column": "performance_rating",
+                "full_path": "fund_managers.performance_rating",
+                "is_dimension": true
+              },
+              "score": 0.9999982686460953,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        }
+      ],
+      "tables": [
+        "funds",
+        "fee_transactions",
+        "fund_managers"
+      ],
+      "semantic_match_counts": [
+        1,
+        2,
+        2,
+        1
+      ],
+      "plan": {
+        "tables": [
+          "funds",
+          "fee_transactions",
+          "fund_managers"
+        ],
+        "strategy": "kg_shortest_paths",
+        "path_tables": [
+          "funds",
+          "fee_transactions",
+          "management_companies",
+          "fund_managers"
+        ],
+        "path_edges": [
+          {
+            "from": "funds",
+            "to": "fee_transactions",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "fund_id"
+          },
+          {
+            "from": "funds",
+            "to": "management_companies",
+            "type": "many_to_one",
+            "from_column": "management_company_id",
+            "to_column": "id"
+          },
+          {
+            "from": "management_companies",
+            "to": "fund_managers",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "management_company_id"
+          }
+        ],
+        "unreachable": [],
+        "notes": "Join order derived via knowledge graph shortest paths from first table."
+      },
+      "result": {
+        "summary": "Query processed successfully",
+        "tables": [
+          "funds",
+          "fee_transactions",
+          "fund_managers"
+        ],
+        "plan": {
+          "tables": [
+            "funds",
+            "fee_transactions",
+            "fund_managers"
+          ],
+          "strategy": "kg_shortest_paths",
+          "path_tables": [
+            "funds",
+            "fee_transactions",
+            "management_companies",
+            "fund_managers"
+          ],
+          "path_edges": [
+            {
+              "from": "funds",
+              "to": "fee_transactions",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "fund_id"
+            },
+            {
+              "from": "funds",
+              "to": "management_companies",
+              "type": "many_to_one",
+              "from_column": "management_company_id",
+              "to_column": "id"
+            },
+            {
+              "from": "management_companies",
+              "to": "fund_managers",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "management_company_id"
+            }
+          ],
+          "unreachable": [],
+          "notes": "Join order derived via knowledge graph shortest paths from first table."
+        },
+        "sql": {
+          "sql": "SELECT DATE_TRUNC('month', fee_transactions.fee_period_start) AS month,\n       SUM(fee_transactions.fee_amount) AS fees,\n       fee_transactions.currency AS currency\n  FROM funds\n  INNER JOIN fee_transactions ON funds.id = fee_transactions.fund_id\n  INNER JOIN management_companies ON funds.management_company_id = management_companies.id\n  INNER JOIN fund_managers ON management_companies.id = fund_managers.management_company_id\n WHERE funds.fund_type IN ('Equity Growth', 'Equity Value')\n   AND fund_managers.performance_rating >= 4\n   AND fund_managers.is_active = true\n   AND funds.is_active = true\n   AND fee_transactions.fee_period_start >= CURRENT_DATE - INTERVAL '12 months'\n GROUP BY month, fee_transactions.currency\n ORDER BY month ASC;",
+          "explanation": "Query Intent: aggregation\nQuestion: 'For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)'\n\nSelected Columns:\n  - fund_managers.performance_rating\n  - fee_transactions.fee_amount (SUM) as 'fees'\n  - fee_transactions.currency\n\nJoins:\n  - INNER JOIN fee_transactions\n    ON funds.id = fee_transactions.fund_id\n  - INNER JOIN management_companies\n    ON funds.management_company_id = management_companies.id\n  - INNER JOIN fund_managers\n    ON management_companies.id = fund_managers.management_company_id\n\nFilters:\n  - funds.fund_type IN ('Equity Growth', 'Equity Value')\n  - funds.performance_rating > '= 4'\n  - fund_managers.is_active = true\n  - funds.is_active = true\n",
+          "metadata": {
+            "intent_type": "aggregation",
+            "tables": [
+              "funds",
+              "fee_transactions",
+              "fund_managers"
+            ],
+            "join_count": 3,
+            "where_count": 4,
+            "aggregations": [
+              "sum"
+            ],
+            "columns_count": 3
+          },
+          "extraction_summary": {
+            "summary": "The SQL extraction retrieves the total fees for equity funds managed by top-rated managers (performance rating >= 4) over the last 12 months, grouped by performance rating and currency. It specifically filters for active funds of types 'Equity Growth' and 'Equity Value'.",
+            "filters_applied": [
+              "funds.fund_type IN ('Equity Growth', 'Equity Value')",
+              "fund_managers.performance_rating >= 4",
+              "funds.is_active = true",
+              "fund_managers.is_active = true"
+            ],
+            "transformations": [],
+            "assumptions": []
+          },
+          "column_ordering": {
+            "ordered_columns": [
+              "fund_managers.performance_rating",
+              "fee_transactions.fee_amount",
+              "fee_transactions.currency"
+            ],
+            "reasoning": "The ordering starts with 'performance_rating' from the 'fund_managers' table because it is a key filter criterion for the query, ensuring that only top-rated managers are considered. Next, 'fee_amount' is included as it is the primary metric being aggregated (total fees). Finally, 'currency' is included as it provides context for the fees but is not essential for the aggregation itself. This order prioritizes the filtering criteria first, followed by the aggregated metric, and then additional context."
+          },
+          "refined_by_integrity": true,
+          "integrity_validation": {
+            "specific_checks": {
+              "semantic": {
+                "valid": false,
+                "issues": [
+                  "The SQL does not include a time filter to restrict results to the last 12 months.",
+                  "The performance rating filter uses an incorrect operator ('>=' is incorrectly formatted as '>=' instead of just '>=' without the extra '=')."
+                ],
+                "suggestions": [
+                  "Add a time filter to restrict results to the last 12 months based on the payment date.",
+                  "Correct the performance rating filter to use the proper syntax."
+                ],
+                "severity": "high"
+              },
+              "temporal": {
+                "valid": false,
+                "issues": [
+                  "The SQL does not use DATE_TRUNC for monthly aggregation as required by the question.",
+                  "The condition for performance_rating is incorrectly written as 'performance_rating > '= 4'' instead of 'performance_rating >= 4'.",
+                  "There is no temporal column in the SELECT statement to match with GROUP BY."
+                ],
+                "suggestions": [
+                  "Use DATE_TRUNC('month', fee_transactions.transaction_date) to aggregate fees by month.",
+                  "Correct the performance_rating condition to 'performance_rating >= 4'.",
+                  "Include a temporal column in the SELECT statement that matches the GROUP BY clause."
+                ],
+                "severity": "high"
+              },
+              "time_filter": {
+                "valid": false,
+                "issues": [
+                  "The SQL query does not include a date filter for the last 12 months.",
+                  "The performance_rating filter is incorrectly formatted with an extra '=' sign."
+                ],
+                "suggestions": [
+                  "Add a WHERE clause for the date filter, such as 'fee_transactions.transaction_date >= CURRENT_DATE - INTERVAL '12 MONTH''.",
+                  "Correct the performance_rating filter to 'funds.performance_rating >= 4'."
+                ],
+                "severity": "high"
+              },
+              "column_order": {
+                "valid": false,
+                "issues": [
+                  "Metrics appear before dimensions"
+                ],
+                "suggestions": [
+                  "Move total_fees to end of SELECT"
+                ],
+                "severity": "medium"
+              }
+            },
+            "holistic": {
+              "valid": false,
+              "quality": "poor",
+              "critical_issues": [
+                "The SQL does not include a time filter to restrict results to the last 12 months.",
+                "The performance rating filter uses an incorrect operator ('>=' is incorrectly formatted as '>=' instead of just '>=' without the extra '=').",
+                "The SQL does not use DATE_TRUNC for monthly aggregation as required by the question.",
+                "There is no temporal column in the SELECT statement to match with GROUP BY."
+              ],
+              "warnings": [
+                "Metrics appear before dimensions in the SELECT statement."
+              ],
+              "confidence": 0.2
+            }
+          },
+          "validation_history": [
+            {
+              "iteration": 1,
+              "valid": false,
+              "issues": [
+                "Execution error: syntax error at or near \"LIMIT\"\nLINE 15:  LIMIT 5\n          ^\n"
+              ],
+              "warnings": [],
+              "reasoning": "No further refinement possible",
+              "token_usage": {}
+            }
+          ]
+        },
+        "execution": {
+          "columns": [
+            "month",
+            "fees",
+            "currency"
+          ],
+          "rows": [
+            {
+              "month": "2024-12",
+              "fees": "261.11",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-01",
+              "fees": "412.16",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-02",
+              "fees": "378.08",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-03",
+              "fees": "435.81",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-04",
+              "fees": "421.92",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-05",
+              "fees": "429.27",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-06",
+              "fees": "818.51",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-07",
+              "fees": "3928.73",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-08",
+              "fees": "3962.79",
+              "currency": "USD"
+            },
+            {
+              "month": "2025-09",
+              "fees": "3672.09",
+              "currency": "USD"
+            }
+          ],
+          "row_count": 10,
+          "truncated": false
+        }
+      },
+      "errors": [],
+      "timings_ms": {
+        "intent_ms": 1.32,
+        "schema_ms": 0.28,
+        "plan_ms": 0.06,
+        "sql_ms": 46113.65,
+        "finalize_ms": 56.06,
+        "total_ms": 46171.37
+      },
+      "llm_summaries": [
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4227.87,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4391.7,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 4493.1,
+          "tokens": "CompletionUsage(completion_tokens=121, prompt_tokens=1773, total_tokens=1894, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3045.75,
+          "tokens": "CompletionUsage(completion_tokens=134, prompt_tokens=1761, total_tokens=1895, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3482.85,
+          "tokens": "CompletionUsage(completion_tokens=132, prompt_tokens=1761, total_tokens=1893, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 4849.51,
+          "tokens": "CompletionUsage(completion_tokens=160, prompt_tokens=1763, total_tokens=1923, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5154,
+          "latency_ms": 3962.78,
+          "tokens": "CompletionUsage(completion_tokens=172, prompt_tokens=1798, total_tokens=1970, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3569.62,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3659.6,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 2683.72,
+          "tokens": "CompletionUsage(completion_tokens=101, prompt_tokens=1749, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 2727.6,
+          "tokens": "CompletionUsage(completion_tokens=87, prompt_tokens=1763, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5042,
+          "latency_ms": 3086.11,
+          "tokens": "CompletionUsage(completion_tokens=88, prompt_tokens=1763, total_tokens=1851, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 2961.09,
+          "tokens": "CompletionUsage(completion_tokens=114, prompt_tokens=1756, total_tokens=1870, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 3845.86,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1756, total_tokens=1868, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 2719.1,
+          "tokens": "CompletionUsage(completion_tokens=130, prompt_tokens=1773, total_tokens=1903, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 2318.01,
+          "tokens": "CompletionUsage(completion_tokens=120, prompt_tokens=1761, total_tokens=1881, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 3086.66,
+          "tokens": "CompletionUsage(completion_tokens=154, prompt_tokens=1763, total_tokens=1917, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 1898.01,
+          "tokens": "CompletionUsage(completion_tokens=103, prompt_tokens=1749, total_tokens=1852, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 1717.36,
+          "tokens": "CompletionUsage(completion_tokens=84, prompt_tokens=1763, total_tokens=1847, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4985,
+          "latency_ms": 2970.34,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1750, total_tokens=1862, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        }
+      ],
+      "llm_usage": {
+        "total_calls": 1,
+        "total_tokens": 1059,
+        "total_cost_usd": 0.000271,
+        "total_latency_ms": 5623.88,
+        "by_stage": {
+          "sql_validation": {
+            "calls": 1,
+            "tokens": 1059,
+            "cost_usd": 0.000271,
+            "latency_ms": 5623.88
+          }
+        },
+        "by_provider": {
+          "openai": {
+            "calls": 1,
+            "tokens": 1059,
+            "cost_usd": 0.000271,
+            "models": [
+              "gpt-4o-mini"
+            ]
+          }
+        },
+        "calls": [
+          {
+            "stage": "sql_validation",
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "tokens": {
+              "prompt": 810,
+              "completion": 249,
+              "total": 1059
+            },
+            "latency_ms": 5623.88,
+            "cost_usd": 0.000271,
+            "chars": {
+              "prompt": 3235,
+              "response": 1115
+            }
+          }
+        ]
+      }
+    }
+  }
+}

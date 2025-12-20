@@ -1,0 +1,637 @@
+{
+  "test_id": "aum_equity_funds",
+  "question": "Show AUM for all equity funds",
+  "timestamp": "2025-12-20T10:59:36.467709Z",
+  "response": {
+    "status": "ok",
+    "message": null,
+    "data": {
+      "question": "Show AUM for all equity funds",
+      "intent": {
+        "type": "retrieval",
+        "time_scope": "none",
+        "aggregations": [],
+        "filters": [
+          "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')"
+        ],
+        "limit": null,
+        "order_by": null,
+        "order_direction": ""
+      },
+      "entities": [
+        {
+          "text": "funds",
+          "entity_type": "table",
+          "confidence": 1.0,
+          "canonical_name": "funds",
+          "value": null,
+          "top_match": {
+            "content": "funds",
+            "metadata": {
+              "application": "fund_accounting",
+              "table": "funds",
+              "embedded_text": "funds",
+              "match_type": "primary",
+              "description": "Master fund information",
+              "entity_type": "table",
+              "relationships_json": "[]",
+              "related_tables_json": "[]",
+              "estimated_rows": 0,
+              "primary_key": "id",
+              "entity_name": "funds"
+            },
+            "score": 0.9999988151103025,
+            "source_type": "schema",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": null,
+          "source": "local",
+          "local_mapping": {
+            "term": "funds",
+            "canonical_name": "funds",
+            "entity_type": "table",
+            "table": null,
+            "column": null,
+            "value": null,
+            "aliases": [
+              "fund",
+              "portfolio",
+              "portfolios",
+              "investment"
+            ],
+            "description": "Fund master table",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "funds",
+              "metadata": {
+                "application": "fund_accounting",
+                "table": "funds",
+                "embedded_text": "funds",
+                "match_type": "primary",
+                "description": "Master fund information",
+                "entity_type": "table",
+                "relationships_json": "[]",
+                "related_tables_json": "[]",
+                "estimated_rows": 0,
+                "primary_key": "id",
+                "entity_name": "funds"
+              },
+              "score": 0.9999988151103025,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "aum",
+          "entity_type": "column",
+          "confidence": 1.0,
+          "canonical_name": "total_aum",
+          "value": null,
+          "top_match": {
+            "content": "aum",
+            "metadata": {
+              "nullable": true,
+              "data_type": "numeric",
+              "table": "funds",
+              "entity_name": "total_aum",
+              "match_type": "synonym",
+              "related_tables_json": "[]",
+              "description": "Total assets under management",
+              "embedded_text": "aum",
+              "full_path": "funds.total_aum",
+              "column": "total_aum",
+              "synonym": "aum",
+              "application": "fund_accounting",
+              "entity_type": "column",
+              "is_dimension": false
+            },
+            "score": 1.0,
+            "source_type": "schema",
+            "match_count": 2,
+            "primary_count": 1,
+            "synonym_count": 1
+          },
+          "table": "funds",
+          "column": "total_aum",
+          "source": "local",
+          "local_mapping": {
+            "term": "aum",
+            "canonical_name": "total_aum",
+            "entity_type": "column",
+            "table": "funds",
+            "column": "total_aum",
+            "value": null,
+            "aliases": [
+              "assets",
+              "assets under management",
+              "managed assets",
+              "fund size"
+            ],
+            "description": "Total assets under management",
+            "context": null,
+            "priority": "high",
+            "optimal_source": true,
+            "source_notes": "Primary source for AUM - preferred over aggregating from holdings or positions"
+          },
+          "semantic_matches": [
+            {
+              "content": "aum",
+              "metadata": {
+                "nullable": true,
+                "data_type": "numeric",
+                "table": "funds",
+                "entity_name": "total_aum",
+                "match_type": "synonym",
+                "related_tables_json": "[]",
+                "description": "Total assets under management",
+                "embedded_text": "aum",
+                "full_path": "funds.total_aum",
+                "column": "total_aum",
+                "synonym": "aum",
+                "application": "fund_accounting",
+                "entity_type": "column",
+                "is_dimension": false
+              },
+              "score": 1.0,
+              "source_type": "schema",
+              "match_count": 2,
+              "primary_count": 1,
+              "synonym_count": 1
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "equity",
+          "entity_type": "domain_value",
+          "confidence": 1.0,
+          "canonical_name": "Equity",
+          "value": "Equity Growth",
+          "top_match": {
+            "content": "Equity Growth",
+            "metadata": {
+              "embedded_text": "Equity Growth",
+              "column": "fund_type",
+              "count": 6,
+              "application": "fund_accounting",
+              "match_type": "primary",
+              "value": "Equity Growth",
+              "entity_name": "Equity Growth",
+              "table": "funds",
+              "full_path": "funds.fund_type",
+              "context": "Used to categorize funds by investment approach and asset class",
+              "entity_type": "domain_value"
+            },
+            "score": 0.3651547431945801,
+            "source_type": "domain_value",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": "fund_type",
+          "source": "local",
+          "local_mapping": {
+            "term": "equity",
+            "canonical_name": "Equity",
+            "entity_type": "domain_value",
+            "table": "funds",
+            "column": "fund_type",
+            "value": "Equity Growth",
+            "aliases": [
+              "equities",
+              "stocks",
+              "equity funds",
+              "stock funds",
+              "stock portfolios",
+              "stock portfolio",
+              "portfolio",
+              "portfolios"
+            ],
+            "description": "Equity type funds (includes Growth, Value, Blend)",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "Equity Growth",
+              "metadata": {
+                "embedded_text": "Equity Growth",
+                "column": "fund_type",
+                "count": 6,
+                "application": "fund_accounting",
+                "match_type": "primary",
+                "value": "Equity Growth",
+                "entity_name": "Equity Growth",
+                "table": "funds",
+                "full_path": "funds.fund_type",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "entity_type": "domain_value"
+              },
+              "score": 0.3651547431945801,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            },
+            {
+              "content": "Equity Value",
+              "metadata": {
+                "entity_type": "domain_value",
+                "match_type": "primary",
+                "count": 9,
+                "application": "fund_accounting",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "value": "Equity Value",
+                "entity_name": "Equity Value",
+                "column": "fund_type",
+                "embedded_text": "Equity Value",
+                "table": "funds",
+                "full_path": "funds.fund_type"
+              },
+              "score": 0.31686609983444214,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        }
+      ],
+      "tables": [
+        "funds"
+      ],
+      "semantic_match_counts": [
+        1,
+        1,
+        2
+      ],
+      "plan": {
+        "tables": [
+          "funds"
+        ],
+        "strategy": "single_table",
+        "notes": "No joins required."
+      },
+      "result": {
+        "summary": "Query processed successfully",
+        "tables": [
+          "funds"
+        ],
+        "plan": {
+          "tables": [
+            "funds"
+          ],
+          "strategy": "single_table",
+          "notes": "No joins required."
+        },
+        "sql": {
+          "sql": "SELECT funds.fund_name AS fund_name,\n       funds.total_aum AS aum,\n       funds.base_currency AS currency\n  FROM funds\n WHERE funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')\n   AND funds.is_active = true",
+          "explanation": "Query Intent: retrieval\nQuestion: 'Show AUM for all equity funds'\n\nSelected Columns:\n  - funds.fund_name\n  - funds.fund_type\n  - funds.total_aum as 'aum'\n  - funds.base_currency as 'currency'\n  - funds.inception_date\n  - funds.risk_rating\n\nFilters:\n  - funds.fund_type IN ('Equity Growth', 'Equity Value')\n  - funds.is_active = true\n",
+          "metadata": {
+            "intent_type": "retrieval",
+            "tables": [
+              "funds"
+            ],
+            "join_count": 0,
+            "where_count": 2,
+            "aggregations": [],
+            "columns_count": 6
+          },
+          "extraction_summary": {
+            "summary": "The SQL extraction retrieves the total assets under management (AUM) for all active equity funds, specifically those categorized as 'Equity Growth' and 'Equity Value'.",
+            "filters_applied": [
+              "funds.fund_type IN ('Equity Growth', 'Equity Value')",
+              "funds.is_active = true"
+            ],
+            "transformations": [],
+            "assumptions": []
+          },
+          "column_ordering": {
+            "ordered_columns": [
+              "funds.fund_name",
+              "funds.fund_type",
+              "funds.total_aum",
+              "funds.base_currency",
+              "funds.inception_date",
+              "funds.risk_rating"
+            ],
+            "reasoning": "The ordering prioritizes human-readable columns first, starting with 'fund_name' and 'fund_type' as they are key identifiers for users. Next, 'total_aum' is included as it is the main metric of interest in the query. Following that, 'base_currency' is added to provide context for the AUM value. Finally, 'inception_date' and 'risk_rating' are included as additional information that may be relevant but are less critical than the primary identifiers and the AUM metric."
+          },
+          "refined_by_integrity": true,
+          "integrity_validation": {
+            "specific_checks": {
+              "semantic": {
+                "valid": false,
+                "issues": [
+                  "The SQL includes extra columns that are not requested in the question.",
+                  "The filter for fund types does not include all equity fund types as per the question."
+                ],
+                "suggestions": [
+                  "Remove extra columns from the SELECT statement to only include AUM.",
+                  "Adjust the filter to include all relevant equity fund types."
+                ],
+                "severity": "high"
+              },
+              "column_order": {
+                "valid": false,
+                "issues": [
+                  "Metrics appear before dimensions"
+                ],
+                "suggestions": [
+                  "Move total_aum to end of SELECT"
+                ],
+                "severity": "medium"
+              }
+            },
+            "holistic": {
+              "valid": false,
+              "quality": "poor",
+              "critical_issues": [
+                "The SQL includes extra columns that are not requested in the question.",
+                "The filter for fund types does not include all equity fund types as per the question."
+              ],
+              "warnings": [
+                "Metrics appear before dimensions in the SELECT statement."
+              ],
+              "confidence": 0.3
+            }
+          },
+          "validation_history": [
+            {
+              "iteration": 1,
+              "valid": true,
+              "issues": [],
+              "warnings": [
+                "Missing expected columns: ['total_aum']"
+              ],
+              "reasoning": "SQL validated successfully with 1 warning(s)",
+              "token_usage": {}
+            }
+          ]
+        },
+        "execution": {
+          "columns": [
+            "fund_name",
+            "aum",
+            "currency"
+          ],
+          "rows": [
+            {
+              "fund_name": "Equity Value Fund D",
+              "aum": "1633342410.39",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund E",
+              "aum": "423617377.70",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Growth Fund H",
+              "aum": "1542227005.57",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund D",
+              "aum": "1572553615.16",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund B",
+              "aum": "465274080.14",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund F",
+              "aum": "699394618.12",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund G",
+              "aum": "631794269.41",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Growth Fund A",
+              "aum": "1228991783.29",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Growth Fund C",
+              "aum": "1439983479.47",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Value Fund H",
+              "aum": "965385607.35",
+              "currency": "USD"
+            },
+            {
+              "fund_name": "Equity Growth Fund I",
+              "aum": "1670538797.80",
+              "currency": "USD"
+            }
+          ],
+          "row_count": 11,
+          "truncated": false
+        }
+      },
+      "errors": [],
+      "timings_ms": {
+        "intent_ms": 1.03,
+        "schema_ms": 0.07,
+        "plan_ms": 0.0,
+        "sql_ms": 23200.15,
+        "finalize_ms": 46.98,
+        "total_ms": 23248.23
+      },
+      "llm_summaries": [
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4227.87,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4391.7,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 4493.1,
+          "tokens": "CompletionUsage(completion_tokens=121, prompt_tokens=1773, total_tokens=1894, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3045.75,
+          "tokens": "CompletionUsage(completion_tokens=134, prompt_tokens=1761, total_tokens=1895, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3482.85,
+          "tokens": "CompletionUsage(completion_tokens=132, prompt_tokens=1761, total_tokens=1893, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 4849.51,
+          "tokens": "CompletionUsage(completion_tokens=160, prompt_tokens=1763, total_tokens=1923, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5154,
+          "latency_ms": 3962.78,
+          "tokens": "CompletionUsage(completion_tokens=172, prompt_tokens=1798, total_tokens=1970, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3569.62,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3659.6,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 2683.72,
+          "tokens": "CompletionUsage(completion_tokens=101, prompt_tokens=1749, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 2727.6,
+          "tokens": "CompletionUsage(completion_tokens=87, prompt_tokens=1763, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5042,
+          "latency_ms": 3086.11,
+          "tokens": "CompletionUsage(completion_tokens=88, prompt_tokens=1763, total_tokens=1851, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 2961.09,
+          "tokens": "CompletionUsage(completion_tokens=114, prompt_tokens=1756, total_tokens=1870, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 3845.86,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1756, total_tokens=1868, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 2719.1,
+          "tokens": "CompletionUsage(completion_tokens=130, prompt_tokens=1773, total_tokens=1903, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 2318.01,
+          "tokens": "CompletionUsage(completion_tokens=120, prompt_tokens=1761, total_tokens=1881, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 3086.66,
+          "tokens": "CompletionUsage(completion_tokens=154, prompt_tokens=1763, total_tokens=1917, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 1898.01,
+          "tokens": "CompletionUsage(completion_tokens=103, prompt_tokens=1749, total_tokens=1852, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 1717.36,
+          "tokens": "CompletionUsage(completion_tokens=84, prompt_tokens=1763, total_tokens=1847, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4985,
+          "latency_ms": 2970.34,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1750, total_tokens=1862, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        }
+      ],
+      "llm_usage": {
+        "total_calls": 0,
+        "total_tokens": 0,
+        "total_cost_usd": 0.0,
+        "total_latency_ms": 0.0,
+        "by_stage": {},
+        "by_provider": {},
+        "calls": []
+      }
+    }
+  }
+}

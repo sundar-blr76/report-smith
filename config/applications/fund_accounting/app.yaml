@@ -138,6 +138,12 @@ business_context:
       description: Financial reports use only completed transactions
       filter: transaction_status = 'Completed'
       applies_to: [transactions]
+    
+    - name: Holdings Must Identify Security
+      description: When querying holdings/securities, always include fund identification (fund_name, fund_code) to show which security is held
+      applies_to: [holdings]
+      required_joins: [funds]
+      required_columns: [funds.fund_name, funds.fund_code]
   
   # Sample queries demonstrating common patterns
   sample_queries:

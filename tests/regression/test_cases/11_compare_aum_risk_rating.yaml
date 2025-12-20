@@ -1,0 +1,12 @@
+id: compare_aum_risk_rating
+description: "Compare AUM between conservative and aggressive funds"
+category: comparison
+question: "Compare AUM between conservative and aggressive funds"
+tags:
+  - comparison
+  - domain_value
+expectations:
+  intent_type: comparison
+  required_columns:
+    - risk_rating
+    - aum

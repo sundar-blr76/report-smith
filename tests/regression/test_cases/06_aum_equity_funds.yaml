@@ -1,0 +1,11 @@
+id: aum_equity_funds
+description: "Simple query for AUM of all equity funds"
+category: simple_aggregation
+question: "Show AUM for all equity funds"
+tags:
+  - local_mapping
+  - aggregation
+expectations:
+  intent_type: aggregation
+  required_columns:
+    - aum

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 import psycopg2
 import psycopg2.extras
@@ -54,6 +55,90 @@ class SQLExecutor:
             if conn:
                 conn.close()
     
+    def _format_datetime_values(
+        self,
+        rows: List[Dict[str, Any]],
+        columns: List[str],
+        column_types: List[int]
+    ) -> List[Dict[str, Any]]:
+        """
+        Format datetime values to human-readable strings.
+        
+        Args:
+            rows: List of row dictionaries
+            columns: List of column names
+            column_types: List of psycopg2 type OIDs
+            
+        Returns:
+            Rows with formatted datetime values
+        """
+        # PostgreSQL type OIDs for datetime types
+        # Reference: https://github.com/postgres/postgres/blob/master/src/include/catalog/pg_type.dat
+        DATE_OID = 1082
+        TIMESTAMP_OID = 1114
+        TIMESTAMPTZ_OID = 1184
+        
+        datetime_oids = {DATE_OID, TIMESTAMP_OID, TIMESTAMPTZ_OID}
+        
+        # Build mapping of column index to format string
+        format_map = {}
+        for idx, (col_name, col_type) in enumerate(zip(columns, column_types)):
+            if col_type not in datetime_oids:
+                continue
+                
+            col_lower = col_name.lower()
+            
+            # Determine format based on column name patterns
+            if any(pattern in col_lower for pattern in ['month', 'mon', 'ym']):
+                # Month aggregations: YYYY-MM
+                format_map[idx] = '%Y-%m'
+            elif any(pattern in col_lower for pattern in ['quarter', 'qtr', 'q']):
+                # Quarter aggregations: YYYY-Q1, YYYY-Q2, etc.
+                format_map[idx] = 'quarter'
+            elif any(pattern in col_lower for pattern in ['year', 'yr', 'y']):
+                # Year aggregations: YYYY
+                format_map[idx] = '%Y'
+            elif col_type == DATE_OID or any(pattern in col_lower for pattern in ['date', 'day', 'dt']):
+                # Date columns: YYYY-MM-DD
+                format_map[idx] = '%Y-%m-%d'
+            else:
+                # Timestamp columns: YYYY-MM-DD HH:MM:SS
+                format_map[idx] = '%Y-%m-%d %H:%M:%S'
+        
+        if not format_map:
+            return rows
+        
+        # Format datetime values in rows
+        formatted_rows = []
+        for row in rows:
+            formatted_row = dict(row)
+            for idx, col_name in enumerate(columns):
+                if idx not in format_map:
+                    continue
+                    
+                value = formatted_row.get(col_name)
+                if value is None:
+                    continue
+                
+                try:
+                    if isinstance(value, (date, datetime)):
+                        fmt = format_map[idx]
+                        if fmt == 'quarter':
+                            # Special handling for quarters
+                            quarter = (value.month - 1) // 3 + 1
+                            formatted_row[col_name] = f"{value.year}-Q{quarter}"
+                        else:
+                            formatted_row[col_name] = value.strftime(fmt)
+                except Exception as e:
+                    logger.warning(f"[sql-exec] failed to format datetime column '{col_name}': {e}")
+                    # Keep original value on error
+                    
+            formatted_rows.append(formatted_row)
+        
+        logger.debug(f"[sql-exec] formatted {len(format_map)} datetime columns")
+        return formatted_rows
+
+    
     def execute_query(
         self,
         sql: str,
@@ -91,11 +176,16 @@ class SQLExecutor:
                     if truncated:
                         rows = rows[:max_rows]
                     
-                    # Extract column names
+                    # Extract column names and types
                     columns = [desc[0] for desc in cur.description] if cur.description else []
+                    column_types = [desc[1] for desc in cur.description] if cur.description else []
                     
                     # Convert rows to list of dicts
                     result_rows = [dict(row) for row in rows]
+                    
+                    # Format datetime values to human-readable strings
+                    if result_rows and column_types:
+                        result_rows = self._format_datetime_values(result_rows, columns, column_types)
                     
                     logger.info(
                         f"[sql-exec] query executed successfully: "

@@ -1,0 +1,17 @@
+id: equity_fees_by_month
+description: "Monthly fees for equity funds with top-rated managers"
+category: temporal_aggregation
+question: "For equity products, show total fees by month for the last 12 months, only for funds managed by top-rated managers (performance_rating >= 4)"
+tags:
+  - temporal
+  - aggregation
+  - joins
+  - llm_refinement
+expectations:
+  intent_type: aggregation
+  should_have_date_filter: true
+  should_use_date_trunc: true
+  min_row_count: 1
+  required_columns:
+    - month
+    - fees

@@ -55,11 +55,24 @@ def startup_event() -> None:
         import os
         llm_provider = os.getenv("LLM_PROVIDER", "openai")
         llm_model = os.getenv("LLM_MODEL")
+        
+        # Extract application context for LLM
+        app_context = {}
+        apps = rs_app.config_manager.load_all_applications()
+        if apps:
+            app0 = apps[0]
+            app_context = {
+                "name": app0.name,
+                "business_function": app0.business_function,
+                "description": app0.description
+            }
+        
         llm_analyzer = LLMIntentAnalyzer(
             embedding_manager=rs_app.embedding_manager,
             llm_provider=llm_provider,
             model=llm_model,
             api_key=None,
+            application_context=app_context
         )
         intent_analyzer = HybridIntentAnalyzer(
             embedding_manager=rs_app.embedding_manager,
@@ -68,7 +81,6 @@ def startup_event() -> None:
         from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
         gb = KnowledgeGraphBuilder()
         # Build KG from first app's schema
-        apps = rs_app.config_manager.load_all_applications()
         kg = None
         if apps:
             app0 = apps[0]
@@ -84,8 +96,10 @@ def startup_event() -> None:
             graph_builder=gb,
             knowledge_graph=kg or gb.build_from_schema({"tables": {}}),
         )
-    except Exception:
+    except Exception as e:
         # If initialization fails, the API can still respond with 503
+        from reportsmith.logger import get_logger
+        get_logger(__name__).error(f"Startup failed: {e}", exc_info=True)
         rs_app = None
         intent_analyzer = None
         orchestrator = None
@@ -189,13 +203,18 @@ async def query_stream(question: str):
     if orchestrator is None:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
 
-    queue: list[str] = []
-
+    import queue
+    import threading
+    
+    # Use a thread-safe queue
+    stream_queue = queue.Queue()
+    
     def on_event(event: str, payload: dict):
         data = {"event": event, "payload": payload}
-        queue.append(f"event: {event}\ndata: {_json.dumps(data)}\n\n")
+        # SSE format
+        stream_queue.put(f"event: {event}\ndata: {_json.dumps(data)}\n\n")
 
-    def event_generator():
+    def run_orchestration():
         try:
             final_state = orchestrator.run_stream(question, on_event)
             # Send final snapshot
@@ -210,8 +229,21 @@ async def query_stream(question: str):
             }})
         except Exception as e:
             on_event("error", {"message": str(e)})
-        # drain
-        while queue:
-            yield queue.pop(0)
+        finally:
+            # Sentinel to close stream
+            stream_queue.put(None)
 
+    def event_generator():
+        # Start orchestration in a separate thread so we can yield immediately
+        t = threading.Thread(target=run_orchestration)
+        t.start()
+        
+        while True:
+            # Block for next message
+            msg = stream_queue.get()
+            if msg is None:
+                break
+            yield msg
+            
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+

@@ -17,6 +17,11 @@ tables:
     canonical_name: fee_transactions
     aliases: [fee, charges, "fee transactions"]
     description: "Fee transaction records"
+  
+  holdings:
+    canonical_name: holdings
+    aliases: [holding, positions, position, securities, security, investments]
+    description: "Account fund holdings and positions"
 
 # Columns - Map business terms to actual columns
 columns:
@@ -80,14 +85,39 @@ columns:
 
 # Dimension Values - Map to specific values in dimension columns
 domain_values:
-  # Fund Types
+  # Fund Types - Equity (all equity types)
   equity:
+    canonical_name: Equity
+    table: funds
+    column: fund_type
+    value: Equity Growth  # Primary equity type
+    aliases: [equities, stocks, "equity funds", "stock funds", "stock portfolios", "stock portfolio", portfolio, portfolios]
+    description: "Equity type funds (includes Growth, Value, Blend)"
+    note: "This matches to Equity Growth as primary, but LLM should expand to all equity types"
+  
+  equity_growth:
     canonical_name: Equity Growth
     table: funds
     column: fund_type
     value: Equity Growth
-    aliases: [equities, stocks, "equity funds", "stock funds"]
-    description: "Equity type funds"
+    aliases: ["equity growth", "growth stocks", "growth equity"]
+    description: "Equity growth funds"
+  
+  equity_value:
+    canonical_name: Equity Value
+    table: funds
+    column: fund_type
+    value: Equity Value
+    aliases: ["equity value", "value stocks", "value equity"]
+    description: "Equity value funds"
+  
+  equity_blend:
+    canonical_name: Equity Blend
+    table: funds
+    column: fund_type
+    value: Equity Blend
+    aliases: ["equity blend", "blended equity", "core equity"]
+    description: "Equity blend funds"
   
   bond:
     canonical_name: Bond

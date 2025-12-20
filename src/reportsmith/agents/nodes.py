@@ -10,6 +10,7 @@ from reportsmith.query_execution import SQLExecutor
 from reportsmith.query_processing import HybridIntentAnalyzer
 from reportsmith.query_processing.sql_generator import SQLGenerator
 from reportsmith.query_processing.domain_value_enricher import DomainValueEnricher
+from reportsmith.query_processing.sql_integrity_validator import SQLIntegrityValidator
 from reportsmith.schema_intelligence.graph_builder import KnowledgeGraphBuilder
 from reportsmith.schema_intelligence.knowledge_graph import SchemaKnowledgeGraph
 from reportsmith.schema_intelligence.dimension_loader import DimensionLoader
@@ -71,6 +72,18 @@ class AgentNodes:
         except Exception as e:
             logger.warning(f"[nodes] Could not initialize domain value enricher: {e}")
             self.domain_value_enricher = None
+        
+        # SQL integrity validator for granular LLM-based validation
+        try:
+            self.integrity_validator = SQLIntegrityValidator(
+                llm_client=llm_client,
+                enable_cache=True,
+                enable_selective_validation=True
+            )
+            logger.info("[nodes] Initialized SQL integrity validator")
+        except Exception as e:
+            logger.warning(f"[nodes] Could not initialize SQL integrity validator: {e}")
+            self.integrity_validator = None
 
     def _write_debug(self, filename: str, data: Any) -> None:
         """Write debug data to file"""
@@ -143,7 +156,11 @@ class AgentNodes:
                     ),
                     "column": getattr(e, "column", None),
                     "source": getattr(e, "source", None),
-                    "local_mapping": getattr(e, "local_mapping", None),
+                    "local_mapping": (
+                        e.local_mapping.__dict__ 
+                        if getattr(e, "local_mapping", None) and hasattr(e.local_mapping, "__dict__") 
+                        else getattr(e, "local_mapping", None)
+                    ),
                 }
                 for e in intent.entities
             ]
@@ -1403,6 +1420,134 @@ class AgentNodes:
                 entities=state.entities,
                 plan=state.plan,
             )
+            
+            # Run granular integrity validation if available
+            if self.integrity_validator:
+                logger.info("[sql-gen] running granular integrity validation")
+                
+                try:
+                    # Run all specific validators
+                    specific_results = self.integrity_validator.validate_all_specific(
+                        question=state.question,
+                        sql=sql_result.get("sql", ""),
+                        intent=state.intent,
+                        entities=state.entities
+                    )
+                    
+                    # Run final holistic validation
+                    holistic_result = self.integrity_validator.validate_full_integrity(
+                        question=state.question,
+                        sql=sql_result.get("sql", ""),
+                        intent=state.intent,
+                        specific_results=specific_results
+                    )
+                    
+                    # Log validation results
+                    failed_checks = [name for name, result in specific_results.items() if not result.is_valid]
+                    if failed_checks:
+                        logger.warning(
+                            f"[sql-gen][integrity] Failed checks: {failed_checks}. "
+                            f"Overall quality: {holistic_result.overall_quality}"
+                        )
+                        
+                        # Collect all issues and suggestions for refinement
+                        all_issues = []
+                        all_suggestions = []
+                        for name, result in specific_results.items():
+                            if not result.is_valid:
+                                all_issues.extend(result.issues)
+                                all_suggestions.extend(result.suggestions)
+                                logger.info(
+                                    f"[sql-gen][integrity][{name}] Issues: {result.issues}"
+                                )
+                        
+                        # If critical issues found and we have suggestions, attempt refinement
+                        if holistic_result.critical_issues and all_suggestions:
+                            logger.info(
+                                f"[sql-gen][integrity] Attempting refinement for {len(holistic_result.critical_issues)} critical issues"
+                            )
+                            
+                            # Store original SQL for history tracking
+                            original_sql = sql_result.get("sql", "")
+                            
+                            # Get relevant refinement examples from history
+                            history_examples = []
+                            for name, result in specific_results.items():
+                                if not result.is_valid:
+                                    examples = self.integrity_validator.get_refinement_examples(
+                                        issue_type=name,
+                                        question=state.question,
+                                        limit=2
+                                    )
+                                    history_examples.extend(examples)
+                            
+                            # Format history for prompt inclusion
+                            history_context = ""
+                            if history_examples:
+                                history_context = self.integrity_validator.format_refinement_history(
+                                    history_examples
+                                )
+                                logger.info(
+                                    f"[sql-gen][integrity] Including {len(history_examples)} refinement examples"
+                                )
+                            
+                            # Use existing SQL validator to refine based on integrity issues
+                            if hasattr(self.sql_generator, 'validator') and self.sql_generator.validator:
+                                # Build enhanced prompt with history
+                                refinement_prompt_prefix = history_context if history_context else ""
+                                
+                                refined_sql, _ = self.sql_generator.validator._refine_sql_with_llm(
+                                    question=state.question,
+                                    current_sql=original_sql,
+                                    issues=all_issues,
+                                    warnings=[],
+                                    entities=state.entities,
+                                    intent=state.intent,
+                                    prompt_prefix=refinement_prompt_prefix,  # Include history
+                                )
+                                
+                                if refined_sql and refined_sql != original_sql:
+                                    logger.info("[sql-gen][integrity] SQL refined based on integrity checks")
+                                    sql_result["sql"] = refined_sql
+                                    sql_result["refined_by_integrity"] = True
+                                    
+                                    # Track successful refinement in history
+                                    for name, result in specific_results.items():
+                                        if not result.is_valid:
+                                            self.integrity_validator.add_refinement_history(
+                                                question=state.question,
+                                                issue_type=name,
+                                                original_sql=original_sql,
+                                                refined_sql=refined_sql,
+                                                issues=result.issues
+                                            )
+                    else:
+                        logger.info(
+                            f"[sql-gen][integrity] All checks passed! Quality: {holistic_result.overall_quality}"
+                        )
+                    
+                    # Add integrity validation results to SQL result
+                    sql_result["integrity_validation"] = {
+                        "specific_checks": {
+                            name: {
+                                "valid": result.is_valid,
+                                "issues": result.issues,
+                                "suggestions": result.suggestions,
+                                "severity": result.severity,
+                            }
+                            for name, result in specific_results.items()
+                        },
+                        "holistic": {
+                            "valid": holistic_result.is_valid,
+                            "quality": holistic_result.overall_quality,
+                            "critical_issues": holistic_result.critical_issues,
+                            "warnings": holistic_result.warnings,
+                            "confidence": holistic_result.confidence,
+                        }
+                    }
+                    
+                except Exception as e:
+                    logger.warning(f"[sql-gen][integrity] Validation failed: {e}")
 
             # Perform iterative validation and refinement if validator is available
             validation_history = []

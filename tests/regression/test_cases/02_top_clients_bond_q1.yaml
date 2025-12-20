@@ -1,0 +1,15 @@
+id: top_clients_bond_q1
+description: "Top 5 clients by fees on bond funds in Q1 2025"
+category: ranking
+question: "List the top 5 clients by total fees paid on bond funds in Q1 2025"
+tags:
+  - ranking
+  - temporal_filter
+  - joins
+expectations:
+  intent_type: ranking
+  should_have_date_filter: true
+  should_have_limit: 5
+  required_columns:
+    - client
+    - fees

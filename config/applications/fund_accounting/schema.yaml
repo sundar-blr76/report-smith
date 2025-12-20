@@ -262,6 +262,7 @@ tables:
   # ----------------------------------------------------------------------------
   holdings:
     description: Account fund holdings
+    aliases: [holding, positions, position, securities, security, investments]
     primary_key: id
     estimated_rows: 5000
     

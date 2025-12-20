@@ -1,0 +1,11 @@
+id: fees_truepotential
+description: "Fees for TruePotential clients"
+category: simple_filter
+question: "List fees for TruePotential clients"
+tags:
+  - local_mapping
+  - domain_value
+expectations:
+  intent_type: list
+  required_columns:
+    - fees

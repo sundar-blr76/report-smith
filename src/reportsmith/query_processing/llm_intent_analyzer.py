@@ -65,7 +65,7 @@ class LLMIntentAnalyzer(BaseIntentAnalyzer):
     """
     
     # Cache version - increment when prompt logic changes to invalidate old results
-    CACHE_VERSION = "v2"
+    CACHE_VERSION = "v5"
     
     SYSTEM_PROMPT_BASE = """You are a SQL query intent analyzer for a financial data system.
 
@@ -113,7 +113,26 @@ PERCENTAGE-BASED FILTERS (gains, returns, performance):
   * For performance metrics: use the percentage column directly if available (e.g., "performance_metric > 10")
 - Convert percentage to decimal (20% → 0.20, 15% → 0.15)
 - Use appropriate base value for calculation (cost_basis, total_value, initial_investment, etc.)
-- Include safety check: "AND table.cost_basis > 0" or "AND table.cost_basis IS NOT NULL" to avoid division by zero"""
+- Include safety check: "AND table.cost_basis > 0" or "AND table.cost_basis IS NOT NULL" to avoid division by zero
+
+CATEGORICAL/DIMENSION VALUE FILTERS (fund types, risk ratings, client types, etc.):
+- **CRITICAL**: Recognize categorical scope qualifiers as FILTERS, not just context
+- Patterns that indicate dimension filters:
+  * "FOR [category]" → filter: "table.column = 'value'" or "table.column IN ('value1', 'value2')"
+  * "IN [category]" → filter: "table.column = 'value'"
+  * "OF [category]" → filter: "table.column = 'value'"
+  * "[category] funds/clients/products" → filter: "table.column = 'value'"
+- Examples:
+  * "for stock portfolios" → filter: "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')" (stock = ALL equity types)
+  * "for equity funds" → filter: "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')" (include ALL equity subtypes)
+  * "for equity growth funds" → filter: "funds.fund_type = 'Equity Growth'" (specific subtype)
+  * "for bond funds" → filter: "funds.fund_type = 'Bond'"
+  * "for conservative funds" → filter: "funds.risk_rating = 'Low'" (conservative = low risk)
+  * "for aggressive funds" → filter: "funds.risk_rating = 'High'" (aggressive = high risk)
+  * "for institutional clients" → filter: "clients.client_type = 'Institutional'"
+- **IMPORTANT**: When user says "equity" or "stock" without specifying a subtype, include ALL equity subtypes (Growth, Value, Blend)
+- **ALWAYS** extract these as filters in the filters array, not just as entities
+- The dimension value should appear in BOTH entities (for semantic matching) AND filters (for SQL generation)"""
 
     def __init__(
         self, 
@@ -126,7 +145,8 @@ PERCENTAGE-BASED FILTERS (gains, returns, performance):
         dimension_score_threshold: float = 0.3,
         context_score_threshold: float = 0.4,
         max_matches_warning: int = 20,
-        enable_cache: bool = True
+        enable_cache: bool = True,
+        application_context: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize LLM-based intent analyzer.
@@ -142,11 +162,13 @@ PERCENTAGE-BASED FILTERS (gains, returns, performance):
             context_score_threshold: Minimum score for business context matches (default: 0.4)
             max_matches_warning: Warn user if matches exceed this count (default: 20)
             enable_cache: Enable caching of LLM responses (default: True)
+            application_context: Application profile (name, business_function, description)
         """
         self.embedding_manager = embedding_manager
         self.llm_provider = llm_provider
         self.enable_cache = enable_cache
         self.cache = get_cache_manager() if enable_cache else None
+        self.application_context = application_context or {}
         
         # Search configuration
         self.max_search_results = max_search_results
@@ -535,7 +557,25 @@ PERCENTAGE-BASED FILTERS (gains, returns, performance):
         
         # Build schema context with temporal columns
         schema_context = self._build_temporal_schema_context(query)
-        system_prompt = self.SYSTEM_PROMPT_BASE + business_context + schema_context
+        
+        # Build application context section
+        app_context = ""
+        if self.application_context:
+            app_name = self.application_context.get("name", "")
+            app_function = self.application_context.get("business_function", "")
+            app_desc = self.application_context.get("description", "")
+            
+            if app_name or app_function or app_desc:
+                app_context = "\n\nAPPLICATION DOMAIN CONTEXT:\n"
+                if app_name:
+                    app_context += f"System: {app_name}\n"
+                if app_function:
+                    app_context += f"Business Function: {app_function}\n"
+                if app_desc:
+                    app_context += f"Description: {app_desc}\n"
+                app_context += "\nUse this domain context to better understand user terminology and intent."
+        
+        system_prompt = self.SYSTEM_PROMPT_BASE + app_context + business_context + schema_context
         
         # Print formatted LLM request
         self._print_llm_request(query, system_prompt, business_context, schema_context)

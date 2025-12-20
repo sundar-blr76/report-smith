@@ -1,0 +1,17 @@
+id: compare_aum_equity_bond_quarterly
+description: "Compare AUM and fees between equity and bond funds by quarter in 2024"
+category: comparison
+question: "Compare average AUM and total fees between equity and bond funds over 2024; return results by quarter"
+tags:
+  - comparison
+  - temporal_aggregation
+  - multi_metric
+expectations:
+  intent_type: comparison
+  should_have_date_filter: true
+  should_use_date_trunc: true
+  required_columns:
+    - quarter
+    - fund_type
+    - aum
+    - fees

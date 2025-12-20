@@ -1,0 +1,649 @@
+{
+  "test_id": "fees_truepotential",
+  "question": "List fees for TruePotential clients",
+  "timestamp": "2025-12-20T11:00:10.507584Z",
+  "response": {
+    "status": "ok",
+    "message": null,
+    "data": {
+      "question": "List fees for TruePotential clients",
+      "intent": {
+        "type": "retrieval",
+        "time_scope": "none",
+        "aggregations": [],
+        "filters": [
+          "clients.client_type = 'TruePotential'"
+        ],
+        "limit": null,
+        "order_by": null,
+        "order_direction": ""
+      },
+      "entities": [
+        {
+          "text": "clients",
+          "entity_type": "table",
+          "confidence": 1.0,
+          "canonical_name": "clients",
+          "value": null,
+          "top_match": {
+            "content": "clients",
+            "metadata": {
+              "relationships_json": "[]",
+              "entity_name": "clients",
+              "entity_type": "table",
+              "primary_key": "id",
+              "match_type": "primary",
+              "embedded_text": "clients",
+              "table": "clients",
+              "description": "Client master data",
+              "application": "fund_accounting",
+              "related_tables_json": "[]",
+              "estimated_rows": 0
+            },
+            "score": 0.9999984206740464,
+            "source_type": "schema",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "clients",
+          "column": null,
+          "source": "local",
+          "local_mapping": {
+            "term": "clients",
+            "canonical_name": "clients",
+            "entity_type": "table",
+            "table": null,
+            "column": null,
+            "value": null,
+            "aliases": [
+              "client",
+              "customer",
+              "customers",
+              "investor",
+              "investors",
+              "account holder",
+              "account holders"
+            ],
+            "description": "Client master data",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "clients",
+              "metadata": {
+                "relationships_json": "[]",
+                "entity_name": "clients",
+                "entity_type": "table",
+                "primary_key": "id",
+                "match_type": "primary",
+                "embedded_text": "clients",
+                "table": "clients",
+                "description": "Client master data",
+                "application": "fund_accounting",
+                "related_tables_json": "[]",
+                "estimated_rows": 0
+              },
+              "score": 0.9999984206740464,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "fees",
+          "entity_type": "column",
+          "confidence": 1.0,
+          "canonical_name": "fee_amount",
+          "value": null,
+          "top_match": {
+            "content": "fees",
+            "metadata": {
+              "is_dimension": false,
+              "application": "fund_accounting",
+              "entity_type": "column",
+              "entity_name": "fee_amount",
+              "full_path": "fee_transactions.fee_amount",
+              "description": "",
+              "nullable": true,
+              "related_tables_json": "[]",
+              "match_type": "synonym",
+              "synonym": "fees",
+              "embedded_text": "fees",
+              "table": "fee_transactions",
+              "data_type": "numeric",
+              "column": "fee_amount"
+            },
+            "score": 1.0,
+            "source_type": "schema",
+            "match_count": 2,
+            "primary_count": 0,
+            "synonym_count": 2
+          },
+          "table": "fee_transactions",
+          "column": "fee_amount",
+          "source": "local",
+          "local_mapping": {
+            "term": "fees",
+            "canonical_name": "fee_amount",
+            "entity_type": "column",
+            "table": "fee_transactions",
+            "column": "fee_amount",
+            "value": null,
+            "aliases": [
+              "fee",
+              "charges",
+              "management fees",
+              "advisory fees"
+            ],
+            "description": "Fee amounts charged to clients",
+            "context": null,
+            "priority": "high",
+            "optimal_source": true,
+            "source_notes": "Primary source for fee amounts from transaction records"
+          },
+          "semantic_matches": [
+            {
+              "content": "fees",
+              "metadata": {
+                "is_dimension": false,
+                "application": "fund_accounting",
+                "entity_type": "column",
+                "entity_name": "fee_amount",
+                "full_path": "fee_transactions.fee_amount",
+                "description": "",
+                "nullable": true,
+                "related_tables_json": "[]",
+                "match_type": "synonym",
+                "synonym": "fees",
+                "embedded_text": "fees",
+                "table": "fee_transactions",
+                "data_type": "numeric",
+                "column": "fee_amount"
+              },
+              "score": 1.0,
+              "source_type": "schema",
+              "match_count": 2,
+              "primary_count": 0,
+              "synonym_count": 2
+            },
+            {
+              "content": "fees",
+              "metadata": {
+                "related_tables_json": "[]",
+                "embedded_text": "fees",
+                "data_type": "numeric",
+                "nullable": true,
+                "application": "fund_accounting",
+                "full_path": "transactions.fees",
+                "is_dimension": false,
+                "match_type": "primary",
+                "description": "",
+                "entity_type": "column",
+                "column": "fees",
+                "entity_name": "fees",
+                "table": "transactions"
+              },
+              "score": 0.9999988789444387,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        },
+        {
+          "text": "truepotential",
+          "entity_type": "domain_value",
+          "confidence": 1.0,
+          "canonical_name": "TruePotential",
+          "value": "TruePotential",
+          "top_match": null,
+          "table": "management_companies",
+          "column": "name",
+          "source": "local",
+          "local_mapping": {
+            "term": "truepotential",
+            "canonical_name": "TruePotential",
+            "entity_type": "domain_value",
+            "table": "management_companies",
+            "column": "name",
+            "value": "TruePotential",
+            "aliases": [
+              "true potential",
+              "tp",
+              "truepot"
+            ],
+            "description": "TruePotential management company",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_match_count": 0
+        }
+      ],
+      "tables": [
+        "clients",
+        "fee_transactions",
+        "management_companies"
+      ],
+      "semantic_match_counts": [
+        1,
+        2,
+        0
+      ],
+      "plan": {
+        "tables": [
+          "clients",
+          "fee_transactions",
+          "management_companies"
+        ],
+        "strategy": "kg_shortest_paths",
+        "path_tables": [
+          "clients",
+          "accounts",
+          "fee_transactions",
+          "holdings",
+          "funds",
+          "management_companies"
+        ],
+        "path_edges": [
+          {
+            "from": "clients",
+            "to": "accounts",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "client_id"
+          },
+          {
+            "from": "accounts",
+            "to": "fee_transactions",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "account_id"
+          },
+          {
+            "from": "clients",
+            "to": "accounts",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "client_id"
+          },
+          {
+            "from": "accounts",
+            "to": "holdings",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "account_id"
+          },
+          {
+            "from": "holdings",
+            "to": "funds",
+            "type": "many_to_one",
+            "from_column": "fund_id",
+            "to_column": "id"
+          },
+          {
+            "from": "funds",
+            "to": "management_companies",
+            "type": "many_to_one",
+            "from_column": "management_company_id",
+            "to_column": "id"
+          }
+        ],
+        "unreachable": [],
+        "notes": "Join order derived via knowledge graph shortest paths from first table."
+      },
+      "result": {
+        "summary": "Query processed successfully",
+        "tables": [
+          "clients",
+          "fee_transactions",
+          "management_companies"
+        ],
+        "plan": {
+          "tables": [
+            "clients",
+            "fee_transactions",
+            "management_companies"
+          ],
+          "strategy": "kg_shortest_paths",
+          "path_tables": [
+            "clients",
+            "accounts",
+            "fee_transactions",
+            "holdings",
+            "funds",
+            "management_companies"
+          ],
+          "path_edges": [
+            {
+              "from": "clients",
+              "to": "accounts",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "client_id"
+            },
+            {
+              "from": "accounts",
+              "to": "fee_transactions",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "account_id"
+            },
+            {
+              "from": "clients",
+              "to": "accounts",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "client_id"
+            },
+            {
+              "from": "accounts",
+              "to": "holdings",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "account_id"
+            },
+            {
+              "from": "holdings",
+              "to": "funds",
+              "type": "many_to_one",
+              "from_column": "fund_id",
+              "to_column": "id"
+            },
+            {
+              "from": "funds",
+              "to": "management_companies",
+              "type": "many_to_one",
+              "from_column": "management_company_id",
+              "to_column": "id"
+            }
+          ],
+          "unreachable": [],
+          "notes": "Join order derived via knowledge graph shortest paths from first table."
+        },
+        "sql": {
+          "sql": "SELECT clients.client_code AS client_code,\n       clients.first_name AS first_name,\n       clients.last_name AS last_name,\n       fee_transactions.fee_amount AS fees,\n       fee_transactions.currency AS currency,\n       fee_transactions.fee_type AS fee_type,\n       fee_transactions.payment_date AS payment_date\n  FROM clients\n  INNER JOIN accounts ON clients.id = accounts.client_id\n  INNER JOIN fee_transactions ON accounts.id = fee_transactions.account_id\n  INNER JOIN holdings ON accounts.id = holdings.account_id\n  INNER JOIN funds ON holdings.fund_id = funds.id\n  INNER JOIN management_companies ON funds.management_company_id = management_companies.id\n WHERE management_companies.name ILIKE '%TruePotential%' AND clients.client_type = 'TruePotential'",
+          "explanation": "Query Intent: retrieval\nQuestion: 'List fees for TruePotential clients'\n\nSelected Columns:\n  - clients.client_code\n  - clients.first_name\n  - clients.last_name\n  - fee_transactions.fee_amount as 'fees'\n  - fee_transactions.currency\n  - fee_transactions.fee_type\n  - fee_transactions.payment_date\n\nJoins:\n  - INNER JOIN accounts\n    ON clients.id = accounts.client_id\n  - INNER JOIN fee_transactions\n    ON accounts.id = fee_transactions.account_id\n  - INNER JOIN holdings\n    ON accounts.id = holdings.account_id\n  - INNER JOIN funds\n    ON holdings.fund_id = funds.id\n  - INNER JOIN management_companies\n    ON funds.management_company_id = management_companies.id\n\nFilters:\n  - management_companies.name ILIKE '%TruePotential%'\n",
+          "metadata": {
+            "intent_type": "retrieval",
+            "tables": [
+              "clients",
+              "fee_transactions",
+              "management_companies"
+            ],
+            "join_count": 5,
+            "where_count": 1,
+            "aggregations": [],
+            "columns_count": 7
+          },
+          "extraction_summary": {
+            "summary": "The SQL extraction retrieves the client code, first and last names, fee amounts, currencies, fee types, and payment dates for clients associated with management companies that include 'TruePotential' in their name. The major filter applied ensures that only clients linked to TruePotential management companies are included in the results.",
+            "filters_applied": [
+              "management_companies.name ILIKE '%TruePotential%'"
+            ],
+            "transformations": [],
+            "assumptions": []
+          },
+          "column_ordering": {
+            "ordered_columns": [
+              "clients.client_code",
+              "clients.first_name",
+              "clients.last_name",
+              "fee_transactions.fee_amount",
+              "fee_transactions.currency",
+              "fee_transactions.fee_type",
+              "fee_transactions.payment_date"
+            ],
+            "reasoning": "The ordering starts with primary identifiers, which are the client-related columns (client_code, first_name, last_name) to provide clear identification of the clients. Next, the fee-related columns (fee_amount, currency, fee_type) are included, as they are the main focus of the query. Finally, the payment_date is included to provide context for when the fees were incurred. This arrangement prioritizes human readability and logical grouping of related information."
+          },
+          "refined_by_integrity": true,
+          "integrity_validation": {
+            "specific_checks": {
+              "semantic": {
+                "valid": true,
+                "issues": [],
+                "suggestions": [],
+                "severity": "low"
+              },
+              "column_order": {
+                "valid": false,
+                "issues": [
+                  "Metrics appear before dimensions"
+                ],
+                "suggestions": [
+                  "Move fee_amount to the end of SELECT"
+                ],
+                "severity": "medium"
+              }
+            },
+            "holistic": {
+              "valid": false,
+              "quality": "acceptable",
+              "critical_issues": [
+                "Metrics appear before dimensions"
+              ],
+              "warnings": [],
+              "confidence": 0.75
+            }
+          },
+          "validation_history": [
+            {
+              "iteration": 1,
+              "valid": true,
+              "issues": [],
+              "warnings": [
+                "Missing expected columns: ['fee_amount']"
+              ],
+              "reasoning": "SQL validated successfully with 1 warning(s)",
+              "token_usage": {}
+            }
+          ]
+        },
+        "execution": {
+          "columns": [
+            "client_code",
+            "first_name",
+            "last_name",
+            "fees",
+            "currency",
+            "fee_type",
+            "payment_date"
+          ],
+          "rows": [],
+          "row_count": 0,
+          "truncated": false
+        }
+      },
+      "errors": [],
+      "timings_ms": {
+        "intent_ms": 1.05,
+        "schema_ms": 0.07,
+        "plan_ms": 0.04,
+        "sql_ms": 24404.2,
+        "finalize_ms": 178.3,
+        "total_ms": 24583.66
+      },
+      "llm_summaries": [
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4227.87,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4391.7,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 4493.1,
+          "tokens": "CompletionUsage(completion_tokens=121, prompt_tokens=1773, total_tokens=1894, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3045.75,
+          "tokens": "CompletionUsage(completion_tokens=134, prompt_tokens=1761, total_tokens=1895, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3482.85,
+          "tokens": "CompletionUsage(completion_tokens=132, prompt_tokens=1761, total_tokens=1893, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 4849.51,
+          "tokens": "CompletionUsage(completion_tokens=160, prompt_tokens=1763, total_tokens=1923, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5154,
+          "latency_ms": 3962.78,
+          "tokens": "CompletionUsage(completion_tokens=172, prompt_tokens=1798, total_tokens=1970, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3569.62,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3659.6,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 2683.72,
+          "tokens": "CompletionUsage(completion_tokens=101, prompt_tokens=1749, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 2727.6,
+          "tokens": "CompletionUsage(completion_tokens=87, prompt_tokens=1763, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5042,
+          "latency_ms": 3086.11,
+          "tokens": "CompletionUsage(completion_tokens=88, prompt_tokens=1763, total_tokens=1851, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 2961.09,
+          "tokens": "CompletionUsage(completion_tokens=114, prompt_tokens=1756, total_tokens=1870, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 3845.86,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1756, total_tokens=1868, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 2719.1,
+          "tokens": "CompletionUsage(completion_tokens=130, prompt_tokens=1773, total_tokens=1903, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 2318.01,
+          "tokens": "CompletionUsage(completion_tokens=120, prompt_tokens=1761, total_tokens=1881, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 3086.66,
+          "tokens": "CompletionUsage(completion_tokens=154, prompt_tokens=1763, total_tokens=1917, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 1898.01,
+          "tokens": "CompletionUsage(completion_tokens=103, prompt_tokens=1749, total_tokens=1852, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 1717.36,
+          "tokens": "CompletionUsage(completion_tokens=84, prompt_tokens=1763, total_tokens=1847, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4985,
+          "latency_ms": 2970.34,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1750, total_tokens=1862, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        }
+      ],
+      "llm_usage": {
+        "total_calls": 0,
+        "total_tokens": 0,
+        "total_cost_usd": 0.0,
+        "total_latency_ms": 0.0,
+        "by_stage": {},
+        "by_provider": {},
+        "calls": []
+      }
+    }
+  }
+}

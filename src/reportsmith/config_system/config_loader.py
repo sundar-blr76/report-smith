@@ -37,6 +37,7 @@ class ApplicationConfig:
     name: str
     description: str
     databases: List[DatabaseConfig]
+    business_function: Optional[str] = None
 
 
 class ConfigurationManager:
@@ -157,7 +158,8 @@ class ConfigurationManager:
                 id=app_id,
                 name=app_name,
                 description=app_desc,
-                databases=databases
+                databases=databases,
+                business_function=app_info.get('business_function')
             )
             
             logger.info(f"Loaded application: {app_name} ({app_id}) with {len(databases)} database instances")

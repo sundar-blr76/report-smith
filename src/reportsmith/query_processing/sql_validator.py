@@ -984,6 +984,7 @@ If value is a date range, return SQL expression like "column >= '2025-10-01' AND
         intent: Dict[str, Any],
         previous_attempts: List[Dict[str, Any]] = None,
         schema_metadata: Optional[Dict[str, Any]] = None,
+        prompt_prefix: str = "",  # NEW: For refinement history
     ) -> Tuple[Optional[str], Dict[str, Any]]:
         """Ask LLM to refine SQL based on validation issues and previous failed attempts."""
         
@@ -1006,6 +1007,11 @@ Warnings: {', '.join(attempt['warnings'])}
 """
             previous_context += "\n⚠️ IMPORTANT: Do NOT suggest any of the above SQL queries again. They have already failed.\n"
         
+        # Include refinement history prefix if provided
+        history_section = ""
+        if prompt_prefix:
+            history_section = f"\n{prompt_prefix}\n"
+        
         prompt = f"""Refine SQL query to address validation issues.
 
 User Question: "{question}"
@@ -1014,7 +1020,7 @@ Current SQL:
 {current_sql}
 
 {schema_context}
-
+{history_section}
 Validation Issues:
 {json.dumps(issues, indent=2)}
 
@@ -1037,6 +1043,20 @@ Common fixes:
 - Check table and column names match schema exactly
 - Use business date columns (fee_period_start/fee_period_end for fees, transaction_date for transactions) NOT metadata timestamps (created_at, updated_at)
 - There is NO "payments" table - fee_transactions is the correct table for fees
+
+CRITICAL SCHEMA RULES:
+- fund_managers table has NO "manager_name" column
+- For fund manager names, use: CONCAT(fund_managers.first_name, ' ', fund_managers.last_name) OR fund_managers.first_name || ' ' || fund_managers.last_name
+- For management company names, use: management_companies.name (NOT fund_managers)
+- fund_managers.management_company_id links to management_companies.id
+- funds.management_company_id links to management_companies.id
+
+HOLDINGS/SECURITIES TABLE RULES:
+- holdings table has NO "security_id" column
+- holdings.fund_id is the FK to funds table (this identifies the security/fund being held)
+- To identify which security is held, JOIN to funds and SELECT funds.fund_name, funds.fund_code
+- holdings represents "securities held" or "positions" - the fund IS the security
+- NEVER use holdings.security_id - use holdings.fund_id instead
 
 Return JSON:
 {{

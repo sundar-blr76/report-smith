@@ -1,0 +1,904 @@
+{
+  "test_id": "compare_aum_equity_bond_quarterly",
+  "question": "Compare average AUM and total fees between equity and bond funds over 2024; return results by quarter",
+  "timestamp": "2025-12-20T10:59:03.421084Z",
+  "response": {
+    "status": "ok",
+    "message": null,
+    "data": {
+      "question": "Compare average AUM and total fees between equity and bond funds over 2024; return results by quarter",
+      "intent": {
+        "type": "comparison",
+        "time_scope": "quarterly",
+        "aggregations": [
+          "avg",
+          "sum"
+        ],
+        "filters": [
+          "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Equity Blend')",
+          "funds.fund_type IN ('Bond')"
+        ],
+        "limit": null,
+        "order_by": null,
+        "order_direction": ""
+      },
+      "entities": [
+        {
+          "text": "funds",
+          "entity_type": "table",
+          "confidence": 1.0,
+          "canonical_name": "funds",
+          "value": null,
+          "top_match": {
+            "content": "funds",
+            "metadata": {
+              "estimated_rows": 0,
+              "description": "Master fund information",
+              "table": "funds",
+              "primary_key": "id",
+              "relationships_json": "[]",
+              "embedded_text": "funds",
+              "match_type": "primary",
+              "related_tables_json": "[]",
+              "entity_type": "table",
+              "application": "fund_accounting",
+              "entity_name": "funds"
+            },
+            "score": 0.9999988151103025,
+            "source_type": "schema",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": null,
+          "source": "local",
+          "local_mapping": {
+            "term": "funds",
+            "canonical_name": "funds",
+            "entity_type": "table",
+            "table": null,
+            "column": null,
+            "value": null,
+            "aliases": [
+              "fund",
+              "portfolio",
+              "portfolios",
+              "investment"
+            ],
+            "description": "Fund master table",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "funds",
+              "metadata": {
+                "estimated_rows": 0,
+                "description": "Master fund information",
+                "table": "funds",
+                "primary_key": "id",
+                "relationships_json": "[]",
+                "embedded_text": "funds",
+                "match_type": "primary",
+                "related_tables_json": "[]",
+                "entity_type": "table",
+                "application": "fund_accounting",
+                "entity_name": "funds"
+              },
+              "score": 0.9999988151103025,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "fees",
+          "entity_type": "column",
+          "confidence": 1.0,
+          "canonical_name": "fee_amount",
+          "value": null,
+          "top_match": {
+            "content": "fees",
+            "metadata": {
+              "nullable": true,
+              "related_tables_json": "[]",
+              "embedded_text": "fees",
+              "is_dimension": false,
+              "column": "fee_amount",
+              "data_type": "numeric",
+              "description": "",
+              "synonym": "fees",
+              "match_type": "synonym",
+              "full_path": "fee_transactions.fee_amount",
+              "table": "fee_transactions",
+              "entity_name": "fee_amount",
+              "application": "fund_accounting",
+              "entity_type": "column"
+            },
+            "score": 1.0,
+            "source_type": "schema",
+            "match_count": 2,
+            "primary_count": 0,
+            "synonym_count": 2
+          },
+          "table": "fee_transactions",
+          "column": "fee_amount",
+          "source": "local",
+          "local_mapping": {
+            "term": "fees",
+            "canonical_name": "fee_amount",
+            "entity_type": "column",
+            "table": "fee_transactions",
+            "column": "fee_amount",
+            "value": null,
+            "aliases": [
+              "fee",
+              "charges",
+              "management fees",
+              "advisory fees"
+            ],
+            "description": "Fee amounts charged to clients",
+            "context": null,
+            "priority": "high",
+            "optimal_source": true,
+            "source_notes": "Primary source for fee amounts from transaction records"
+          },
+          "semantic_matches": [
+            {
+              "content": "fees",
+              "metadata": {
+                "nullable": true,
+                "related_tables_json": "[]",
+                "embedded_text": "fees",
+                "is_dimension": false,
+                "column": "fee_amount",
+                "data_type": "numeric",
+                "description": "",
+                "synonym": "fees",
+                "match_type": "synonym",
+                "full_path": "fee_transactions.fee_amount",
+                "table": "fee_transactions",
+                "entity_name": "fee_amount",
+                "application": "fund_accounting",
+                "entity_type": "column"
+              },
+              "score": 1.0,
+              "source_type": "schema",
+              "match_count": 2,
+              "primary_count": 0,
+              "synonym_count": 2
+            },
+            {
+              "content": "fees",
+              "metadata": {
+                "entity_type": "column",
+                "data_type": "numeric",
+                "full_path": "transactions.fees",
+                "match_type": "primary",
+                "column": "fees",
+                "application": "fund_accounting",
+                "nullable": true,
+                "description": "",
+                "is_dimension": false,
+                "table": "transactions",
+                "embedded_text": "fees",
+                "related_tables_json": "[]",
+                "entity_name": "fees"
+              },
+              "score": 0.9999988789444387,
+              "source_type": "schema",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        },
+        {
+          "text": "aum",
+          "entity_type": "column",
+          "confidence": 1.0,
+          "canonical_name": "total_aum",
+          "value": null,
+          "top_match": {
+            "content": "aum",
+            "metadata": {
+              "entity_type": "column",
+              "related_tables_json": "[]",
+              "match_type": "synonym",
+              "description": "Total assets under management",
+              "nullable": true,
+              "is_dimension": false,
+              "application": "fund_accounting",
+              "data_type": "numeric",
+              "full_path": "funds.total_aum",
+              "column": "total_aum",
+              "table": "funds",
+              "entity_name": "total_aum",
+              "synonym": "aum",
+              "embedded_text": "aum"
+            },
+            "score": 1.0,
+            "source_type": "schema",
+            "match_count": 2,
+            "primary_count": 1,
+            "synonym_count": 1
+          },
+          "table": "funds",
+          "column": "total_aum",
+          "source": "local",
+          "local_mapping": {
+            "term": "aum",
+            "canonical_name": "total_aum",
+            "entity_type": "column",
+            "table": "funds",
+            "column": "total_aum",
+            "value": null,
+            "aliases": [
+              "assets",
+              "assets under management",
+              "managed assets",
+              "fund size"
+            ],
+            "description": "Total assets under management",
+            "context": null,
+            "priority": "high",
+            "optimal_source": true,
+            "source_notes": "Primary source for AUM - preferred over aggregating from holdings or positions"
+          },
+          "semantic_matches": [
+            {
+              "content": "aum",
+              "metadata": {
+                "entity_type": "column",
+                "related_tables_json": "[]",
+                "match_type": "synonym",
+                "description": "Total assets under management",
+                "nullable": true,
+                "is_dimension": false,
+                "application": "fund_accounting",
+                "data_type": "numeric",
+                "full_path": "funds.total_aum",
+                "column": "total_aum",
+                "table": "funds",
+                "entity_name": "total_aum",
+                "synonym": "aum",
+                "embedded_text": "aum"
+              },
+              "score": 1.0,
+              "source_type": "schema",
+              "match_count": 2,
+              "primary_count": 1,
+              "synonym_count": 1
+            }
+          ],
+          "semantic_match_count": 1
+        },
+        {
+          "text": "equity",
+          "entity_type": "domain_value",
+          "confidence": 1.0,
+          "canonical_name": "Equity",
+          "value": "Equity Growth",
+          "top_match": {
+            "content": "Equity Growth",
+            "metadata": {
+              "application": "fund_accounting",
+              "context": "Used to categorize funds by investment approach and asset class",
+              "entity_type": "domain_value",
+              "match_type": "primary",
+              "entity_name": "Equity Growth",
+              "count": 6,
+              "value": "Equity Growth",
+              "full_path": "funds.fund_type",
+              "table": "funds",
+              "column": "fund_type",
+              "embedded_text": "Equity Growth"
+            },
+            "score": 0.3651547431945801,
+            "source_type": "domain_value",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": "fund_type",
+          "source": "local",
+          "local_mapping": {
+            "term": "equity",
+            "canonical_name": "Equity",
+            "entity_type": "domain_value",
+            "table": "funds",
+            "column": "fund_type",
+            "value": "Equity Growth",
+            "aliases": [
+              "equities",
+              "stocks",
+              "equity funds",
+              "stock funds",
+              "stock portfolios",
+              "stock portfolio",
+              "portfolio",
+              "portfolios"
+            ],
+            "description": "Equity type funds (includes Growth, Value, Blend)",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "Equity Growth",
+              "metadata": {
+                "application": "fund_accounting",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "entity_type": "domain_value",
+                "match_type": "primary",
+                "entity_name": "Equity Growth",
+                "count": 6,
+                "value": "Equity Growth",
+                "full_path": "funds.fund_type",
+                "table": "funds",
+                "column": "fund_type",
+                "embedded_text": "Equity Growth"
+              },
+              "score": 0.3651547431945801,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            },
+            {
+              "content": "Equity Value",
+              "metadata": {
+                "entity_name": "Equity Value",
+                "entity_type": "domain_value",
+                "table": "funds",
+                "full_path": "funds.fund_type",
+                "count": 9,
+                "match_type": "primary",
+                "application": "fund_accounting",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "embedded_text": "Equity Value",
+                "column": "fund_type",
+                "value": "Equity Value"
+              },
+              "score": 0.31686609983444214,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 2
+        },
+        {
+          "text": "bond",
+          "entity_type": "domain_value",
+          "confidence": 1.0,
+          "canonical_name": "Bond",
+          "value": "Bond",
+          "top_match": {
+            "content": "Bond",
+            "metadata": {
+              "table": "funds",
+              "entity_name": "Bond",
+              "full_path": "funds.fund_type",
+              "value": "Bond",
+              "embedded_text": "Bond",
+              "context": "Used to categorize funds by investment approach and asset class",
+              "application": "fund_accounting",
+              "column": "fund_type",
+              "count": 7,
+              "match_type": "primary",
+              "entity_type": "domain_value"
+            },
+            "score": 0.7470345497131348,
+            "source_type": "domain_value",
+            "match_count": 1,
+            "primary_count": 1,
+            "synonym_count": 0
+          },
+          "table": "funds",
+          "column": "fund_type",
+          "source": "local",
+          "local_mapping": {
+            "term": "bond",
+            "canonical_name": "Bond",
+            "entity_type": "domain_value",
+            "table": "funds",
+            "column": "fund_type",
+            "value": "Bond",
+            "aliases": [
+              "bonds",
+              "fixed income",
+              "bond funds",
+              "debt"
+            ],
+            "description": "Bond and fixed income funds",
+            "context": null,
+            "priority": null,
+            "optimal_source": false,
+            "source_notes": null
+          },
+          "semantic_matches": [
+            {
+              "content": "Bond",
+              "metadata": {
+                "table": "funds",
+                "entity_name": "Bond",
+                "full_path": "funds.fund_type",
+                "value": "Bond",
+                "embedded_text": "Bond",
+                "context": "Used to categorize funds by investment approach and asset class",
+                "application": "fund_accounting",
+                "column": "fund_type",
+                "count": 7,
+                "match_type": "primary",
+                "entity_type": "domain_value"
+              },
+              "score": 0.7470345497131348,
+              "source_type": "domain_value",
+              "match_count": 1,
+              "primary_count": 1,
+              "synonym_count": 0
+            }
+          ],
+          "semantic_match_count": 1
+        }
+      ],
+      "tables": [
+        "funds",
+        "fee_transactions"
+      ],
+      "semantic_match_counts": [
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "plan": {
+        "tables": [
+          "funds",
+          "fee_transactions"
+        ],
+        "strategy": "kg_shortest_paths",
+        "path_tables": [
+          "funds",
+          "fee_transactions"
+        ],
+        "path_edges": [
+          {
+            "from": "funds",
+            "to": "fee_transactions",
+            "type": "one_to_many",
+            "from_column": "id",
+            "to_column": "fund_id"
+          }
+        ],
+        "unreachable": [],
+        "notes": "Join order derived via knowledge graph shortest paths from first table."
+      },
+      "result": {
+        "summary": "Query processed successfully",
+        "tables": [
+          "funds",
+          "fee_transactions"
+        ],
+        "plan": {
+          "tables": [
+            "funds",
+            "fee_transactions"
+          ],
+          "strategy": "kg_shortest_paths",
+          "path_tables": [
+            "funds",
+            "fee_transactions"
+          ],
+          "path_edges": [
+            {
+              "from": "funds",
+              "to": "fee_transactions",
+              "type": "one_to_many",
+              "from_column": "id",
+              "to_column": "fund_id"
+            }
+          ],
+          "unreachable": [],
+          "notes": "Join order derived via knowledge graph shortest paths from first table."
+        },
+        "sql": {
+          "sql": "SELECT DATE_TRUNC('quarter', fee_transactions.fee_period_start) AS quarter,\n       funds.fund_type AS fund_type,\n       AVG(funds.total_aum) AS aum,\n       SUM(fee_transactions.fee_amount) AS fees,\n       fee_transactions.currency AS currency\n  FROM funds\n  INNER JOIN fee_transactions ON funds.id = fee_transactions.fund_id\n WHERE funds.fund_type IN ('Equity Growth', 'Equity Value', 'Bond')\n   AND funds.is_active = true\n   AND fee_transactions.fee_period_start >= '2024-01-01'\n   AND fee_transactions.fee_period_start < '2025-01-01'\n GROUP BY quarter, funds.fund_type, fee_transactions.currency\n ORDER BY quarter, funds.fund_type ASC",
+          "explanation": "Query Intent: comparison\nQuestion: 'Compare average AUM and total fees between equity and bond funds over 2024; return results by quarter'\n\nSelected Columns:\n  - funds.total_aum (AVG) as 'aum'\n  - fee_transactions.fee_amount (AVG) as 'fees'\n  - fee_transactions.currency\n\nJoins:\n  - INNER JOIN fee_transactions\n    ON funds.id = fee_transactions.fund_id\n\nFilters:\n  - funds.fund_type IN ('Equity Growth', 'Equity Value', 'Bond')\n  - funds.is_active = true\n",
+          "metadata": {
+            "intent_type": "comparison",
+            "tables": [
+              "funds",
+              "fee_transactions"
+            ],
+            "join_count": 1,
+            "where_count": 2,
+            "aggregations": [
+              "avg",
+              "sum"
+            ],
+            "columns_count": 3
+          },
+          "extraction_summary": {
+            "summary": "The SQL extraction calculates the average assets under management (AUM) and average fees for active equity and bond funds in 2024, grouped by currency. It specifically filters for fund types categorized as 'Equity Growth', 'Equity Value', and 'Bond'. The results are ordered by currency to facilitate comparison between the two fund types.",
+            "filters_applied": [
+              "funds.fund_type IN ('Equity Growth', 'Equity Value', 'Bond')",
+              "funds.is_active = true"
+            ],
+            "transformations": [],
+            "assumptions": []
+          },
+          "column_ordering": {
+            "ordered_columns": [
+              "funds.total_aum",
+              "fee_transactions.fee_amount",
+              "fee_transactions.currency"
+            ],
+            "reasoning": "The ordering starts with 'total_aum' as it is a key aggregated metric that provides a direct comparison between equity and bond funds. Next, 'fee_amount' is included as it is another important aggregated metric for comparison. Finally, 'currency' is included as it provides context for the fees but is not an aggregated metric. This order prioritizes the most relevant metrics for comparison while keeping related columns together."
+          },
+          "refined_by_integrity": true,
+          "integrity_validation": {
+            "specific_checks": {
+              "semantic": {
+                "valid": false,
+                "issues": [
+                  "The SQL does not group results by quarter as requested.",
+                  "The SQL does not differentiate between equity and bond funds correctly."
+                ],
+                "suggestions": [
+                  "Add a column to extract the quarter from the date and include it in the SELECT and GROUP BY clauses.",
+                  "Adjust the fund type filter to include only 'Equity' and 'Bond' instead of specific equity categories."
+                ],
+                "severity": "high"
+              },
+              "temporal": {
+                "valid": false,
+                "issues": [
+                  "The SQL query does not use DATE_TRUNC to aggregate results by quarter as requested.",
+                  "Temporal columns are not included in the SELECT statement, which should match the GROUP BY clause."
+                ],
+                "suggestions": [
+                  "Use DATE_TRUNC('quarter', column) to aggregate results by quarter.",
+                  "Include a temporal column in the SELECT statement that matches the GROUP BY clause."
+                ],
+                "severity": "high"
+              },
+              "time_filter": {
+                "valid": false,
+                "issues": [
+                  "The SQL query does not include a date filter for the year 2024."
+                ],
+                "suggestions": [
+                  "Add WHERE clause to filter by date, e.g., WHERE funds.date >= '2024-01-01' AND funds.date < '2025-01-01'"
+                ],
+                "severity": "high"
+              },
+              "comparison": {
+                "valid": false,
+                "issues": [
+                  "Comparison dimension 'fund_type' is not included in the SELECT clause.",
+                  "Comparison dimension 'fund_type' is not included in the GROUP BY clause."
+                ],
+                "suggestions": [
+                  "Add fund_type to SELECT and GROUP BY for comparison"
+                ],
+                "severity": "high"
+              },
+              "column_order": {
+                "valid": false,
+                "issues": [
+                  "Metrics appear before dimensions"
+                ],
+                "suggestions": [
+                  "Move aum and fees to the end of SELECT"
+                ],
+                "severity": "medium"
+              }
+            },
+            "holistic": {
+              "valid": false,
+              "quality": "poor",
+              "critical_issues": [
+                "The SQL does not group results by quarter as requested.",
+                "The SQL does not differentiate between equity and bond funds correctly.",
+                "The SQL query does not include a date filter for the year 2024."
+              ],
+              "warnings": [
+                "Metrics appear before dimensions in the SELECT clause."
+              ],
+              "confidence": 0.2
+            }
+          },
+          "validation_history": [
+            {
+              "iteration": 1,
+              "valid": true,
+              "issues": [],
+              "warnings": [
+                "Missing expected columns: ['fee_amount', 'total_aum']"
+              ],
+              "reasoning": "SQL validated successfully with 1 warning(s)",
+              "token_usage": {}
+            }
+          ]
+        },
+        "execution": {
+          "columns": [
+            "quarter",
+            "fund_type",
+            "aum",
+            "fees",
+            "currency"
+          ],
+          "rows": [
+            {
+              "quarter": "2024-Q1",
+              "fund_type": "Bond",
+              "aum": "282415542.79000000",
+              "fees": "302.64",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q1",
+              "fund_type": "Equity Value",
+              "aum": "685543317.79428571",
+              "fees": "22.53",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q2",
+              "fund_type": "Bond",
+              "aum": "282415542.79000000",
+              "fees": "333.52",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q2",
+              "fund_type": "Equity Value",
+              "aum": "685543317.79428571",
+              "fees": "23.46",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q3",
+              "fund_type": "Bond",
+              "aum": "282415542.79000000",
+              "fees": "309.57",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q3",
+              "fund_type": "Equity Growth",
+              "aum": "1619214080.90800000",
+              "fees": "672.87",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q3",
+              "fund_type": "Equity Value",
+              "aum": "896165338.37111111",
+              "fees": "24.44",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q4",
+              "fund_type": "Bond",
+              "aum": "282415542.79000000",
+              "fees": "321.90",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q4",
+              "fund_type": "Equity Growth",
+              "aum": "1582611555.65428571",
+              "fees": "670.11",
+              "currency": "USD"
+            },
+            {
+              "quarter": "2024-Q4",
+              "fund_type": "Equity Value",
+              "aum": "1108960869.32384615",
+              "fees": "165.91",
+              "currency": "USD"
+            }
+          ],
+          "row_count": 10,
+          "truncated": false
+        }
+      },
+      "errors": [],
+      "timings_ms": {
+        "intent_ms": 1.48,
+        "schema_ms": 0.18,
+        "plan_ms": 0.03,
+        "sql_ms": 42961.66,
+        "finalize_ms": 55.46,
+        "total_ms": 43018.81
+      },
+      "llm_summaries": [
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4227.87,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4978,
+          "latency_ms": 4391.7,
+          "tokens": "CompletionUsage(completion_tokens=106, prompt_tokens=1750, total_tokens=1856, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 4493.1,
+          "tokens": "CompletionUsage(completion_tokens=121, prompt_tokens=1773, total_tokens=1894, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3045.75,
+          "tokens": "CompletionUsage(completion_tokens=134, prompt_tokens=1761, total_tokens=1895, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 3482.85,
+          "tokens": "CompletionUsage(completion_tokens=132, prompt_tokens=1761, total_tokens=1893, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 4849.51,
+          "tokens": "CompletionUsage(completion_tokens=160, prompt_tokens=1763, total_tokens=1923, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5154,
+          "latency_ms": 3962.78,
+          "tokens": "CompletionUsage(completion_tokens=172, prompt_tokens=1798, total_tokens=1970, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3569.62,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5021,
+          "latency_ms": 3659.6,
+          "tokens": "CompletionUsage(completion_tokens=131, prompt_tokens=1767, total_tokens=1898, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1664))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 2683.72,
+          "tokens": "CompletionUsage(completion_tokens=101, prompt_tokens=1749, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 2727.6,
+          "tokens": "CompletionUsage(completion_tokens=87, prompt_tokens=1763, total_tokens=1850, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5042,
+          "latency_ms": 3086.11,
+          "tokens": "CompletionUsage(completion_tokens=88, prompt_tokens=1763, total_tokens=1851, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 2961.09,
+          "tokens": "CompletionUsage(completion_tokens=114, prompt_tokens=1756, total_tokens=1870, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5000,
+          "latency_ms": 3845.86,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1756, total_tokens=1868, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5072,
+          "latency_ms": 2719.1,
+          "tokens": "CompletionUsage(completion_tokens=130, prompt_tokens=1773, total_tokens=1903, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4998,
+          "latency_ms": 2318.01,
+          "tokens": "CompletionUsage(completion_tokens=120, prompt_tokens=1761, total_tokens=1881, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5033,
+          "latency_ms": 3086.66,
+          "tokens": "CompletionUsage(completion_tokens=154, prompt_tokens=1763, total_tokens=1917, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4961,
+          "latency_ms": 1898.01,
+          "tokens": "CompletionUsage(completion_tokens=103, prompt_tokens=1749, total_tokens=1852, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 5041,
+          "latency_ms": 1717.36,
+          "tokens": "CompletionUsage(completion_tokens=84, prompt_tokens=1763, total_tokens=1847, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        },
+        {
+          "stage": "intent",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "prompt_chars": 4985,
+          "latency_ms": 2970.34,
+          "tokens": "CompletionUsage(completion_tokens=112, prompt_tokens=1750, total_tokens=1862, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=0, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=1024))"
+        }
+      ],
+      "llm_usage": {
+        "total_calls": 0,
+        "total_tokens": 0,
+        "total_cost_usd": 0.0,
+        "total_latency_ms": 0.0,
+        "by_stage": {},
+        "by_provider": {},
+        "calls": []
+      }
+    }
+  }
+}
