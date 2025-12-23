@@ -56,6 +56,35 @@ ReportSmith/
 
 ## Quick Start
 
+### 🚀 Onboarding Your Database (Start Here!)
+
+**Want to connect ReportSmith to your existing database?** Use our automated onboarding scripts:
+
+```bash
+# Connect to your database and auto-generate configuration
+python scripts/onboard_database.py \
+  --app-id my_app \
+  --app-name "My Application" \
+  --db-type postgresql \
+  --host localhost \
+  --port 5432 \
+  --database mydb \
+  --username user \
+  --password pass
+```
+
+**What this does:**
+1. Connects to your database and extracts the schema
+2. Detects tables, columns, data types, and relationships
+3. Generates ready-to-use configuration files in `config/applications/my_app/`
+4. Creates templates for you to add business context
+
+**Supported databases:** PostgreSQL, MySQL, Oracle, SQL Server, SQLite
+
+📖 **See [scripts/README.md](scripts/README.md) for examples with all database types**
+
+---
+
 ### Prerequisites
 - Python 3.12+
 - PostgreSQL 12+
@@ -82,6 +111,36 @@ ReportSmith/
    cd db_setup
    python3 setup_database.py
    ```
+
+3a. **[Optional] Onboard New Database**
+   Use the onboarding scripts to automatically extract schema and generate configs:
+   ```bash
+   # Easy way - use the convenience script
+   python scripts/onboard_database.py \
+     --app-id my_app \
+     --app-name "My Application" \
+     --db-type postgresql \
+     --host localhost \
+     --port 5432 \
+     --database mydb \
+     --username user \
+     --password pass
+   
+   # Or use the bash script (Unix/Linux/Mac)
+   ./scripts/onboard_database.sh \
+     --app-id my_app \
+     --app-name "My Application" \
+     --db-type postgresql \
+     --host localhost \
+     --port 5432 \
+     --database mydb \
+     --username user \
+     --password pass
+   ```
+   
+   This will generate configuration files in `config/applications/my_app/`.
+   
+   See [scripts/README.md](scripts/README.md) for examples with all database vendors.
 
 4. **Start Application**
    ```bash
@@ -113,6 +172,7 @@ curl -X POST http://127.0.0.1:8000/query \
 
 #### Setup & Operations
 - **[SETUP.md](SETUP.md)** - Detailed setup guide
+- **[docs/ONBOARDING_GUIDE.md](docs/ONBOARDING_GUIDE.md)** - Database onboarding and schema introspection
 - **[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)** - Current system status
 - **[docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** - Database schema details
 
